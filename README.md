@@ -6,8 +6,9 @@ Independent model infrastructure platform for the RUSA-AI ecosystem.
 
 RusaModels is deployed as two independent services backed by one shared control plane:
 
-- **Model Server** — model registry, lifecycle API and optional OpenAI-compatible inference proxy.
-- **Quant Server** — model inspection, conversion and quantization service boundary.
+- **Model Server** — model registry, lifecycle API and authenticated OpenAI-compatible inference gateway.
+- **Quant Server** — model inspection, conversion and GGUF quantization service boundary.
+- **Local CPU Runtime** — optional private llama.cpp GGUF chat runtime plus a separate CPU SentenceTransformers embedding runtime.
 - **Shared PostgreSQL** — registry metadata, model versions, upload sessions and audit events.
 - **Shared S3-compatible storage** — immutable model artifacts.
 
@@ -24,6 +25,10 @@ RusaAi is an authenticated service consumer. It does not connect directly to the
 - Resumable multipart uploads, per-part checksums, object-level SHA-256 verification and streamed artifact downloads.
 - Hugging Face Hub search and queued model download jobs with upstream license verification and explicit license acknowledgement.
 - Queued F32/F16/BF16 safetensors conversion, GGUF F32/F16/BF16 conversion and Q8/Q6/Q5/Q4 GGUF quantization adapters.
+- Independent chat and embedding upstream configuration, allowing local LLM and embedding runtimes to use separate CPU services.
+- CPU-only Codespaces inference profile with private llama.cpp and local embedding containers, bounded CPU/RAM limits and no published runtime ports.
+- Migrated agent SFT dataset validation, QLoRA training, held-out evaluation, adapter merge, GGUF checksum verification and inference benchmark tools.
+- Verified model-version artifact download and pinned local embedding snapshot utilities.
 - Immutable Hugging Face commit pinning, upstream license verification, and artifact manifests with SHA-256 digests.
 - Separate Quant Worker with database leases, heartbeat renewal, stale-worker fencing, bounded retries for transient failures and cooperative cancellation.
 - Container-aware RAM/disk preflight and cancellable conversion subprocesses outside API request processes.
@@ -32,7 +37,7 @@ RusaAi is an authenticated service consumer. It does not connect directly to the
 
 ## Not yet implemented
 
-Dynamic model loading/deployment, multi-model routing, scheduling, benchmark/evaluation, training orchestration and dashboard. The inference proxy requires an explicitly configured upstream runtime; it does not install or supervise llama.cpp/vLLM itself. Safetensors conversion requires `pip install -e ".[quantization]"`. GGUF conversion requires a separately installed llama.cpp `convert_hf_to_gguf.py` and `llama-quantize`, configured with `LLAMA_CPP_CONVERT_SCRIPT` and `LLAMA_QUANTIZE_BIN`. The GGUF adapter allowlists Llama, Qwen2/Qwen3 and DeepSeek model types by default, with explicit configuration for extensions. Actual compatibility remains dependent on the installed upstream converter version. These features are not advertised as operational until implemented and tested.
+Dynamic model loading/deployment, multi-model routing, scheduling, automated training orchestration and dashboard. The standard Model Server profile still requires an explicitly configured upstream runtime; the optional CPU Codespaces profile supplies llama.cpp and embedding sidecars for development. The QLoRA training workflow is a separate CUDA-only candidate workflow and is not part of CPU inference. Safetensors conversion requires `pip install -e ".[quantization]"`. GGUF conversion requires a separately installed llama.cpp `convert_hf_to_gguf.py` and `llama-quantize`, configured with `LLAMA_CPP_CONVERT_SCRIPT` and `LLAMA_QUANTIZE_BIN`. The GGUF adapter allowlists Llama, Qwen2/Qwen3 and DeepSeek model types by default, with explicit configuration for extensions. Actual compatibility remains dependent on the installed upstream converter version. These features are not advertised as operational until implemented and tested.
 
 ## Local development
 
@@ -47,9 +52,9 @@ Health endpoints:
 
 The Compose stack runs PostgreSQL and MinIO locally for development only. It is not the shared Codespaces control plane.
 
-## Two Codespaces
+## Codespaces
 
-Create one Codespace using `.devcontainer/model-server/devcontainer.json` and another using `.devcontainer/quant-server/devcontainer.json`. Configure both with the same external `DATABASE_URL`, `S3_ENDPOINT_URL`, `S3_BUCKET` and S3 credentials. See [docs/CODESPACES.md](docs/CODESPACES.md).
+Create a Model Server Codespace using `.devcontainer/model-server/devcontainer.json` or the CPU inference profile `.devcontainer/model-server-cpu/devcontainer.json`. Create a separate Quant Server Codespace using `.devcontainer/quant-server/devcontainer.json`. The CPU profile requests 4 CPUs, 16 GB RAM and starts private llama.cpp and local embedding services; keep GGUF and embedding model weights outside Git. Configure the shared control-plane secrets as documented in [docs/CODESPACES.md](docs/CODESPACES.md).
 
 ## Security
 
@@ -62,3 +67,6 @@ Never commit model weights, API tokens or credentials. Production requires Postg
 - [Codespaces setup](docs/CODESPACES.md)
 - [Operations runbook](docs/OPERATIONS.md)
 - [RusaAi integration](docs/RUSAAI-INTEGRATION.md)
+- [CPU inference](docs/CPU_INFERENCE.md)
+- [Training](docs/TRAINING.md)
+- [Migration from RusaAi](docs/MIGRATION_FROM_RUSAAI.md)
