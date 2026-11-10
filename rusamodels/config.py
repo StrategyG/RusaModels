@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     service_token_sha256: str | None = Field(None, validation_alias="RUSAMODELS_SERVICE_TOKEN_SHA256")
     hf_token: SecretStr | None = Field(None, validation_alias="HF_TOKEN")
     worker_poll_seconds: int = Field(5, validation_alias="RUSAMODELS_WORKER_POLL_SECONDS")
+    inference_base_url: str | None = Field(None, validation_alias="RUSAMODELS_INFERENCE_BASE_URL")
+    inference_model_id: str | None = Field(None, validation_alias="RUSAMODELS_INFERENCE_MODEL_ID")
+    inference_api_key: SecretStr | None = Field(None, validation_alias="RUSAMODELS_INFERENCE_API_KEY")
+    inference_timeout_seconds: int = Field(300, validation_alias="RUSAMODELS_INFERENCE_TIMEOUT_SECONDS")
     max_upload_bytes: int = Field(10 * 1024**3, validation_alias="MAX_UPLOAD_BYTES")
 
     @field_validator("max_upload_bytes")
@@ -34,6 +38,13 @@ class Settings(BaseSettings):
             raise ValueError("MAX_UPLOAD_BYTES must be positive")
         return value
 
+    @field_validator("inference_timeout_seconds")
+    @classmethod
+    def positive_inference_timeout(cls, value: int) -> int:
+        if value <= 0 or value > 3600:
+            raise ValueError("RUSAMODELS_INFERENCE_TIMEOUT_SECONDS must be between 1 and 3600")
+        return value
+
     @model_validator(mode="after")
     def enforce_production_adapters(self):
         if self.environment in {"staging", "production"}:
@@ -41,6 +52,19 @@ class Settings(BaseSettings):
                 raise ValueError("Staging and production require PostgreSQL")
             if self.storage_backend != "s3":
                 raise ValueError("Staging and production require S3-compatible storage")
+        if bool(self.inference_base_url) != bool(self.inference_model_id):
+            raise ValueError("Inference base URL and model ID must be configured together")
+        if self.inference_base_url:
+            from urllib.parse import urlsplit
+
+            parsed = urlsplit(self.inference_base_url)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                raise ValueError("RUSAMODELS_INFERENCE_BASE_URL must be an HTTP(S) URL")
+            if parsed.username or parsed.password or parsed.query or parsed.fragment:
+                raise ValueError("Inference base URL must not contain credentials, query or fragment")
+            if self.environment == "production":
+                if parsed.scheme != "https" or not self.inference_api_key:
+                    raise ValueError("Production inference requires HTTPS and an upstream API key")
         if self.environment == "production":
             if not self.service_token_sha256 or not self.api_principals_json.strip() or self.api_principals_json.strip() == "{}":
                 raise ValueError("Production requires service and API credentials")
