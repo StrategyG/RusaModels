@@ -50,4 +50,4 @@ This is a single-upstream proxy, not a model loader or router. Install and opera
 - Do not expose PostgreSQL or object-store administration publicly.
 
 ## Current scope
-Model CRUD, immutable model-version registration, resumable artifact uploads, checksum verification, artifact download, Hugging Face discovery/download, worker leases/retries, safetensors conversion and GGUF conversion/quantization adapters are implemented. Inference, routing, scheduling, benchmark/evaluation, training orchestration and dashboard remain future phases. Actual conversion requires the optional dependencies and external llama.cpp tools documented above.
+Model CRUD, immutable model-version registration, resumable artifact uploads, checksum verification, artifact download, Hugging Face discovery/download, worker leases/retries, safetensors conversion, GGUF conversion/quantization adapters, and the single-upstream OpenAI-compatible inference proxy are implemented. Dynamic model routing, scheduling, benchmark/evaluation, training orchestration and dashboard remain future phases. Actual conversion requires the optional dependencies and external llama.cpp tools documented above.
