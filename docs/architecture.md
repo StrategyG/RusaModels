@@ -14,7 +14,8 @@ flowchart LR
   R[RusaAi / client] -->|Bearer HTTPS| M[Model Server]
   M -->|read metadata| P[(Shared PostgreSQL)]
   M -->|read artifacts| S[(Shared S3)]
-  Q[Quant Server] -->|write versions + audit| P
+  Q[Quant Server] -->|enqueue jobs| P
+  W[Quant Worker] -->|claim jobs + register versions| P
   Q -->|write immutable objects| S
 ```
 
