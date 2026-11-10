@@ -1,7 +1,7 @@
 """Validated API request and response schemas."""
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 
 class ModelCreate(BaseModel):
@@ -93,6 +93,14 @@ class HubDownloadCreate(BaseModel):
     license_id: str = Field(min_length=1, max_length=128)
     license_accepted: bool
     architecture: str | None = Field(default=None, max_length=128)
+
+    @field_validator("license_id")
+    @classmethod
+    def normalize_license_id(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not normalized:
+            raise ValueError("license_id must not be blank")
+        return normalized
 
 
 class ConversionCreate(BaseModel):
