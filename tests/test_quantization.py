@@ -40,3 +40,30 @@ def test_preflight_accepts_small_compatible_checkpoint(tmp_path):
     )
     assert result.source_bytes == 100
     assert result.estimated_peak_ram_bytes < result.available_ram_bytes
+
+
+
+def test_cgroup_v2_memory_limit_accounts_for_current_usage(tmp_path):
+    from rusamodels.quantization.preflight import _cgroup_available_ram_bytes
+
+    (tmp_path / "memory.max").write_text(str(8 * 1024**3))
+    (tmp_path / "memory.current").write_text(str(3 * 1024**3))
+    assert _cgroup_available_ram_bytes(tmp_path) == 5 * 1024**3
+
+
+def test_cgroup_v1_memory_limit_accounts_for_current_usage(tmp_path):
+    from rusamodels.quantization.preflight import _cgroup_available_ram_bytes
+
+    memory = tmp_path / "memory"
+    memory.mkdir()
+    (memory / "memory.limit_in_bytes").write_text(str(16 * 1024**3))
+    (memory / "memory.usage_in_bytes").write_text(str(4 * 1024**3))
+    assert _cgroup_available_ram_bytes(tmp_path) == 12 * 1024**3
+
+
+def test_available_ram_uses_lower_container_or_host_value(monkeypatch):
+    from rusamodels.quantization import preflight
+
+    monkeypatch.setattr(preflight, "_host_available_ram_bytes", lambda: 12 * 1024**3)
+    monkeypatch.setattr(preflight, "_cgroup_available_ram_bytes", lambda: 4 * 1024**3)
+    assert preflight.available_ram_bytes() == 4 * 1024**3
