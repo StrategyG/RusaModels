@@ -73,7 +73,7 @@ class ArtifactOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
     version_id: str
-    original_filename: str
+    original_filename: str | None
     media_type: str | None
     size_bytes: int
     sha256: str
