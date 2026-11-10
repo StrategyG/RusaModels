@@ -2,16 +2,22 @@
 import argparse
 import hashlib
 import json
+import random
 import re
 import shutil
 import tempfile
+import threading
 import time
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from botocore.exceptions import BotoCoreError, ClientError
 from huggingface_hub import HfApi, snapshot_download
-from sqlalchemy import select
+from huggingface_hub.utils import HfHubHTTPError
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import Timeout as RequestsTimeout
+from sqlalchemy import and_, or_, select, update
 
 from rusamodels.config import get_settings
 from rusamodels.database import build_engine, build_session_factory
@@ -95,7 +101,9 @@ def _upload_tree(storage, files: list[Path], model_id: str, version_id: str) -> 
         raise
 
 
-def _audit(db, job: ModelJob, action: str, outcome: str) -> None:
+def _audit(
+    db, job: ModelJob, action: str, outcome: str, *, status: str | None = None
+) -> None:
     db.add(AuditEvent(
         actor_subject=job.created_by,
         actor_role=job.created_by_role,
@@ -103,8 +111,63 @@ def _audit(db, job: ModelJob, action: str, outcome: str) -> None:
         resource=f"job:{job.id}",
         outcome=outcome,
         request_id=f"job-{job.id}",
-        event_metadata={"job_type": job.job_type, "status": job.status},
+        event_metadata={
+            "job_type": job.job_type,
+            "status": status or job.status,
+            "attempt": job.attempt_count,
+        },
     ))
+
+
+def _is_retryable(exc: Exception) -> bool:
+    if isinstance(exc, ClientError):
+        status = int(exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode", 0))
+        return status in {408, 429} or status >= 500
+    if isinstance(exc, HfHubHTTPError):
+        status = getattr(getattr(exc, "response", None), "status_code", 0) or 0
+        return status in {408, 429} or status >= 500
+    return isinstance(
+        exc, (TimeoutError, ConnectionError, RequestsConnectionError, RequestsTimeout, BotoCoreError)
+    )
+
+
+def _heartbeat_loop(
+    job_id: str,
+    sessions,
+    worker_id: str,
+    lease_epoch: int,
+    stop_event: threading.Event,
+    lease_lost: threading.Event,
+    lease_seconds: int,
+) -> None:
+    interval = max(1, lease_seconds // 3)
+    while not stop_event.wait(interval):
+        db = sessions()
+        try:
+            now = datetime.now(UTC)
+            result = db.execute(
+                update(ModelJob)
+                .where(
+                    ModelJob.id == job_id,
+                    ModelJob.status == "running",
+                    ModelJob.lease_owner == worker_id,
+                    ModelJob.lease_epoch == lease_epoch,
+                )
+                .values(
+                    lease_expires_at=now + timedelta(seconds=lease_seconds),
+                    last_heartbeat_at=now,
+                )
+            )
+            db.commit()
+            if result.rowcount != 1:
+                lease_lost.set()
+                return
+        except Exception:
+            db.rollback()
+            lease_lost.set()
+            return
+        finally:
+            db.close()
 
 
 def _download_job(db, job: ModelJob, settings, storage, work_dir: Path) -> list[Artifact]:
@@ -211,13 +274,35 @@ def _conversion_job(db, job: ModelJob, settings, storage, work_dir: Path) -> lis
     return _upload_tree(storage, outputs, job.model_id, output_version.id)[0]
 
 
-def process_job(job_id: str, sessions, settings, storage) -> None:
+def process_job(
+    job_id: str,
+    sessions,
+    settings,
+    storage,
+    worker_id: str,
+    lease_seconds: int = 30,
+) -> None:
     db = sessions()
     uploaded_keys: list[str] = []
+    stop_event = threading.Event()
+    lease_lost = threading.Event()
+    heartbeat = None
+    lease_epoch = None
     try:
         job = db.get(ModelJob, job_id)
-        if job is None or job.status != "running":
+        if job is None or job.status != "running" or job.lease_owner != worker_id:
             return
+        lease_epoch = job.lease_epoch
+        heartbeat = threading.Thread(
+            target=_heartbeat_loop,
+            args=(
+                job_id, sessions, worker_id, lease_epoch, stop_event,
+                lease_lost, lease_seconds,
+            ),
+            name=f"job-heartbeat-{job_id[:8]}",
+            daemon=True,
+        )
+        heartbeat.start()
         with tempfile.TemporaryDirectory(prefix="rusamodels-job-") as temporary:
             work_dir = Path(temporary)
             if job.job_type == "download":
@@ -227,6 +312,11 @@ def process_job(job_id: str, sessions, settings, storage) -> None:
             else:
                 raise RuntimeError("Unsupported model job type")
             uploaded_keys = [item.storage_key for item in artifacts]
+            if lease_lost.is_set():
+                db.rollback()
+                for key in uploaded_keys:
+                    storage.delete(key)
+                return
             output_version = db.get(ModelVersion, job.output_version_id)
             manifest = [
                 {"filename": item.original_filename, "size_bytes": item.size_bytes, "sha256": item.sha256}
@@ -235,11 +325,29 @@ def process_job(job_id: str, sessions, settings, storage) -> None:
             manifest_bytes = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
             output_version.manifest_sha256 = hashlib.sha256(manifest_bytes).hexdigest()
             output_version.status = "ready"
+            result = db.execute(
+                update(ModelJob)
+                .where(
+                    ModelJob.id == job_id,
+                    ModelJob.status == "running",
+                    ModelJob.lease_owner == worker_id,
+                    ModelJob.lease_epoch == lease_epoch,
+                )
+                .values(
+                    status="succeeded",
+                    progress_percent=100,
+                    finished_at=datetime.now(UTC),
+                    lease_owner=None,
+                    lease_expires_at=None,
+                )
+            )
+            if result.rowcount != 1:
+                db.rollback()
+                for key in uploaded_keys:
+                    storage.delete(key)
+                return
             db.add_all(artifacts)
-            job.status = "succeeded"
-            job.progress_percent = 100
-            job.finished_at = datetime.now(UTC)
-            _audit(db, job, "model_job.succeeded", "success")
+            _audit(db, job, "model_job.succeeded", "success", status="succeeded")
             try:
                 db.commit()
             except Exception:
@@ -250,26 +358,65 @@ def process_job(job_id: str, sessions, settings, storage) -> None:
     except Exception as exc:
         db.rollback()
         job = db.get(ModelJob, job_id)
-        if job is not None:
-            job.status = "failed"
+        if (
+            job is not None
+            and job.status == "running"
+            and job.lease_owner == worker_id
+            and job.lease_epoch == lease_epoch
+        ):
             job.error_code = type(exc).__name__[:128]
-            job.finished_at = datetime.now(UTC)
-            if job.output_version_id:
-                version = db.get(ModelVersion, job.output_version_id)
-                if version is not None:
-                    version.status = "failed"
-            _audit(db, job, "model_job.failed", "failed")
+            job.lease_owner = None
+            job.lease_expires_at = None
+            retry = _is_retryable(exc) and job.attempt_count < job.max_attempts
+            if retry:
+                backoff_cap = min(300, 5 * (2 ** max(0, job.attempt_count - 1)))
+                job.status = "queued"
+                job.next_attempt_at = datetime.now(UTC) + timedelta(
+                    seconds=random.uniform(0, backoff_cap)
+                )
+                job.finished_at = None
+                status = "queued"
+                outcome = "retry_scheduled"
+                if job.output_version_id:
+                    version = db.get(ModelVersion, job.output_version_id)
+                    if version is not None:
+                        version.status = "queued"
+            else:
+                job.status = "failed"
+                job.finished_at = datetime.now(UTC)
+                job.next_attempt_at = None
+                status = "failed"
+                outcome = "failed"
+                if job.output_version_id:
+                    version = db.get(ModelVersion, job.output_version_id)
+                    if version is not None:
+                        version.status = "failed"
+            _audit(db, job, "model_job.failed", outcome, status=status)
             db.commit()
     finally:
+        stop_event.set()
+        if heartbeat is not None:
+            heartbeat.join(timeout=max(2, lease_seconds))
         db.close()
 
 
-def claim_job(sessions) -> str | None:
+def claim_job(sessions, worker_id: str, lease_seconds: int = 30) -> str | None:
     db = sessions()
     try:
+        now = datetime.now(UTC)
+        eligible = or_(
+            and_(
+                ModelJob.status == "queued",
+                or_(ModelJob.next_attempt_at.is_(None), ModelJob.next_attempt_at <= now),
+            ),
+            and_(
+                ModelJob.status == "running",
+                or_(ModelJob.lease_expires_at.is_(None), ModelJob.lease_expires_at <= now),
+            ),
+        )
         job = db.scalar(
             select(ModelJob)
-            .where(ModelJob.status == "queued")
+            .where(eligible)
             .order_by(ModelJob.created_at.asc())
             .with_for_update(skip_locked=True)
             .limit(1)
@@ -277,8 +424,28 @@ def claim_job(sessions) -> str | None:
         if job is None:
             db.rollback()
             return None
+        if job.status == "running" and job.attempt_count >= job.max_attempts:
+            job.status = "failed"
+            job.error_code = "WorkerLeaseExpired"
+            job.finished_at = now
+            job.lease_owner = None
+            job.lease_expires_at = None
+            if job.output_version_id:
+                version = db.get(ModelVersion, job.output_version_id)
+                if version is not None:
+                    version.status = "failed"
+            _audit(db, job, "model_job.lease_expired", "failed", status="failed")
+            db.commit()
+            return None
         job.status = "running"
-        job.started_at = datetime.now(UTC)
+        job.attempt_count += 1
+        job.lease_epoch += 1
+        job.lease_owner = worker_id
+        job.lease_expires_at = now + timedelta(seconds=lease_seconds)
+        job.last_heartbeat_at = now
+        job.next_attempt_at = None
+        if job.started_at is None:
+            job.started_at = now
         db.commit()
         return job.id
     finally:
@@ -293,10 +460,11 @@ def main():
     engine = build_engine(settings.database_url)
     sessions = build_session_factory(engine)
     storage = create_storage(settings)
+    worker_id = str(uuid.uuid4())
     while True:
-        job_id = claim_job(sessions)
+        job_id = claim_job(sessions, worker_id)
         if job_id:
-            process_job(job_id, sessions, settings, storage)
+            process_job(job_id, sessions, settings, storage, worker_id)
             if args.once:
                 break
         elif args.once:
