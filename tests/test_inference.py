@@ -175,3 +175,30 @@ def test_openai_proxy_returns_service_unavailable_when_unconfigured(api_client):
         response = client.get("/openai/v1/models", headers=auth("manager-test-token"))
 
     assert response.status_code == 503
+
+
+def test_inference_audit_records_metadata_without_prompt_content(api_client, monkeypatch):
+    settings = api_client.app.state.settings
+    settings.inference_base_url = "http://runtime.internal:8088"
+    settings.inference_model_id = "qwen-local"
+    monkeypatch.setattr("rusamodels.inference.httpx.AsyncClient", FakeAsyncClient)
+
+    with _model_client(api_client, settings) as client:
+        response = client.post(
+            "/openai/v1/chat/completions",
+            json={
+                "model": "qwen-local",
+                "messages": [{"role": "user", "content": "private prompt must not be logged"}],
+            },
+            headers=auth("manager-test-token"),
+        )
+        assert response.status_code == 200
+        audit = client.get("/v1/platform/audit-events", headers=auth("admin-test-token"))
+
+    event = next(
+        item for item in audit.json()["items"]
+        if item["action"] == "inference.requested"
+    )
+    assert event["metadata"]["model"] == "qwen-local"
+    assert "messages" not in event["metadata"]
+    assert "private prompt must not be logged" not in str(event)
