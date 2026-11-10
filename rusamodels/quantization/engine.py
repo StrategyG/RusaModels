@@ -82,7 +82,7 @@ class ConversionEngine:
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
-        inspection = inspect_model_directory(source_dir)
+        inspect_model_directory(source_dir)
         dtype = getattr(torch, TORCH_DTYPES[precision])
         model = AutoModelForCausalLM.from_pretrained(
             source_dir,
@@ -114,10 +114,11 @@ class ConversionEngine:
         script_value = os.getenv("LLAMA_CPP_CONVERT_SCRIPT")
         if not script_value or not Path(script_value).is_file():
             raise RuntimeError("LLAMA_CPP_CONVERT_SCRIPT is not configured or missing")
+        script_path = str(Path(script_value).resolve())
         converter_output = output_dir / "model-f16.gguf"
         converter_precision = "f16" if quantization else precision.lower()
         _run(
-            [sys.executable, script_value, str(source_dir), "--outfile", str(converter_output),
+            [sys.executable, script_path, str(source_dir), "--outfile", str(converter_output),
              "--outtype", converter_precision],
             output_dir,
             self.timeout_seconds,
@@ -128,7 +129,9 @@ class ConversionEngine:
 
     def _quantize_existing_gguf(self, source: Path, output_dir: Path, quantization: str) -> Path:
         binary_value = os.getenv("LLAMA_QUANTIZE_BIN", "llama-quantize")
-        binary = shutil.which(binary_value) or (binary_value if Path(binary_value).is_file() else None)
+        binary = shutil.which(binary_value) or (
+            str(Path(binary_value).resolve()) if Path(binary_value).is_file() else None
+        )
         if not binary:
             raise RuntimeError("llama-quantize executable is not installed")
         output = output_dir / f"model-{quantization.lower()}.gguf"
