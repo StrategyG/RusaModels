@@ -284,8 +284,6 @@ def test_admin_can_request_running_job_cancellation_idempotently(api_client):
 
 
 def test_inference_service_role_can_call_only_openai_compatible_routes(api_client, monkeypatch):
-    from rusamodels.config import Settings
-
     settings = api_client.app.state.settings
     settings.inference_base_url = "http://runtime.internal:8088"
     settings.inference_model_id = "qwen-local"
