@@ -7,7 +7,7 @@
   "overrideCommand": false,
   "shutdownAction": "stopCompose",
   "hostRequirements": { "cpus": 4, "memory": 16, "storage": 32 },
-  "postCreateCommand": "python -m pip install -e '.[dev]'",
+  "postCreateCommand": "python -m pip install --user -e '.[dev]'",
   "forwardPorts": [8001],
   "portsAttributes": { "8001": { "label": "RusaModels Quant Server", "onAutoForward": "notify" } },
   "customizations": { "vscode": { "extensions": ["ms-python.python", "charliermarsh.ruff"] } }
