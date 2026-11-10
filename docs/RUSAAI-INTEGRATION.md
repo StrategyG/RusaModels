@@ -10,7 +10,7 @@ RusaModels now exposes authenticated model registry, model-version, artifact dow
 - Header: X-Rusa-Service-Token
 - The token is verified against RUSAMODELS_SERVICE_TOKEN_SHA256.
 
-The Model Server optionally exposes an OpenAI-compatible proxy under `/openai/v1` when `RUSAMODELS_INFERENCE_BASE_URL` and `RUSAMODELS_INFERENCE_MODEL_ID` are configured. It supports model listing, chat completions, completions, embeddings and streaming. Only Manager and Administrator roles can invoke it. This is a single-upstream proxy: dynamic model loading, routing, tool-call compatibility verification, rate limiting and usage metering remain future work. A dependency check does not prove that a model is loaded or compatible with tool calling.
+The Model Server optionally exposes an OpenAI-compatible proxy under `/openai/v1` when `RUSAMODELS_INFERENCE_BASE_URL` and `RUSAMODELS_INFERENCE_MODEL_ID` are configured. It supports model listing, chat completions, completions, embeddings and streaming. The dedicated `inference` role, Manager, and Administrator roles can invoke it. For RusaAi runtime traffic, issue a dedicated principal with role `inference`; its only permission is `inference:invoke`. It cannot create or modify models, run quantization jobs, archive models, or read administrative audit records. This is a single-upstream proxy: dynamic model loading, routing, tool-call compatibility verification, rate limiting and usage metering remain future work. A dependency check does not prove that a model is loaded or compatible with tool calling.
 
 
 ## OpenAI SDK example
@@ -22,7 +22,7 @@ from openai import OpenAI
 
 client = OpenAI(
     base_url="https://MODEL-SERVER-HOST/openai/v1",
-    api_key="RUSAMODELS_MANAGER_OR_ADMIN_TOKEN",
+    api_key="RUSAMODELS_INFERENCE_SERVICE_TOKEN",
 )
 
 response = client.chat.completions.create(
@@ -32,7 +32,7 @@ response = client.chat.completions.create(
 print(response.choices[0].message.content)
 ```
 
-For streaming, pass `stream=True`. Use a Manager or Administrator token. The configured model ID is the only model exposed by this initial single-upstream proxy.
+For streaming, pass `stream=True`. Use a dedicated `inference`-role token for runtime traffic. Manager and Administrator credentials should remain reserved for model operations and administration. The configured model ID is the only model exposed by this initial single-upstream proxy.
 
 
 ## Local CPU model and embedding runtimes
@@ -46,7 +46,7 @@ The RusaModels public API remains the single authenticated boundary:
 - `POST /openai/v1/embeddings` → local embedding service `/v1/embeddings`.
 - `GET /openai/v1/models` lists the configured generation and embedding model IDs.
 
-RUSA AI should configure its OpenAI-compatible chat client with `https://<model-server-host>/openai/v1`, a dedicated RusaModels Manager/Administrator token, and model ID `rusa-general-4b`. Its embedding provider should use the same API base URL, the same protected API boundary, model ID `rusa-embedding-small`, and dimension 384.
+RUSA AI should configure its OpenAI-compatible chat client with `https://<model-server-host>/openai/v1`, a dedicated RusaModels `inference`-role token, and model ID `rusa-general-4b`. The inference role is limited to the OpenAI-compatible inference routes. Its embedding provider should use the same API base URL, the same protected API boundary, model ID `rusa-embedding-small`, and dimension 384.
 
 The default embedding model is multilingual-e5-small. It expects `input_type=passage` for document chunks and `input_type=query` for retrieval queries. The RUSA AI embedding client/RAG call sites must send this field explicitly. The migrated RusaModels embedding endpoint accepts it; this repository change does not alter RUSA AI's existing RAG package.
 
