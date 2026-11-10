@@ -65,6 +65,7 @@ class LocalArtifactStorage:
 
     def create_multipart(self, key: str, content_type: str, metadata: dict[str, str]) -> str:
         validate_storage_key(key)
+        self.multipart_root.mkdir(parents=True, exist_ok=True)
         upload_id = str(uuid.uuid4())
         (self.multipart_root / upload_id).mkdir(parents=True, exist_ok=False)
         return upload_id
