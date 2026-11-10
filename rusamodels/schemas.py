@@ -1,5 +1,6 @@
-"""Validated request and response schemas."""
+"""Validated API request and response schemas."""
 from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 
@@ -25,6 +26,13 @@ class VersionCreate(BaseModel):
     manifest_sha256: str | None = Field(default=None, pattern=r"^[0-9a-fA-F]{64}$")
 
 
+class UploadCreate(BaseModel):
+    filename: str = Field(min_length=1, max_length=512)
+    expected_size: int = Field(gt=0)
+    expected_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
+    media_type: str = Field(default="application/octet-stream", max_length=255)
+
+
 class ModelOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
@@ -48,4 +56,26 @@ class VersionOut(BaseModel):
     status: str
     manifest_sha256: str | None
     created_by: str
+    created_at: datetime | None
+
+
+class UploadOut(BaseModel):
+    id: str
+    version_id: str
+    filename: str
+    expected_size: int
+    expected_sha256: str
+    status: str
+    part_size_limit: int
+
+
+class ArtifactOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    version_id: str
+    original_filename: str
+    media_type: str | None
+    size_bytes: int
+    sha256: str
+    immutable: bool
     created_at: datetime | None
