@@ -230,3 +230,43 @@ def test_expired_job_at_attempt_limit_is_failed(api_client):
     assert failed.lease_owner is None
     assert failed_version.status == "failed"
     db.close()
+
+
+def test_hub_retry_reuses_previously_pinned_commit(
+    api_client, tmp_path, monkeypatch
+):
+    db, _model, version, job = _download_records(api_client)
+    commit = "c" * 40
+    job.parameters = {**job.parameters, "resolved_revision": commit}
+    db.commit()
+    requested_revisions = []
+
+    class FakeHub:
+        def model_info(self, repo_id, revision, files_metadata):
+            requested_revisions.append(revision)
+            return SimpleNamespace(
+                sha=commit,
+                card_data=SimpleNamespace(license="apache-2.0"),
+                siblings=[SimpleNamespace(size=20)],
+            )
+
+    def fake_snapshot_download(repo_id, revision, token, local_dir):
+        requested_revisions.append(revision)
+        target = Path(local_dir)
+        target.mkdir()
+        (target / "config.json").write_text(json.dumps({"model_type": "qwen2"}))
+        (target / "weights.safetensors").write_bytes(b"retry-safe-weights")
+        return str(target)
+
+    monkeypatch.setattr(worker, "HfApi", lambda token=None: FakeHub())
+    monkeypatch.setattr(worker, "snapshot_download", fake_snapshot_download)
+    settings = SimpleNamespace(hf_token=None, max_upload_bytes=1024 * 1024)
+    storage = LocalArtifactStorage(tmp_path / "objects")
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+
+    worker._download_job(db, job, settings, storage, work_dir)
+
+    assert requested_revisions == [commit, commit]
+    assert version.source_revision == commit
+    db.close()
