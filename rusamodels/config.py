@@ -72,6 +72,8 @@ class Settings(BaseSettings):
                 raise ValueError("RUSAMODELS_INFERENCE_BASE_URL must be an HTTP(S) URL")
             if parsed.username or parsed.password or parsed.query or parsed.fragment:
                 raise ValueError("Inference base URL must not contain credentials, query or fragment")
+            if parsed.path not in {"", "/"}:
+                raise ValueError("Inference base URL must not contain an API path prefix")
             if self.environment == "production":
                 if parsed.scheme != "https" or not self.inference_api_key:
                     raise ValueError("Production inference requires HTTPS and an upstream API key")
