@@ -25,6 +25,23 @@ jobs:
         run: pytest -q
       - name: Build container image
         run: docker build --tag rusamodels-ci:${GITHUB_SHA} .
+      - name: Smoke test container health endpoint
+        run: |
+          docker run -d --name rusamodels-smoke -p 127.0.0.1:18000:8000 \
+            -e RUSAMODELS_ENV=test \
+            -e DATABASE_URL=sqlite:////tmp/rusamodels-smoke.db \
+            -e STORAGE_BACKEND=local \
+            -e LOCAL_STORAGE_PATH=/tmp/rusamodels-artifacts \
+            rusamodels-ci:${GITHUB_SHA}
+          trap 'docker rm -f rusamodels-smoke >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18000/health/live; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs rusamodels-smoke
+          exit 1
       - name: Validate devcontainer profiles
         run: |
           python -m json.tool .devcontainer/model-server/devcontainer.json >/dev/null
