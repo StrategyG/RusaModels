@@ -6,7 +6,7 @@ Independent model infrastructure platform for the RUSA-AI ecosystem.
 
 RusaModels is deployed as two independent services backed by one shared control plane:
 
-- **Model Server** — model registry and lifecycle API; future inference gateway and router.
+- **Model Server** — model registry, lifecycle API and optional OpenAI-compatible inference proxy.
 - **Quant Server** — model inspection, conversion and quantization service boundary.
 - **Shared PostgreSQL** — registry metadata, model versions, upload sessions and audit events.
 - **Shared S3-compatible storage** — immutable model artifacts.
@@ -16,6 +16,7 @@ RusaAi is an authenticated service consumer. It does not connect directly to the
 ## Implemented
 
 - Separate FastAPI Model Server and Quant Server entry points plus an independent Quant Worker.
+- Optional OpenAI-compatible chat, completion, embedding and model-list proxy endpoints on Model Server, with streaming support and a separately configured upstream runtime.
 - PostgreSQL/SQLite adapters and Alembic migrations.
 - S3-compatible and development-only local artifact storage.
 - Viewer, Manager and Administrator roles, hashed bearer tokens and service-token authentication.
@@ -31,7 +32,7 @@ RusaAi is an authenticated service consumer. It does not connect directly to the
 
 ## Not yet implemented
 
-Model inference, OpenAI-compatible endpoints, model routing, scheduling, benchmark/evaluation, training orchestration and dashboard. Safetensors conversion requires `pip install -e ".[quantization]"`. GGUF conversion requires a separately installed llama.cpp `convert_hf_to_gguf.py` and `llama-quantize`, configured with `LLAMA_CPP_CONVERT_SCRIPT` and `LLAMA_QUANTIZE_BIN`. The GGUF adapter allowlists Llama, Qwen2/Qwen3 and DeepSeek model types by default, with explicit configuration for extensions. Actual compatibility remains dependent on the installed upstream converter version. These features are not advertised as operational until implemented and tested.
+Dynamic model loading/deployment, multi-model routing, scheduling, benchmark/evaluation, training orchestration and dashboard. The inference proxy requires an explicitly configured upstream runtime; it does not install or supervise llama.cpp/vLLM itself. Safetensors conversion requires `pip install -e ".[quantization]"`. GGUF conversion requires a separately installed llama.cpp `convert_hf_to_gguf.py` and `llama-quantize`, configured with `LLAMA_CPP_CONVERT_SCRIPT` and `LLAMA_QUANTIZE_BIN`. The GGUF adapter allowlists Llama, Qwen2/Qwen3 and DeepSeek model types by default, with explicit configuration for extensions. Actual compatibility remains dependent on the installed upstream converter version. These features are not advertised as operational until implemented and tested.
 
 ## Local development
 
