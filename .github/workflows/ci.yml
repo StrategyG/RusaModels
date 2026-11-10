@@ -34,8 +34,10 @@ jobs:
           DATABASE_URL='postgresql+psycopg://dev:dev@db.example:5432/rusamodels' \
           S3_ENDPOINT_URL='https://s3.example.test' \
           S3_BUCKET='rusamodels-artifacts' \
-          S3_ACCESS_KEY_ID='ci-access-key' \
-          S3_SECRET_ACCESS_KEY='ci-secret-key' \
+          S3_READ_ACCESS_KEY_ID='ci-read-key' \
+          S3_READ_SECRET_ACCESS_KEY='ci-read-secret' \
+          S3_WRITE_ACCESS_KEY_ID='ci-write-key' \
+          S3_WRITE_SECRET_ACCESS_KEY='ci-write-secret' \
           RUSAMODELS_API_PRINCIPALS='{}' \
           RUSAMODELS_SERVICE_TOKEN_SHA256='0000000000000000000000000000000000000000000000000000000000000000' \
           docker compose -f .devcontainer/docker-compose.codespaces.yml config --quiet
