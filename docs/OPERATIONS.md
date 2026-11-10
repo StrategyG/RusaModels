@@ -32,7 +32,7 @@ The Model Server can proxy OpenAI-compatible requests to one explicitly configur
 - `RUSAMODELS_INFERENCE_API_KEY`: optional upstream bearer key in development; required with HTTPS in production.
 - `RUSAMODELS_INFERENCE_TIMEOUT_SECONDS`: upstream timeout from 1 to 3600 seconds.
 
-Routes are rooted at `/openai/v1`: `GET /models`, `POST /chat/completions`, `POST /completions` and `POST /embeddings`. Manager and Administrator roles may invoke inference. The gateway replaces the requested model alias with the configured upstream model ID, forwards the request ID, supports server-sent-event streaming and records request metadata without storing prompts. The upstream key is never returned to clients.
+Routes are rooted at `/openai/v1`: `GET /models`, `POST /chat/completions`, `POST /completions` and `POST /embeddings`. The least-privilege `inference` role may invoke only these routes; Manager and Administrator roles retain access for operational use. Register the RusaAi service token as a SHA-256 principal with role `inference`; do not reuse a Manager or Administrator credential for service-to-service inference. The gateway replaces the requested model alias with the configured upstream model ID, forwards the request ID, supports server-sent-event streaming and records request metadata without storing prompts. The upstream key is never returned to clients.
 
 This is a single-upstream proxy, not a model loader or router. Install and operate a compatible runtime separately (for example, llama.cpp `llama-server`); model deployment lifecycle, dynamic routing, rate limits and usage metering are not yet implemented. Production requires HTTPS and an upstream API key.
 
