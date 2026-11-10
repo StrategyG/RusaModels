@@ -180,7 +180,7 @@ def _download_job(db, job: ModelJob, settings, storage, work_dir: Path) -> list[
     token = settings.hf_token.get_secret_value() if settings.hf_token else None
     api = HfApi(token=token)
     repo_id = job.parameters["repo_id"]
-    revision = job.parameters["revision"]
+    revision = job.parameters.get("resolved_revision") or job.parameters["revision"]
     info = api.model_info(repo_id, revision=revision, files_metadata=True)
     card = getattr(info, "card_data", None)
     upstream_license = getattr(card, "license", None) if card else None
@@ -197,7 +197,22 @@ def _download_job(db, job: ModelJob, settings, storage, work_dir: Path) -> list[
         "resolved_revision": resolved_revision.lower(),
         "upstream_license": str(upstream_license).lower(),
     }
-    db.commit()
+    db.flush()
+    if job.lease_owner:
+        persisted = db.execute(
+            update(ModelJob)
+            .where(
+                ModelJob.id == job.id,
+                ModelJob.status == "running",
+                ModelJob.lease_owner == job.lease_owner,
+                ModelJob.lease_epoch == job.lease_epoch,
+            )
+            .values(parameters=job.parameters)
+        )
+        if persisted.rowcount != 1:
+            db.rollback()
+            raise RuntimeError("Worker lease was lost before persisting Hub revision")
+        db.commit()
     sibling_sizes = [
         int(item.size) for item in (getattr(info, "siblings", None) or [])
         if getattr(item, "size", None) is not None
