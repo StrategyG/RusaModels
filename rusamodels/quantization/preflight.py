@@ -1,4 +1,4 @@
-"""Conservative CPU memory and temporary-disk preflight checks."""
+"""Conservative container-aware CPU memory and temporary-disk preflight checks."""
 import os
 import shutil
 from dataclasses import dataclass
@@ -18,7 +18,7 @@ class PreflightResult:
     available_disk_bytes: int
 
 
-def available_ram_bytes() -> int:
+def _host_available_ram_bytes() -> int | None:
     if hasattr(os, "sysconf"):
         try:
             return int(os.sysconf("SC_AVPHYS_PAGES") * os.sysconf("SC_PAGE_SIZE"))
@@ -27,8 +27,50 @@ def available_ram_bytes() -> int:
     try:
         import psutil
         return int(psutil.virtual_memory().available)
-    except ImportError as exc:
-        raise ResourceLimitError("Cannot determine available system RAM") from exc
+    except ImportError:
+        return None
+
+
+def _cgroup_available_ram_bytes(root: Path = Path("/sys/fs/cgroup")) -> int | None:
+    # cgroup v2 reports the hard memory limit and current usage separately.
+    v2_limit = root / "memory.max"
+    v2_current = root / "memory.current"
+    if v2_limit.is_file():
+        try:
+            raw_limit = v2_limit.read_text(encoding="ascii").strip()
+            if raw_limit != "max":
+                limit = int(raw_limit)
+                current = int(v2_current.read_text(encoding="ascii").strip()) if v2_current.is_file() else 0
+                if 0 < limit < 2**60:
+                    return max(0, limit - current)
+        except (OSError, ValueError):
+            pass
+
+    # cgroup v1 uses memory.limit_in_bytes and memory.usage_in_bytes.
+    v1_root = root / "memory"
+    v1_limit = v1_root / "memory.limit_in_bytes"
+    v1_current = v1_root / "memory.usage_in_bytes"
+    if v1_limit.is_file():
+        try:
+            limit = int(v1_limit.read_text(encoding="ascii").strip())
+            current = int(v1_current.read_text(encoding="ascii").strip()) if v1_current.is_file() else 0
+            if 0 < limit < 2**60:
+                return max(0, limit - current)
+        except (OSError, ValueError):
+            pass
+    return None
+
+
+def available_ram_bytes() -> int:
+    host_available = _host_available_ram_bytes()
+    cgroup_available = _cgroup_available_ram_bytes()
+    if host_available is None and cgroup_available is None:
+        raise ResourceLimitError("Cannot determine available system or container RAM")
+    if host_available is None:
+        return cgroup_available
+    if cgroup_available is None:
+        return host_available
+    return min(host_available, cgroup_available)
 
 
 def preflight_conversion(
