@@ -83,3 +83,35 @@ class ArtifactOut(BaseModel):
     sha256: str
     immutable: bool
     created_at: datetime | None
+
+
+class HubDownloadCreate(BaseModel):
+    repo_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$", max_length=255)
+    revision: str = Field(default="main", min_length=1, max_length=255)
+    model_name: str = Field(min_length=1, max_length=255)
+    version: str = Field(default="hf-main", min_length=1, max_length=128)
+    license_id: str = Field(min_length=1, max_length=128)
+    license_accepted: bool
+    architecture: str | None = Field(default=None, max_length=128)
+
+
+class ConversionCreate(BaseModel):
+    output_version: str = Field(min_length=1, max_length=128)
+    target_format: str = Field(pattern=r"^(safetensors|gguf)$")
+    target_precision: str = Field(default="F16", pattern=r"^(F32|F16|BF16)$")
+    quantization: str | None = Field(default=None, pattern=r"^(Q8|Q6|Q5|Q4)$")
+
+
+class JobOut(BaseModel):
+    id: str
+    model_id: str
+    input_version_id: str | None
+    output_version_id: str | None
+    job_type: str
+    status: str
+    progress_percent: int
+    error_code: str | None
+    created_by: str
+    created_at: datetime | None
+    started_at: datetime | None
+    finished_at: datetime | None
