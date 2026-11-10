@@ -1,4 +1,5 @@
 import json
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -269,4 +270,51 @@ def test_hub_retry_reuses_previously_pinned_commit(
 
     assert requested_revisions == [commit, commit]
     assert version.source_revision == commit
+    db.close()
+
+
+
+def test_running_job_cancellation_is_observed_by_worker_heartbeat(
+    api_client, tmp_path, monkeypatch
+):
+    db, _model, version, job = _download_records(api_client)
+    job.status = "queued"
+    db.commit()
+    db.close()
+    sessions = api_client.app.state.sessions
+    worker_id = "worker-cancel-test"
+    job_id = worker.claim_job(sessions, worker_id, lease_seconds=3)
+    started = threading.Event()
+
+    def wait_for_cancel(db, job, settings, storage, work_dir, cancel_event=None):
+        started.set()
+        cancel_event.wait(timeout=4)
+        return []
+
+    monkeypatch.setattr(worker, "_download_job", wait_for_cancel)
+    settings = SimpleNamespace(hf_token=None, max_upload_bytes=1024 * 1024)
+    storage = LocalArtifactStorage(tmp_path / "objects")
+    runner = threading.Thread(
+        target=worker.process_job,
+        args=(job_id, sessions, settings, storage, worker_id),
+        kwargs={"lease_seconds": 3},
+    )
+    runner.start()
+    assert started.wait(timeout=3)
+
+    control_db = sessions()
+    control_job = control_db.get(ModelJob, job.id)
+    control_job.cancel_requested = True
+    control_db.commit()
+    control_db.close()
+
+    runner.join(timeout=5)
+    assert not runner.is_alive()
+    db = sessions()
+    cancelled = db.get(ModelJob, job.id)
+    cancelled_version = db.get(ModelVersion, version.id)
+    assert cancelled.status == "cancelled"
+    assert cancelled.cancel_requested is True
+    assert cancelled.lease_owner is None
+    assert cancelled_version.status == "cancelled"
     db.close()
