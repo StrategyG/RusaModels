@@ -1,25 +1,23 @@
+x-shared-env: &shared-env
+  RUSAMODELS_ENV: development
+  DATABASE_URL: ${DATABASE_URL:?Set shared DATABASE_URL Codespaces secret}
+  STORAGE_BACKEND: s3
+  S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:?Set shared S3_ENDPOINT_URL Codespaces secret}
+  S3_REGION: ${S3_REGION:-us-east-1}
+  S3_BUCKET: ${S3_BUCKET:?Set shared S3_BUCKET Codespaces secret}
+  RUSAMODELS_API_PRINCIPALS: ${RUSAMODELS_API_PRINCIPALS:?Set RUSAMODELS_API_PRINCIPALS Codespaces secret}
+  RUSAMODELS_SERVICE_TOKEN_SHA256: ${RUSAMODELS_SERVICE_TOKEN_SHA256:?Set service token digest secret}
+
 services:
   model-server:
     build:
       context: ..
       dockerfile: Dockerfile
     command: ["uvicorn", "services.model_server.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
-    environment: &shared-env
-      RUSAMODELS_ENV: development
-      DATABASE_URL: ${DATABASE_URL:?Set shared DATABASE_URL Codespaces secret}
-      STORAGE_BACKEND: s3
-      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:?Set shared S3_ENDPOINT_URL Codespaces secret}
-      S3_REGION: ${S3_REGION:-us-east-1}
-      S3_BUCKET: ${S3_BUCKET:?Set shared S3_BUCKET Codespaces secret}
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?Set shared S3_ACCESS_KEY_ID Codespaces secret}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?Set shared S3_SECRET_ACCESS_KEY Codespaces secret}
-      RUSAMODELS_API_PRINCIPALS: ${RUSAMODELS_API_PRINCIPALS:?Set RUSAMODELS_API_PRINCIPALS Codespaces secret}
-      RUSAMODELS_SERVICE_TOKEN_SHA256: ${RUSAMODELS_SERVICE_TOKEN_SHA256:?Set service token digest secret}
-      HF_TOKEN: ${HF_TOKEN:-}
-      RUSAMODELS_WORKER_POLL_SECONDS: ${RUSAMODELS_WORKER_POLL_SECONDS:-5}
-      LLAMA_CPP_CONVERT_SCRIPT: ${LLAMA_CPP_CONVERT_SCRIPT:-}
-      LLAMA_QUANTIZE_BIN: ${LLAMA_QUANTIZE_BIN:-llama-quantize}
-      RUSAMODELS_GGUF_MODEL_TYPES: ${RUSAMODELS_GGUF_MODEL_TYPES:-}
+    environment:
+      <<: *shared-env
+      S3_ACCESS_KEY_ID: ${S3_READ_ACCESS_KEY_ID:?Set read-only S3 access key}
+      S3_SECRET_ACCESS_KEY: ${S3_READ_SECRET_ACCESS_KEY:?Set read-only S3 secret}
     volumes:
       - ..:/workspace:cached
     working_dir: /workspace
@@ -30,7 +28,15 @@ services:
       context: ..
       dockerfile: Dockerfile
     command: ["uvicorn", "services.quant_server.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
-    environment: *shared-env
+    environment: &quant-env
+      <<: *shared-env
+      S3_ACCESS_KEY_ID: ${S3_WRITE_ACCESS_KEY_ID:?Set write-limited S3 access key}
+      S3_SECRET_ACCESS_KEY: ${S3_WRITE_SECRET_ACCESS_KEY:?Set write-limited S3 secret}
+      HF_TOKEN: ${HF_TOKEN:-}
+      RUSAMODELS_WORKER_POLL_SECONDS: ${RUSAMODELS_WORKER_POLL_SECONDS:-5}
+      LLAMA_CPP_CONVERT_SCRIPT: ${LLAMA_CPP_CONVERT_SCRIPT:-}
+      LLAMA_QUANTIZE_BIN: ${LLAMA_QUANTIZE_BIN:-llama-quantize}
+      RUSAMODELS_GGUF_MODEL_TYPES: ${RUSAMODELS_GGUF_MODEL_TYPES:-}
     volumes:
       - ..:/workspace:cached
     working_dir: /workspace
@@ -41,7 +47,7 @@ services:
       context: ..
       dockerfile: Dockerfile
     command: ["python", "-m", "services.quant_server.worker"]
-    environment: *shared-env
+    environment: *quant-env
     volumes:
       - ..:/workspace:cached
     working_dir: /workspace
