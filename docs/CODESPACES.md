@@ -48,7 +48,7 @@ Store raw tokens only in the secret manager.
 
 ## CPU inference Model Server (16 GB)
 
-For local CPU inference in the Model Server Codespace, select `.devcontainer/model-server-cpu/devcontainer.json`. It requests 4 CPUs, 16 GB RAM and 64 GB storage, and adds two private services:
+For local CPU inference in the Model Server Codespace, select `.devcontainer/model-server-cpu/devcontainer.json`. It requests 4 CPUs, 16 GB RAM and 32 GB storage, and adds two private services:
 - llama.cpp serving one pinned GGUF chat model.
 - SentenceTransformers serving the local multilingual embedding model.
 
