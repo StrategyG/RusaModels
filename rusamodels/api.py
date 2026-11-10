@@ -344,7 +344,8 @@ def create_service_app(
     ):
 
         if service_name != "quant-server":
-            raise HTTPException(404, "Artifact writes are available only on Quant Server")        if part_number < 1 or part_number > 10000:
+            raise HTTPException(404, "Artifact writes are available only on Quant Server")
+        if part_number < 1 or part_number > 10000:
             raise HTTPException(422, "part_number must be between 1 and 10000")
         upload = get_upload(db, upload_id)
         if upload.status != "open":
@@ -523,7 +524,8 @@ def create_service_app(
     ):
 
         if service_name != "quant-server":
-            raise HTTPException(404, "Artifact writes are available only on Quant Server")        upload = get_upload(db, upload_id)
+            raise HTTPException(404, "Artifact writes are available only on Quant Server")
+        upload = get_upload(db, upload_id)
         if upload.status != "open":
             raise HTTPException(409, "Only open uploads can be aborted")
         artifact_storage.abort_multipart(upload.storage_key, upload.storage_upload_id)
