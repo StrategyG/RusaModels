@@ -103,7 +103,7 @@ async def stream_request(
 async def run(args: argparse.Namespace) -> dict[str, object]:
     api_key = os.getenv("RUSAMODELS_API_TOKEN")
     if not api_key:
-        raise SystemExit("RUSA_API_KEY must be set in the environment")
+        raise SystemExit("RUSAMODELS_API_TOKEN must be set in the environment")
     parsed = urlparse(args.base_url)
     local_hosts = {"localhost", "127.0.0.1", "::1"}
     if parsed.hostname not in local_hosts and not args.allow_remote_staging:
