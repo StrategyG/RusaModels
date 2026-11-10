@@ -1,5 +1,6 @@
 """Immutable artifact storage adapters."""
 import hashlib
+import hmac
 import os
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -43,7 +44,7 @@ class LocalArtifactStorage:
         if self.root not in target.parents:
             raise ValueError("Artifact path escapes storage root")
         digest = hashlib.sha256(payload).hexdigest()
-        if expected_sha256 and not hashlib.compare_digest(digest, expected_sha256.lower()):
+        if expected_sha256 and not hmac.compare_digest(digest, expected_sha256.lower()):
             raise ValueError("SHA-256 mismatch")
         target.parent.mkdir(parents=True, exist_ok=True)
         try:
@@ -51,6 +52,9 @@ class LocalArtifactStorage:
                 handle.write(payload)
         except FileExistsError:
             raise FileExistsError("Artifact keys are immutable") from None
+        except Exception:
+            target.unlink(missing_ok=True)
+            raise
         return StorageWriteResult(safe, digest, len(payload))
 
     def read_bytes(self, key: str) -> bytes:
@@ -78,7 +82,7 @@ class S3ArtifactStorage:
     def write_bytes(self, key: str, payload: bytes, expected_sha256: str | None = None) -> StorageWriteResult:
         safe = validate_storage_key(key)
         digest = hashlib.sha256(payload).hexdigest()
-        if expected_sha256 and not hmac_compare(digest, expected_sha256.lower()):
+        if expected_sha256 and not hmac.compare_digest(digest, expected_sha256.lower()):
             raise ValueError("SHA-256 mismatch")
         try:
             self.client.head_object(Bucket=self.bucket, Key=safe)
@@ -94,11 +98,6 @@ class S3ArtifactStorage:
 
     def read_bytes(self, key: str) -> bytes:
         return self.client.get_object(Bucket=self.bucket, Key=validate_storage_key(key))["Body"].read()
-
-
-def hmac_compare(left: str, right: str) -> bool:
-    import hmac
-    return hmac.compare_digest(left, right)
 
 
 def create_storage(settings):
