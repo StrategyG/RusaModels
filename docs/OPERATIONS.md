@@ -17,7 +17,7 @@ For S3, non-final multipart parts must be at least 5 MiB. The default configured
 
 ## Quantization worker
 
-The Quant Server Codespace runs the API and the separate `services.quant_server.worker` process. Local Compose also starts `quant-worker`. The worker claims queued jobs from the shared PostgreSQL queue, downloads approved Hugging Face snapshots or converts registered versions, verifies artifact checksums and registers immutable output artifacts.
+The Quant Server Codespace runs the API and the separate `services.quant_server.worker` process. Local Compose also starts `quant-worker`. The worker claims queued jobs from the shared PostgreSQL queue using a 30-second lease and a monotonically increasing lease epoch. A heartbeat renews the lease every 10 seconds. If a worker disappears, another worker can reclaim an expired lease; stale workers cannot commit results after ownership changes. Transient network and object-store failures are retried with exponential backoff and jitter, up to three attempts. Permanent validation and license failures are terminal. The worker downloads approved Hugging Face snapshots or converts registered versions, verifies artifact checksums and registers immutable output artifacts.
 
 Hugging Face downloads require an upstream model-card license identifier and explicit `license_accepted=true`. The worker compares the supplied license identifier to the upstream model card before downloading. Gated repositories additionally require an authorized `HF_TOKEN` secret.
 
