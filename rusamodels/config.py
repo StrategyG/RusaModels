@@ -40,7 +40,7 @@ class Settings(BaseSettings):
             if self.storage_backend != "s3":
                 raise ValueError("Staging and production require S3-compatible storage")
         if self.environment == "production":
-            if not self.service_token_sha256 or self.api_principals_json.strip() == "{}":
+            if not self.service_token_sha256 or not self.api_principals_json.strip() or self.api_principals_json.strip() == "{}":
                 raise ValueError("Production requires service and API credentials")
         return self
 
