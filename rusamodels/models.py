@@ -1,8 +1,18 @@
-"""Shared registry and audit ORM models."""
+"""Shared registry, upload and audit ORM models."""
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, JSON, String, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -47,11 +57,38 @@ class Artifact(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     version_id: Mapped[str] = mapped_column(String(36), ForeignKey("model_versions.id", ondelete="RESTRICT"), nullable=False)
     storage_key: Mapped[str] = mapped_column(String(1024), nullable=False, unique=True)
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     media_type: Mapped[str | None] = mapped_column(String(255))
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     immutable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class UploadSession(Base):
+    __tablename__ = "upload_sessions"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    version_id: Mapped[str] = mapped_column(String(36), ForeignKey("model_versions.id", ondelete="RESTRICT"), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(1024), nullable=False, unique=True)
+    storage_upload_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    media_type: Mapped[str] = mapped_column(String(255), nullable=False, default="application/octet-stream")
+    expected_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    expected_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class UploadPart(Base):
+    __tablename__ = "upload_parts"
+    __table_args__ = (UniqueConstraint("upload_id", "part_number", name="uq_upload_part_number"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    upload_id: Mapped[str] = mapped_column(String(36), ForeignKey("upload_sessions.id", ondelete="CASCADE"), nullable=False)
+    part_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    etag: Mapped[str] = mapped_column(String(255), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
 class AuditEvent(Base):
