@@ -44,11 +44,27 @@ def _safe_filename(path: Path) -> str:
     return (name or "artifact.bin")[:255]
 
 
-def _upload_tree(storage, files: list[Path], model_id: str, version_id: str) -> tuple[list[Artifact], list[str]]:
+class JobCancelled(Exception):
+    """Raised when an administrator requests cooperative job cancellation."""
+
+
+def _check_cancelled(cancel_event: threading.Event | None) -> None:
+    if cancel_event is not None and cancel_event.is_set():
+        raise JobCancelled("Model job cancellation was requested")
+
+
+def _upload_tree(
+    storage,
+    files: list[Path],
+    model_id: str,
+    version_id: str,
+    cancel_event: threading.Event | None = None,
+) -> tuple[list[Artifact], list[str]]:
     artifacts = []
     keys = []
     try:
         for file_path in files:
+            _check_cancelled(cancel_event)
             if not file_path.is_file() or file_path.is_symlink():
                 continue
             digest, size = _sha256_file(file_path)
@@ -64,6 +80,7 @@ def _upload_tree(storage, files: list[Path], model_id: str, version_id: str) -> 
                 with file_path.open("rb") as source:
                     number = 1
                     while chunk := source.read(_PART_BYTES):
+                        _check_cancelled(cancel_event)
                         etag = storage.upload_part(key, upload_id, number, chunk)
                         parts.append({"PartNumber": number, "ETag": etag})
                         number += 1
@@ -138,6 +155,7 @@ def _heartbeat_loop(
     lease_epoch: int,
     stop_event: threading.Event,
     lease_lost: threading.Event,
+    cancel_event: threading.Event,
     lease_seconds: int,
 ) -> None:
     interval = max(1, lease_seconds // 3)
@@ -162,6 +180,8 @@ def _heartbeat_loop(
             if result.rowcount != 1:
                 lease_lost.set()
                 return
+            if db.scalar(select(ModelJob.cancel_requested).where(ModelJob.id == job_id)):
+                cancel_event.set()
         except Exception:
             db.rollback()
             lease_lost.set()
@@ -170,7 +190,11 @@ def _heartbeat_loop(
             db.close()
 
 
-def _download_job(db, job: ModelJob, settings, storage, work_dir: Path) -> list[Artifact]:
+def _download_job(
+    db, job: ModelJob, settings, storage, work_dir: Path,
+    cancel_event: threading.Event | None = None,
+) -> list[Artifact]:
+    _check_cancelled(cancel_event)
     model = db.get(ModelCatalog, job.model_id)
     version = db.get(ModelVersion, job.output_version_id)
     if model is None or version is None:
@@ -182,6 +206,7 @@ def _download_job(db, job: ModelJob, settings, storage, work_dir: Path) -> list[
     repo_id = job.parameters["repo_id"]
     revision = job.parameters.get("resolved_revision") or job.parameters["revision"]
     info = api.model_info(repo_id, revision=revision, files_metadata=True)
+    _check_cancelled(cancel_event)
     card = getattr(info, "card_data", None)
     upstream_license = getattr(card, "license", None) if card else None
     if not upstream_license:
@@ -230,6 +255,7 @@ def _download_job(db, job: ModelJob, settings, storage, work_dir: Path) -> list[
         token=token,
         local_dir=str(local_dir),
     )
+    _check_cancelled(cancel_event)
     files = [
         path for path in local_dir.rglob("*")
         if path.is_file() and not path.is_symlink() and ".cache" not in path.parts
@@ -239,11 +265,17 @@ def _download_job(db, job: ModelJob, settings, storage, work_dir: Path) -> list[
         raise RuntimeError("Downloaded model exceeds configured MAX_UPLOAD_BYTES")
     if actual_total > shutil.disk_usage(work_dir).total:
         raise RuntimeError("Downloaded model exceeds available temporary disk")
-    artifacts, _keys = _upload_tree(storage, files, job.model_id, version.id)
+    artifacts, _keys = _upload_tree(
+        storage, files, job.model_id, version.id, cancel_event
+    )
     return artifacts
 
 
-def _conversion_job(db, job: ModelJob, settings, storage, work_dir: Path) -> list[Artifact]:
+def _conversion_job(
+    db, job: ModelJob, settings, storage, work_dir: Path,
+    cancel_event: threading.Event | None = None,
+) -> list[Artifact]:
+    _check_cancelled(cancel_event)
     source_version = db.get(ModelVersion, job.input_version_id)
     output_version = db.get(ModelVersion, job.output_version_id)
     if source_version is None or output_version is None:
@@ -261,6 +293,7 @@ def _conversion_job(db, job: ModelJob, settings, storage, work_dir: Path) -> lis
     source_dir.mkdir()
     output_dir.mkdir()
     for artifact in source_artifacts:
+        _check_cancelled(cancel_event)
         filename = _safe_filename(Path(artifact.original_filename or artifact.id))
         target = source_dir / filename
         if target.exists():
@@ -268,6 +301,7 @@ def _conversion_job(db, job: ModelJob, settings, storage, work_dir: Path) -> lis
         digest = hashlib.sha256()
         with target.open("xb") as output:
             for chunk in storage.read_stream(artifact.storage_key):
+                _check_cancelled(cancel_event)
                 digest.update(chunk)
                 output.write(chunk)
         if digest.hexdigest() != artifact.sha256 or target.stat().st_size != artifact.size_bytes:
@@ -278,6 +312,7 @@ def _conversion_job(db, job: ModelJob, settings, storage, work_dir: Path) -> lis
         work_dir,
         target_format=params["target_format"],
     )
+    _check_cancelled(cancel_event)
     engine = ConversionEngine()
     outputs = engine.convert(
         source_dir,
@@ -285,8 +320,12 @@ def _conversion_job(db, job: ModelJob, settings, storage, work_dir: Path) -> lis
         target_format=params["target_format"],
         target_precision=params["target_precision"],
         quantization=params.get("quantization"),
+        cancel_event=cancel_event,
     )
-    return _upload_tree(storage, outputs, job.model_id, output_version.id)[0]
+    _check_cancelled(cancel_event)
+    return _upload_tree(
+        storage, outputs, job.model_id, output_version.id, cancel_event
+    )[0]
 
 
 def process_job(
@@ -301,6 +340,7 @@ def process_job(
     uploaded_keys: list[str] = []
     stop_event = threading.Event()
     lease_lost = threading.Event()
+    cancel_event = threading.Event()
     heartbeat = None
     lease_epoch = None
     try:
@@ -312,7 +352,7 @@ def process_job(
             target=_heartbeat_loop,
             args=(
                 job_id, sessions, worker_id, lease_epoch, stop_event,
-                lease_lost, lease_seconds,
+                lease_lost, cancel_event, lease_seconds,
             ),
             name=f"job-heartbeat-{job_id[:8]}",
             daemon=True,
@@ -321,12 +361,17 @@ def process_job(
         with tempfile.TemporaryDirectory(prefix="rusamodels-job-") as temporary:
             work_dir = Path(temporary)
             if job.job_type == "download":
-                artifacts = _download_job(db, job, settings, storage, work_dir)
+                artifacts = _download_job(
+                    db, job, settings, storage, work_dir, cancel_event
+                )
             elif job.job_type == "convert":
-                artifacts = _conversion_job(db, job, settings, storage, work_dir)
+                artifacts = _conversion_job(
+                    db, job, settings, storage, work_dir, cancel_event
+                )
             else:
                 raise RuntimeError("Unsupported model job type")
             uploaded_keys = [item.storage_key for item in artifacts]
+            _check_cancelled(cancel_event)
             if lease_lost.is_set():
                 db.rollback()
                 for key in uploaded_keys:
@@ -347,6 +392,7 @@ def process_job(
                     ModelJob.status == "running",
                     ModelJob.lease_owner == worker_id,
                     ModelJob.lease_epoch == lease_epoch,
+                    ModelJob.cancel_requested.is_(False),
                 )
                 .values(
                     status="succeeded",
@@ -358,6 +404,15 @@ def process_job(
             )
             if result.rowcount != 1:
                 db.rollback()
+                current = db.get(ModelJob, job_id)
+                if (
+                    current is not None
+                    and current.status == "running"
+                    and current.lease_owner == worker_id
+                    and current.lease_epoch == lease_epoch
+                    and current.cancel_requested
+                ):
+                    raise JobCancelled("Model job cancellation was requested")
                 for key in uploaded_keys:
                     storage.delete(key)
                 return
@@ -382,6 +437,23 @@ def process_job(
             job.error_code = type(exc).__name__[:128]
             job.lease_owner = None
             job.lease_expires_at = None
+            if isinstance(exc, JobCancelled) or cancel_event.is_set():
+                for key in uploaded_keys:
+                    try:
+                        storage.delete(key)
+                    except Exception:
+                        pass
+                job.status = "cancelled"
+                job.finished_at = datetime.now(UTC)
+                job.next_attempt_at = None
+                status = "cancelled"
+                if job.output_version_id:
+                    version = db.get(ModelVersion, job.output_version_id)
+                    if version is not None:
+                        version.status = "cancelled"
+                _audit(db, job, "model_job.cancelled", "success", status=status)
+                db.commit()
+                return
             retry = _is_retryable(exc) and job.attempt_count < job.max_attempts
             if retry:
                 backoff_cap = min(300, 5 * (2 ** max(0, job.attempt_count - 1)))
@@ -438,6 +510,18 @@ def claim_job(sessions, worker_id: str, lease_seconds: int = 30) -> str | None:
         )
         if job is None:
             db.rollback()
+            return None
+        if job.status == "running" and job.cancel_requested:
+            job.status = "cancelled"
+            job.finished_at = now
+            job.lease_owner = None
+            job.lease_expires_at = None
+            if job.output_version_id:
+                version = db.get(ModelVersion, job.output_version_id)
+                if version is not None:
+                    version.status = "cancelled"
+            _audit(db, job, "model_job.cancelled", "success", status="cancelled")
+            db.commit()
             return None
         if job.status == "running" and job.attempt_count >= job.max_attempts:
             job.status = "failed"
