@@ -10,4 +10,4 @@ RusaModels now exposes authenticated model registry, model-version, artifact dow
 - Header: X-Rusa-Service-Token
 - The token is verified against RUSAMODELS_SERVICE_TOKEN_SHA256.
 
-The OpenAI-compatible inference endpoint and model routing contract are not yet implemented. A dependency check does not prove that a model is loaded or compatible with tool calling.
+The Model Server optionally exposes an OpenAI-compatible proxy under `/openai/v1` when `RUSAMODELS_INFERENCE_BASE_URL` and `RUSAMODELS_INFERENCE_MODEL_ID` are configured. It supports model listing, chat completions, completions, embeddings and streaming. Only Manager and Administrator roles can invoke it. This is a single-upstream proxy: dynamic model loading, routing, tool-call compatibility verification, rate limiting and usage metering remain future work. A dependency check does not prove that a model is loaded or compatible with tool calling.
