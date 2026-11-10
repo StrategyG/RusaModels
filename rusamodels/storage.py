@@ -111,6 +111,12 @@ class LocalArtifactStorage:
             raise FileNotFoundError("Multipart upload not found")
         return folder
 
+    def read_bytes(self, key: str) -> bytes:
+        target = (self.root / validate_storage_key(key)).resolve()
+        if self.root not in target.parents:
+            raise ValueError("Artifact path escapes storage root")
+        return target.read_bytes()
+
     def read_stream(self, key: str) -> Iterator[bytes]:
         target = (self.root / validate_storage_key(key)).resolve()
         if self.root not in target.parents:
@@ -173,6 +179,15 @@ class S3ArtifactStorage:
         self.client.abort_multipart_upload(
             Bucket=self.bucket, Key=validate_storage_key(key), UploadId=upload_id
         )
+
+    def read_bytes(self, key: str) -> bytes:
+        body = self.client.get_object(
+            Bucket=self.bucket, Key=validate_storage_key(key)
+        )["Body"]
+        try:
+            return body.read()
+        finally:
+            body.close()
 
     def read_stream(self, key: str) -> Iterator[bytes]:
         body = self.client.get_object(Bucket=self.bucket, Key=validate_storage_key(key))["Body"]
