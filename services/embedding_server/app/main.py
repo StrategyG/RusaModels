@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, Header, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class EmbeddingRequest(BaseModel):
