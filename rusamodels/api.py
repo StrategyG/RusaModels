@@ -691,13 +691,25 @@ def create_service_app(
         job = db.get(ModelJob, job_id)
         if job is None:
             raise HTTPException(404, "Model job not found")
-        if job.status != "queued":
-            raise HTTPException(409, "Only queued jobs can be cancelled")
-        job.status = "cancelled"
-        job.finished_at = datetime.now(UTC)
-        db.commit()
-        audit(db, request, principal, "model_job.cancelled", f"job:{job_id}")
-        return job
+        if job.status == "cancelled":
+            return job
+        if job.status == "queued":
+            job.status = "cancelled"
+            job.finished_at = datetime.now(UTC)
+            job.next_attempt_at = None
+            db.commit()
+            audit(db, request, principal, "model_job.cancelled", f"job:{job_id}")
+            return job
+        if job.status == "running":
+            if not job.cancel_requested:
+                job.cancel_requested = True
+                db.commit()
+                audit(
+                    db, request, principal, "model_job.cancel_requested",
+                    f"job:{job_id}", {"lease_epoch": job.lease_epoch},
+                )
+            return job
+        raise HTTPException(409, "Terminal model jobs cannot be cancelled")
 
     @app.get("/v1/platform/audit-events", tags=["platform"])
     def list_audit_events(
