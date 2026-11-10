@@ -164,6 +164,13 @@ def test_hub_download_job_is_queued_with_license_acknowledgement(api_client):
     assert accepted.status_code == 202
     assert accepted.json()["job"]["job_type"] == "download"
     assert accepted.json()["job"]["status"] == "queued"
+    audit = api_client.get("/v1/platform/audit-events", headers=auth("admin-test-token"))
+    queued_event = next(
+        item for item in audit.json()["items"] if item["action"] == "hub.download_queued"
+    )
+    assert queued_event["actor_subject"] == "test-manager"
+    assert queued_event["metadata"]["license_id"] == "apache-2.0"
+    assert queued_event["metadata"]["license_accepted"] is True
 
 
 def test_conversion_job_queue_and_admin_cancel(api_client):
