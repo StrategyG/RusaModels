@@ -21,14 +21,15 @@ RusaAi is an authenticated service consumer. It does not connect directly to the
 - Viewer, Manager and Administrator roles, hashed bearer tokens and service-token authentication.
 - Model catalog CRUD, version registration and administrator-only archival.
 - Resumable multipart uploads, per-part checksums, object-level SHA-256 verification and streamed artifact downloads.
-- Hugging Face Hub search and queued model download jobs with explicit license acknowledgement.
-- Queued precision conversion and GGUF quantization jobs with conservative CPU/RAM/disk preflight.
+- Hugging Face Hub search and queued model download jobs with upstream license verification and explicit license acknowledgement.
+- Queued F32/F16/BF16 safetensors conversion, GGUF F32/F16/BF16 conversion and Q8/Q6/Q5/Q4 GGUF quantization adapters.
+- Conservative CPU/RAM/disk preflight and a separate Quant Worker that runs jobs outside API request processes.
 - Append-only audit events enforced by database triggers.
 - Docker Compose, separate Codespaces profiles and GitHub Actions CI.
 
 ## Not yet implemented
 
-Model inference, OpenAI-compatible endpoints, model routing, scheduling, benchmark/evaluation, training orchestration and dashboard. Quantization execution requires optional Transformers/PyTorch or separately installed llama.cpp tools; supported model types are checked before GGUF conversion. These features are not advertised as operational until implemented and tested.
+Model inference, OpenAI-compatible endpoints, model routing, scheduling, benchmark/evaluation, training orchestration and dashboard. Safetensors conversion requires `pip install -e ".[quantization]"`. GGUF conversion requires a separately installed llama.cpp `convert_hf_to_gguf.py` and `llama-quantize`, configured with `LLAMA_CPP_CONVERT_SCRIPT` and `LLAMA_QUANTIZE_BIN`. The GGUF adapter allowlists Llama, Qwen2/Qwen3 and DeepSeek model types by default, with explicit configuration for extensions. Actual compatibility remains dependent on the installed upstream converter version. These features are not advertised as operational until implemented and tested.
 
 ## Local development
 
