@@ -9,7 +9,7 @@
   "runServices": ["model-server", "llama-cpp", "embedding-server"],
   "overrideCommand": false,
   "shutdownAction": "stopCompose",
-  "hostRequirements": { "cpus": 4, "memory": 16, "storage": 64 },
+  "hostRequirements": { "cpus": 4, "memory": 16, "storage": 32 },
   "postCreateCommand": "python -m pip install --user -e '.[dev]'",
   "forwardPorts": [8000],
   "portsAttributes": {
