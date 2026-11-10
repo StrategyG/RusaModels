@@ -3,7 +3,7 @@
   "dockerComposeFile": ["../docker-compose.codespaces.yml"],
   "service": "quant-server",
   "workspaceFolder": "/workspace",
-  "runServices": ["quant-server"],
+  "runServices": ["quant-server", "quant-worker"],
   "overrideCommand": false,
   "shutdownAction": "stopCompose",
   "hostRequirements": { "cpus": 4, "memory": 16, "storage": 32 },
