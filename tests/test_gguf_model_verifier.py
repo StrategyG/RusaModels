@@ -75,8 +75,8 @@ def test_verifier_cli_loads_model_settings_from_dotenv(tmp_path, monkeypatch):
         f"RUSAMODELS_GGUF_MODEL_PATH={model}\nRUSAMODELS_GGUF_MODEL_SHA256={digest}\n",
         encoding="utf-8",
     )
-    monkeypatch.delenv("RUSA_GGUF_MODEL_PATH", raising=False)
-    monkeypatch.delenv("RUSA_GGUF_MODEL_SHA256", raising=False)
+    monkeypatch.delenv("RUSAMODELS_GGUF_MODEL_PATH", raising=False)
+    monkeypatch.delenv("RUSAMODELS_GGUF_MODEL_SHA256", raising=False)
     script = Path(__file__).resolve().parents[1] / "scripts" / "verify_gguf_model.py"
 
     result = subprocess.run(
