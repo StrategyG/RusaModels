@@ -36,7 +36,7 @@ python rusamodels/evaluation/evaluate_agent_sft.py \
   --output artifacts/agent-sft-evaluation.json
 ```
 
-For the constrained NVIDIA T4 experiment, use the separate `configs/training/agent-sft-t4.yaml` profile and `scripts/train_agent_sft_t4.sh`. The manual GitHub Actions workflow requires an explicitly registered, trusted self-hosted T4 runner and a manual confirmation input.
+For a guided Colab run, open `notebooks/RusaModels_QLoRA_T4_Colab.ipynb`. For the constrained NVIDIA T4 experiment from a terminal or trusted self-hosted runner, use the separate `configs/training/agent-sft-t4.yaml` profile and `scripts/train_agent_sft_t4.sh`. The manual GitHub Actions workflow requires an explicitly registered, trusted self-hosted T4 runner and a manual confirmation input.
 
 ## Merge and release
 
