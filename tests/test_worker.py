@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -68,7 +69,7 @@ def test_hub_download_pins_resolved_commit_before_snapshot(
 
     def fake_snapshot_download(repo_id, revision, token, local_dir):
         snapshot_calls.append(revision)
-        target = tmp_path / "snapshot"
+        target = Path(local_dir)
         target.mkdir()
         (target / "config.json").write_text(json.dumps({
             "model_type": "qwen2",
