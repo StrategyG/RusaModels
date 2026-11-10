@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     s3_secret_access_key: SecretStr | None = Field(None, validation_alias="S3_SECRET_ACCESS_KEY")
     api_principals_json: str = Field("{}", validation_alias="RUSAMODELS_API_PRINCIPALS")
     service_token_sha256: str | None = Field(None, validation_alias="RUSAMODELS_SERVICE_TOKEN_SHA256")
+    hf_token: SecretStr | None = Field(None, validation_alias="HF_TOKEN")
+    worker_poll_seconds: int = Field(5, validation_alias="RUSAMODELS_WORKER_POLL_SECONDS")
     max_upload_bytes: int = Field(10 * 1024**3, validation_alias="MAX_UPLOAD_BYTES")
 
     @field_validator("max_upload_bytes")
