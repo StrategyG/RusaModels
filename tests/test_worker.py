@@ -142,3 +142,91 @@ def test_hub_download_rejects_non_commit_revision(
     with pytest.raises(RuntimeError, match="immutable commit revision"):
         worker._download_job(db, job, settings, storage, work_dir)
     db.close()
+
+
+
+def test_claim_job_reclaims_expired_lease_with_new_epoch(api_client):
+    from datetime import UTC, datetime, timedelta
+
+    db, _model, _version, job = _download_records(api_client)
+    job.status = "queued"
+    db.commit()
+    db.close()
+    sessions = api_client.app.state.sessions
+
+    first_claim = worker.claim_job(sessions, "worker-a", lease_seconds=30)
+    assert first_claim == job.id
+    db = sessions()
+    claimed = db.get(ModelJob, job.id)
+    assert claimed.status == "running"
+    assert claimed.attempt_count == 1
+    assert claimed.lease_epoch == 1
+    assert claimed.lease_owner == "worker-a"
+    claimed.lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    db.commit()
+    db.close()
+
+    second_claim = worker.claim_job(sessions, "worker-b", lease_seconds=30)
+    assert second_claim == job.id
+    db = sessions()
+    reclaimed = db.get(ModelJob, job.id)
+    assert reclaimed.attempt_count == 2
+    assert reclaimed.lease_epoch == 2
+    assert reclaimed.lease_owner == "worker-b"
+    db.close()
+
+
+def test_transient_worker_failure_is_requeued_with_bounded_retry(
+    api_client, tmp_path, monkeypatch
+):
+    db, _model, version, job = _download_records(api_client)
+    job.status = "queued"
+    db.commit()
+    db.close()
+    sessions = api_client.app.state.sessions
+    worker_id = "worker-retry-test"
+    job_id = worker.claim_job(sessions, worker_id)
+    assert job_id == job.id
+
+    def fail_download(*args, **kwargs):
+        raise TimeoutError("simulated upstream timeout")
+
+    monkeypatch.setattr(worker, "_download_job", fail_download)
+    settings = SimpleNamespace(hf_token=None, max_upload_bytes=1024 * 1024)
+    storage = LocalArtifactStorage(tmp_path / "objects")
+    worker.process_job(job_id, sessions, settings, storage, worker_id)
+
+    db = sessions()
+    retried = db.get(ModelJob, job.id)
+    refreshed_version = db.get(ModelVersion, version.id)
+    assert retried.status == "queued"
+    assert retried.attempt_count == 1
+    assert retried.max_attempts == 3
+    assert retried.next_attempt_at is not None
+    assert retried.lease_owner is None
+    assert refreshed_version.status == "queued"
+    db.close()
+
+
+def test_expired_job_at_attempt_limit_is_failed(api_client):
+    from datetime import UTC, datetime, timedelta
+
+    db, _model, version, job = _download_records(api_client)
+    job.status = "running"
+    job.attempt_count = 3
+    job.max_attempts = 3
+    job.lease_owner = "dead-worker"
+    job.lease_epoch = 3
+    job.lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    db.commit()
+    db.close()
+
+    assert worker.claim_job(api_client.app.state.sessions, "replacement-worker") is None
+    db = api_client.app.state.sessions()
+    failed = db.get(ModelJob, job.id)
+    failed_version = db.get(ModelVersion, version.id)
+    assert failed.status == "failed"
+    assert failed.error_code == "WorkerLeaseExpired"
+    assert failed.lease_owner is None
+    assert failed_version.status == "failed"
+    db.close()
