@@ -3,6 +3,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
     ForeignKey,
@@ -59,7 +60,7 @@ class Artifact(Base):
     storage_key: Mapped[str] = mapped_column(String(1024), nullable=False, unique=True)
     original_filename: Mapped[str | None] = mapped_column(String(255))
     media_type: Mapped[str | None] = mapped_column(String(255))
-    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     immutable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -73,7 +74,7 @@ class UploadSession(Base):
     storage_upload_id: Mapped[str] = mapped_column(String(255), nullable=False)
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     media_type: Mapped[str] = mapped_column(String(255), nullable=False, default="application/octet-stream")
-    expected_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    expected_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
     expected_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
