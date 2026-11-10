@@ -58,6 +58,11 @@ app = FastAPI(
 )
 
 
+def _prepare_inputs(texts: list[str], input_type: Literal["query", "passage"]) -> list[str]:
+    prefix = "query: " if input_type == "query" else "passage: "
+    return [item if item.startswith(("query: ", "passage: ")) else prefix + item for item in texts]
+
+
 def _authorize(authorization: str | None) -> None:
     expected = os.getenv("RUSAMODELS_EMBEDDING_INTERNAL_TOKEN", "")
     supplied = authorization.removeprefix("Bearer ").strip() if authorization else ""
@@ -102,8 +107,7 @@ def embeddings(
     if any(not isinstance(item, str) or not item.strip() or len(item) > 100_000 for item in texts):
         raise HTTPException(status_code=422, detail="Every input must be non-empty text up to 100000 characters")
 
-    prefix = "query: " if payload.input_type == "query" else "passage: "
-    normalized = [item if item.startswith(("query: ", "passage: ")) else prefix + item for item in texts]
+    normalized = _prepare_inputs(texts, payload.input_type)
     model = request.app.state.model
     vectors = model.encode(
         normalized,
