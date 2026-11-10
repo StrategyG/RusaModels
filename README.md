@@ -15,18 +15,20 @@ RusaAi is an authenticated service consumer. It does not connect directly to the
 
 ## Implemented
 
-- Separate FastAPI Model Server and Quant Server entry points.
+- Separate FastAPI Model Server and Quant Server entry points plus an independent Quant Worker.
 - PostgreSQL/SQLite adapters and Alembic migrations.
 - S3-compatible and development-only local artifact storage.
 - Viewer, Manager and Administrator roles, hashed bearer tokens and service-token authentication.
 - Model catalog CRUD, version registration and administrator-only archival.
 - Resumable multipart uploads, per-part checksums, object-level SHA-256 verification and streamed artifact downloads.
+- Hugging Face Hub search and queued model download jobs with explicit license acknowledgement.
+- Queued precision conversion and GGUF quantization jobs with conservative CPU/RAM/disk preflight.
 - Append-only audit events enforced by database triggers.
 - Docker Compose, separate Codespaces profiles and GitHub Actions CI.
 
 ## Not yet implemented
 
-Model Hub search, managed Hugging Face downloads, precision conversion, GGUF generation, Q8/Q6/Q5/Q4 quantization, model inference, OpenAI-compatible endpoints, model routing, scheduling, benchmark/evaluation, training orchestration and dashboard. These features are not advertised as operational until implemented and tested.
+Model inference, OpenAI-compatible endpoints, model routing, scheduling, benchmark/evaluation, training orchestration and dashboard. Quantization execution requires optional Transformers/PyTorch or separately installed llama.cpp tools; supported model types are checked before GGUF conversion. These features are not advertised as operational until implemented and tested.
 
 ## Local development
 
