@@ -103,6 +103,7 @@ class ConversionCreate(BaseModel):
 
 
 class JobOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: str
     model_id: str
     input_version_id: str | None
