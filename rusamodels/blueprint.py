@@ -38,7 +38,7 @@ class ModelSpec:
 class TrainingSpec:
     objective: str = "next_token_prediction"
     precision: str = "bf16"
-    post_training: List[str] = field(
+    post_training: list[str] = field(
         default_factory=lambda: [
             "supervised_fine_tuning",
             "rlhf_rlaif",
