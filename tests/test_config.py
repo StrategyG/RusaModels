@@ -50,3 +50,12 @@ def test_production_inference_requires_https_and_upstream_key():
 def test_inference_timeout_has_a_bounded_range():
     with pytest.raises(ValidationError, match="between 1 and 3600"):
         Settings(environment="test", inference_timeout_seconds=3601)
+
+
+def test_inference_base_url_must_not_include_an_api_path():
+    with pytest.raises(ValidationError, match="API path prefix"):
+        Settings(
+            environment="test",
+            inference_base_url="http://runtime.example/v1",
+            inference_model_id="qwen-local",
+        )
