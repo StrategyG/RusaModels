@@ -1,0 +1,38 @@
+# Operational CPU inference profile for the 4-vCPU / 16-GB Codespaces Model Server.
+# Model weights are external local artifacts; no weights are stored in Git.
+runtime:
+  backend: llama.cpp
+  device: cpu
+  format: gguf
+  gpu_layers: 0
+  context_size: 4096
+  parallel_slots: 1
+  cpu_threads: 3
+  llm_memory_limit: 8g
+
+generation:
+  model_id: rusa-general-4b
+  source_model: Qwen/Qwen3-4B-Instruct-2507
+  quantization: Q5_K_M
+  artifact_path_env: RUSAMODELS_GGUF_MODEL_PATH
+  artifact_sha256_env: RUSAMODELS_GGUF_MODEL_SHA256
+
+embedding:
+  model_id: rusa-embedding-small
+  source_model: intfloat/multilingual-e5-small
+  runtime: sentence-transformers
+  device: cpu
+  dimensions: 384
+  normalize_embeddings: true
+  query_prefix: "query: "
+  passage_prefix: "passage: "
+  model_path_env: RUSAMODELS_EMBEDDING_MODEL_PATH
+  cpu_threads: 1
+  memory_limit: 2g
+
+api:
+  generation_base_url: http://llama-cpp:8080
+  embedding_base_url: http://embedding-server:8081
+  public_proxy_prefix: /openai/v1
+  authentication_required: true
+  external_ai_fallback: false
