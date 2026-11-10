@@ -50,7 +50,7 @@ class TrainingSpec:
 
 @dataclass
 class InferenceSpec:
-    quantization: List[str] = field(default_factory=lambda: ["int8", "fp8"])
+    quantization: list[str] = field(default_factory=lambda: ["int8", "fp8"])
     speculative_decoding: bool = True
     tool_use: bool = True
 
