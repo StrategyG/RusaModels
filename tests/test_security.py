@@ -27,3 +27,22 @@ def test_plaintext_token_registry_rejected():
 def test_production_requires_postgres_and_s3():
     with pytest.raises(ValidationError):
         Settings(environment="production", database_url="sqlite:///prod.db", storage_backend="local")
+
+
+def test_inference_role_is_limited_to_inference_capability():
+    assert ROLE_PERMISSIONS["inference"] == frozenset({"inference:invoke"})
+    principals = parse_principals(json.dumps({
+        sha256_hex("inference-token"): {
+            "subject": "rusa-ai-inference",
+            "role": "inference",
+        }
+    }))
+    assert principals[sha256_hex("inference-token")].role == "inference"
+
+
+def test_inference_role_is_not_a_model_manager_or_administrator():
+    permissions = ROLE_PERMISSIONS["inference"]
+    assert "models:write" not in permissions
+    assert "quantization:run" not in permissions
+    assert "admin:destructive" not in permissions
+    assert "audit:read" not in permissions
