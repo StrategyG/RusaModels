@@ -2,6 +2,7 @@
 import hashlib
 import re
 import uuid
+from datetime import datetime, timezone
 from collections.abc import Generator
 from typing import Any
 from urllib.parse import quote
@@ -15,9 +16,14 @@ from sqlalchemy.orm import Session
 
 from rusamodels.config import Settings, get_settings
 from rusamodels.database import build_engine, build_session_factory
-from rusamodels.models import Artifact, AuditEvent, ModelCatalog, ModelVersion, UploadPart, UploadSession
+from rusamodels.models import (
+    Artifact, AuditEvent, ModelCatalog, ModelJob, ModelVersion, UploadPart, UploadSession
+)
 from rusamodels.schemas import (
     ArtifactOut,
+    ConversionCreate,
+    HubDownloadCreate,
+    JobOut,
     ModelCreate,
     ModelOut,
     ModelPatch,
@@ -26,13 +32,15 @@ from rusamodels.schemas import (
     VersionCreate,
     VersionOut,
 )
+from rusamodels.hub import search_models
 from rusamodels.security import Principal, authenticate, record_audit, require_service_token
 from rusamodels.storage import create_storage
 
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 _SAFE_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
 _REQUIRED_TABLES = {
-    "model_catalog", "model_versions", "artifacts", "upload_sessions", "upload_parts", "audit_events"
+    "model_catalog", "model_versions", "artifacts", "upload_sessions", "upload_parts",
+    "model_jobs", "audit_events"
 }
 _PART_SIZE_LIMIT = 64 * 1024 * 1024
 _S3_MIN_PART_SIZE = 5 * 1024 * 1024
@@ -513,6 +521,166 @@ def create_service_app(
         db.commit()
         audit(db, request, principal, "artifacts.upload_aborted", f"upload:{upload_id}")
         return None
+
+
+    if service_name == "model-server":
+        @app.get("/v1/hub/search", tags=["model-hub"])
+        def hub_search(
+            request: Request,
+            q: str = Query(min_length=1, max_length=128),
+            limit: int = Query(default=20, ge=1, le=50),
+            principal: Principal = Depends(roles("viewer", "manager", "administrator")),
+            db: Session = Depends(get_db),
+        ):
+            try:
+                items = search_models(q, limit)
+            except Exception as exc:
+                raise HTTPException(502, "Hugging Face Hub search is unavailable") from exc
+            audit(db, request, principal, "hub.search", "/v1/hub/search",
+                  {"query": q, "result_count": len(items)})
+            return {"items": items, "count": len(items)}
+
+    if service_name == "quant-server":
+        @app.post("/v1/hub/downloads", tags=["model-hub"], status_code=202)
+        def create_hub_download(
+            payload: HubDownloadCreate,
+            request: Request,
+            principal: Principal = Depends(roles("manager", "administrator")),
+            db: Session = Depends(get_db),
+        ):
+            if not payload.license_accepted:
+                raise HTTPException(400, "Explicit upstream license acceptance is required")
+            model = ModelCatalog(
+                name=payload.model_name.strip(),
+                publisher=payload.repo_id.split("/", maxsplit=1)[0],
+                architecture=payload.architecture,
+                license_id=payload.license_id,
+                source_uri=f"https://huggingface.co/{payload.repo_id}",
+                created_by=principal.subject,
+            )
+            db.add(model)
+            db.flush()
+            version = ModelVersion(
+                model_id=model.id, version=payload.version,
+                source_revision=payload.revision, precision="SOURCE",
+                status="queued", created_by=principal.subject,
+            )
+            db.add(version)
+            db.flush()
+            job = ModelJob(
+                model_id=model.id, output_version_id=version.id, job_type="download",
+                parameters={
+                    "repo_id": payload.repo_id,
+                    "revision": payload.revision,
+                    "license_accepted": payload.license_accepted,
+                },
+                status="queued", progress_percent=0,
+                created_by=principal.subject, created_by_role=principal.role,
+            )
+            db.add(job)
+            try:
+                db.commit()
+            except IntegrityError as exc:
+                db.rollback()
+                raise HTTPException(409, "Requested model version already exists") from exc
+            db.refresh(job)
+            audit(db, request, principal, "hub.download_queued", f"job:{job.id}",
+                  {"repo_id": payload.repo_id, "revision": payload.revision})
+            return {
+                "job": JobOut.model_validate(job),
+                "model_id": model.id,
+                "version_id": version.id,
+            }
+
+        @app.post(
+            "/v1/models/{model_id}/versions/{version_id}/conversion-jobs",
+            response_model=JobOut,
+            status_code=202,
+            tags=["quantization"],
+        )
+        def create_conversion_job(
+            model_id: str,
+            version_id: str,
+            payload: ConversionCreate,
+            request: Request,
+            principal: Principal = Depends(roles("manager", "administrator")),
+            db: Session = Depends(get_db),
+        ):
+            source = db.get(ModelVersion, version_id)
+            if source is None or source.model_id != model_id:
+                raise HTTPException(404, "Source model version not found")
+            artifact_exists = db.scalar(
+                select(Artifact.id).where(Artifact.version_id == version_id).limit(1)
+            )
+            if artifact_exists is None:
+                raise HTTPException(409, "Source model version has no registered artifacts")
+            if payload.quantization and payload.target_format != "gguf":
+                raise HTTPException(422, "Integer quantization requires GGUF output")
+            precision = (
+                f"GGUF_{payload.quantization}" if payload.quantization
+                else f"GGUF_{payload.target_precision}" if payload.target_format == "gguf"
+                else payload.target_precision
+            )
+            output_version = ModelVersion(
+                model_id=model_id, version=payload.output_version,
+                source_revision=source.source_revision, precision=precision,
+                status="queued", created_by=principal.subject,
+            )
+            db.add(output_version)
+            try:
+                db.flush()
+                job = ModelJob(
+                    model_id=model_id, input_version_id=version_id,
+                    output_version_id=output_version.id, job_type="convert",
+                    parameters={
+                        "target_format": payload.target_format,
+                        "target_precision": payload.target_precision,
+                        "quantization": payload.quantization,
+                    },
+                    status="queued", progress_percent=0,
+                    created_by=principal.subject, created_by_role=principal.role,
+                )
+                db.add(job)
+                db.commit()
+            except IntegrityError as exc:
+                db.rollback()
+                raise HTTPException(409, "Output model version already exists") from exc
+            db.refresh(job)
+            audit(db, request, principal, "quantization.job_queued", f"job:{job.id}",
+                  {"source_version_id": version_id, "output_version_id": output_version.id,
+                   "target_format": payload.target_format, "precision": precision})
+            return job
+
+    @app.get("/v1/jobs/{job_id}", response_model=JobOut, tags=["jobs"])
+    def get_job(
+        job_id: str,
+        request: Request,
+        principal: Principal = Depends(roles("viewer", "manager", "administrator")),
+        db: Session = Depends(get_db),
+    ):
+        job = db.get(ModelJob, job_id)
+        if job is None:
+            raise HTTPException(404, "Model job not found")
+        audit(db, request, principal, "model_job.read", f"job:{job_id}")
+        return job
+
+    @app.post("/v1/jobs/{job_id}/cancel", response_model=JobOut, tags=["jobs"])
+    def cancel_job(
+        job_id: str,
+        request: Request,
+        principal: Principal = Depends(roles("administrator")),
+        db: Session = Depends(get_db),
+    ):
+        job = db.get(ModelJob, job_id)
+        if job is None:
+            raise HTTPException(404, "Model job not found")
+        if job.status != "queued":
+            raise HTTPException(409, "Only queued jobs can be cancelled")
+        job.status = "cancelled"
+        job.finished_at = datetime.now(timezone.utc)
+        db.commit()
+        audit(db, request, principal, "model_job.cancelled", f"job:{job_id}")
+        return job
 
     @app.get("/v1/platform/audit-events", tags=["platform"])
     def list_audit_events(
