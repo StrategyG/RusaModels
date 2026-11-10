@@ -15,6 +15,11 @@ services:
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?Set shared S3_SECRET_ACCESS_KEY Codespaces secret}
       RUSAMODELS_API_PRINCIPALS: ${RUSAMODELS_API_PRINCIPALS:?Set RUSAMODELS_API_PRINCIPALS Codespaces secret}
       RUSAMODELS_SERVICE_TOKEN_SHA256: ${RUSAMODELS_SERVICE_TOKEN_SHA256:?Set service token digest secret}
+      HF_TOKEN: ${HF_TOKEN:-}
+      RUSAMODELS_WORKER_POLL_SECONDS: ${RUSAMODELS_WORKER_POLL_SECONDS:-5}
+      LLAMA_CPP_CONVERT_SCRIPT: ${LLAMA_CPP_CONVERT_SCRIPT:-}
+      LLAMA_QUANTIZE_BIN: ${LLAMA_QUANTIZE_BIN:-llama-quantize}
+      RUSAMODELS_GGUF_MODEL_TYPES: ${RUSAMODELS_GGUF_MODEL_TYPES:-}
     volumes:
       - ..:/workspace:cached
     working_dir: /workspace
@@ -30,3 +35,13 @@ services:
       - ..:/workspace:cached
     working_dir: /workspace
     ports: ["8001:8000"]
+
+  quant-worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    command: ["python", "-m", "services.quant_server.worker"]
+    environment: *shared-env
+    volumes:
+      - ..:/workspace:cached
+    working_dir: /workspace
