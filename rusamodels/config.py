@@ -38,6 +38,16 @@ class Settings(BaseSettings):
             raise ValueError("MAX_UPLOAD_BYTES must be positive")
         return value
 
+    @field_validator(
+        "inference_base_url", "inference_model_id", "inference_api_key", mode="before"
+    )
+    @classmethod
+    def empty_inference_settings_to_none(cls, value):
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
+
     @field_validator("inference_timeout_seconds")
     @classmethod
     def positive_inference_timeout(cls, value: int) -> int:
