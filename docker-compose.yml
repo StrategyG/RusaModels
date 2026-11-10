@@ -56,6 +56,11 @@ services:
       S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-rusamodels_minio_dev_only_change_me}
       RUSAMODELS_API_PRINCIPALS: ${RUSAMODELS_API_PRINCIPALS:-}
       RUSAMODELS_SERVICE_TOKEN_SHA256: ${RUSAMODELS_SERVICE_TOKEN_SHA256:-}
+      HF_TOKEN: ${HF_TOKEN:-}
+      RUSAMODELS_WORKER_POLL_SECONDS: ${RUSAMODELS_WORKER_POLL_SECONDS:-5}
+      LLAMA_CPP_CONVERT_SCRIPT: ${LLAMA_CPP_CONVERT_SCRIPT:-}
+      LLAMA_QUANTIZE_BIN: ${LLAMA_QUANTIZE_BIN:-llama-quantize}
+      RUSAMODELS_GGUF_MODEL_TYPES: ${RUSAMODELS_GGUF_MODEL_TYPES:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -76,6 +81,14 @@ services:
     command: ["uvicorn", "services.quant_server.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
     environment: *app-env
     ports: ["8001:8000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+  quant-worker:
+    build: .
+    command: ["python", "-m", "services.quant_server.worker"]
+    environment: *app-env
     depends_on:
       migrate:
         condition: service_completed_successfully
