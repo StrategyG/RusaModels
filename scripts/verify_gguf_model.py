@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the pinned GGUF model artifact before starting the CPU Compose stack."""
+"""Verify the pinned GGUF model artifact before starting the RusaModels CPU inference stack."""
 
 from __future__ import annotations
 
@@ -32,9 +32,9 @@ def main(argv: list[str] | None = None) -> int:
     model_path = args.model or os.getenv("RUSAMODELS_GGUF_MODEL_PATH")
     expected_sha256 = args.sha256 or os.getenv("RUSAMODELS_GGUF_MODEL_SHA256")
     if not model_path:
-        parser.error("provide --model or set RUSA_GGUF_MODEL_PATH in the env file")
+        parser.error("provide --model or set RUSAMODELS_GGUF_MODEL_PATH in the env file")
     if not expected_sha256:
-        parser.error("provide --sha256 or set RUSA_GGUF_MODEL_SHA256 in the env file")
+        parser.error("provide --sha256 or set RUSAMODELS_GGUF_MODEL_SHA256 in the env file")
 
     try:
         verified = verify_gguf_file(model_path, expected_sha256)
