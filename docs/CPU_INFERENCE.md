@@ -67,7 +67,7 @@ Configure the CPU Model Server Codespace with:
 - `RUSAMODELS_EMBEDDING_INTERNAL_TOKEN`: random secret of at least 32 characters. The Model Server and embedding container receive the same value.
 - Existing Model Server secrets: database URL, S3 endpoint/bucket, API principal digests, service-token digest and read-only S3 credentials.
 
-Use `.devcontainer/model-server-cpu/devcontainer.json`. It requests 4 CPUs, 16 GB RAM and 64 GB storage. The standard Model Server and Quant Server Codespaces profiles remain available.
+Use `.devcontainer/model-server-cpu/devcontainer.json`. It requests 4 CPUs, 16 GB RAM and 32 GB storage. The standard Model Server and Quant Server Codespaces profiles remain available.
 
 ## Start and verify
 
