@@ -15,8 +15,7 @@ from pathlib import Path
 from botocore.exceptions import BotoCoreError, ClientError
 from huggingface_hub import HfApi, snapshot_download
 from huggingface_hub.utils import HfHubHTTPError
-from requests.exceptions import ConnectionError as RequestsConnectionError
-from requests.exceptions import Timeout as RequestsTimeout
+from httpx import ConnectError, TimeoutException
 from sqlalchemy import and_, or_, select, update
 
 from rusamodels.config import get_settings
@@ -144,7 +143,7 @@ def _is_retryable(exc: Exception) -> bool:
         status = getattr(getattr(exc, "response", None), "status_code", 0) or 0
         return status in {408, 429} or status >= 500
     return isinstance(
-        exc, (TimeoutError, ConnectionError, RequestsConnectionError, RequestsTimeout, BotoCoreError)
+        exc, (TimeoutError, ConnectionError, ConnectError, TimeoutException, BotoCoreError)
     )
 
 
