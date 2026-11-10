@@ -7,35 +7,32 @@ Independent model infrastructure platform for the RUSA-AI ecosystem.
 RusaModels is deployed as two independent services backed by one shared control plane:
 
 - **Model Server** — model registry and lifecycle API; future inference gateway and router.
-- **Quant Server** — model inspection, conversion and quantization API boundary.
-- **Shared PostgreSQL** — registry metadata, model versions and audit events.
+- **Quant Server** — model inspection, conversion and quantization service boundary.
+- **Shared PostgreSQL** — registry metadata, model versions, upload sessions and audit events.
 - **Shared S3-compatible storage** — immutable model artifacts.
 
 RusaAi is an authenticated service consumer. It does not connect directly to the RusaModels database or object storage.
 
-## Current implementation status
+## Implemented
 
-The repository currently contains:
 - Separate FastAPI Model Server and Quant Server entry points.
-- PostgreSQL/SQLite database adapters and an Alembic registry migration.
-- S3-compatible and development-only local artifact storage adapters.
-- Viewer, Manager and Administrator API roles.
-- Hashed bearer-token authentication and a separate service-token boundary.
-- Model catalog CRUD, model version registration and administrator-only archival.
+- PostgreSQL/SQLite adapters and Alembic migrations.
+- S3-compatible and development-only local artifact storage.
+- Viewer, Manager and Administrator roles, hashed bearer tokens and service-token authentication.
+- Model catalog CRUD, version registration and administrator-only archival.
+- Resumable multipart uploads, per-part checksums, object-level SHA-256 verification and streamed artifact downloads.
 - Append-only audit events enforced by database triggers.
-- Docker Compose and separate 4-vCPU/16-GB Codespaces profiles.
-- Initial automated tests and GitHub Actions CI.
+- Docker Compose, separate Codespaces profiles and GitHub Actions CI.
 
-**Not yet implemented:** model downloading, multipart artifact upload/download, conversion, GGUF quantization, Q8/Q6/Q5/Q4, model inference, OpenAI-compatible endpoints, routing, scheduling, benchmark/evaluation, training orchestration and dashboard. These must not be considered available until implemented and tested.
+## Not yet implemented
 
-## Quick start
+Model Hub search, managed Hugging Face downloads, precision conversion, GGUF generation, Q8/Q6/Q5/Q4 quantization, model inference, OpenAI-compatible endpoints, model routing, scheduling, benchmark/evaluation, training orchestration and dashboard. These features are not advertised as operational until implemented and tested.
 
-For a local development stack:
+## Local development
 
 ```bash
 cp .env.example .env
 docker compose up --build -d
-docker compose run --rm migrate
 ```
 
 Health endpoints:
@@ -50,12 +47,7 @@ Create one Codespace using `.devcontainer/model-server/devcontainer.json` and an
 
 ## Security
 
-- Never commit model weights, API tokens or credentials.
-- Configure API principals as SHA-256 token digests mapped to a subject and role.
-- Production requires PostgreSQL and S3-compatible storage.
-- Give Model Server read-only artifact permissions and Quant Server narrowly scoped write permissions.
-- Apply schema changes with Alembic migrations, not application startup.
-- See [docs/OPERATIONS.md](docs/OPERATIONS.md).
+Never commit model weights, API tokens or credentials. Production requires PostgreSQL and S3-compatible storage. Give Model Server read-only artifact permissions and Quant Server narrowly scoped write permissions. Apply schema changes with Alembic migrations.
 
 ## Documentation
 
