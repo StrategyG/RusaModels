@@ -7,7 +7,7 @@ import shutil
 import tempfile
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from huggingface_hub import HfApi, snapshot_download
@@ -228,7 +228,7 @@ def process_job(job_id: str, sessions, settings, storage) -> None:
             db.add_all(artifacts)
             job.status = "succeeded"
             job.progress_percent = 100
-            job.finished_at = datetime.now(timezone.utc)
+            job.finished_at = datetime.now(UTC)
             _audit(db, job, "model_job.succeeded", "success")
             try:
                 db.commit()
@@ -243,7 +243,7 @@ def process_job(job_id: str, sessions, settings, storage) -> None:
         if job is not None:
             job.status = "failed"
             job.error_code = type(exc).__name__[:128]
-            job.finished_at = datetime.now(timezone.utc)
+            job.finished_at = datetime.now(UTC)
             if job.output_version_id:
                 version = db.get(ModelVersion, job.output_version_id)
                 if version is not None:
@@ -268,7 +268,7 @@ def claim_job(sessions) -> str | None:
             db.rollback()
             return None
         job.status = "running"
-        job.started_at = datetime.now(timezone.utc)
+        job.started_at = datetime.now(UTC)
         db.commit()
         return job.id
     finally:
