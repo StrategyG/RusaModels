@@ -126,7 +126,7 @@ def test_hub_download_rejects_non_commit_revision(
     db, _model, _version, job = _download_records(api_client)
 
     class FakeHub:
-        def model_info(self, **kwargs):
+        def model_info(self, repo_id, **kwargs):
             return SimpleNamespace(
                 sha="main",
                 card_data=SimpleNamespace(license="apache-2.0"),
