@@ -556,7 +556,7 @@ def create_service_app(
         @app.get("/openai/v1/models", tags=["inference"])
         def openai_models(
             request: Request,
-            principal: Principal = Depends(roles("manager", "administrator")),
+            principal: Principal = Depends(roles("inference", "manager", "administrator")),
             db: Session = Depends(get_db),
         ):
             result = openai_model_list(runtime)
@@ -570,7 +570,7 @@ def create_service_app(
         async def openai_chat_completions(
             payload: dict[str, Any],
             request: Request,
-            principal: Principal = Depends(roles("manager", "administrator")),
+            principal: Principal = Depends(roles("inference", "manager", "administrator")),
             db: Session = Depends(get_db),
         ):
             audit(
@@ -586,7 +586,7 @@ def create_service_app(
         async def openai_completions(
             payload: dict[str, Any],
             request: Request,
-            principal: Principal = Depends(roles("manager", "administrator")),
+            principal: Principal = Depends(roles("inference", "manager", "administrator")),
             db: Session = Depends(get_db),
         ):
             audit(
@@ -602,7 +602,7 @@ def create_service_app(
         async def openai_embeddings(
             payload: dict[str, Any],
             request: Request,
-            principal: Principal = Depends(roles("manager", "administrator")),
+            principal: Principal = Depends(roles("inference", "manager", "administrator")),
             db: Session = Depends(get_db),
         ):
             audit(
