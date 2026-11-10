@@ -23,6 +23,19 @@ Hugging Face downloads require an upstream model-card license identifier and exp
 
 Safetensors precision conversion requires the optional `quantization` dependencies; install them in the Quant Codespace with `python -m pip install --user -e ".[dev,quantization]"`. GGUF conversion additionally requires `LLAMA_CPP_CONVERT_SCRIPT` and `LLAMA_QUANTIZE_BIN` pointing to an installed llama.cpp converter and quantizer. The worker uses a temporary workspace, a separate subprocess for conversion commands, no shell invocation, a sanitized subprocess environment, a hard timeout and a conservative RAM/disk preflight. This is process isolation, not a separate virtual machine or network sandbox. A 4-vCPU/16-GB Codespace will reject jobs estimated to exceed available resources.
 
+## OpenAI-compatible inference proxy
+
+The Model Server can proxy OpenAI-compatible requests to one explicitly configured runtime. Set the following variables in the Model Server environment only:
+
+- `RUSAMODELS_INFERENCE_BASE_URL`: upstream base URL, for example `http://127.0.0.1:8088` (do not include `/v1`).
+- `RUSAMODELS_INFERENCE_MODEL_ID`: public model ID accepted by RusaModels.
+- `RUSAMODELS_INFERENCE_API_KEY`: optional upstream bearer key in development; required with HTTPS in production.
+- `RUSAMODELS_INFERENCE_TIMEOUT_SECONDS`: upstream timeout from 1 to 3600 seconds.
+
+Routes are rooted at `/openai/v1`: `GET /models`, `POST /chat/completions`, `POST /completions` and `POST /embeddings`. Manager and Administrator roles may invoke inference. The gateway replaces the requested model alias with the configured upstream model ID, forwards the request ID, supports server-sent-event streaming and records request metadata without storing prompts. The upstream key is never returned to clients.
+
+This is a single-upstream proxy, not a model loader or router. Install and operate a compatible runtime separately (for example, llama.cpp `llama-server`); model deployment lifecycle, dynamic routing, rate limits and usage metering are not yet implemented. Production requires HTTPS and an upstream API key.
+
 ## Health
 - `/health/live`: process is responsive.
 - `/health/ready`: database, migrated tables and object storage are available.
