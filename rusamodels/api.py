@@ -33,6 +33,7 @@ from rusamodels.schemas import (
     VersionOut,
 )
 from rusamodels.hub import search_models
+from rusamodels.inference import openai_model_list, proxy_openai_request
 from rusamodels.security import Principal, authenticate, record_audit, require_service_token
 from rusamodels.storage import create_storage
 
@@ -551,6 +552,67 @@ def create_service_app(
             audit(db, request, principal, "hub.search", "/v1/hub/search",
                   {"query": q, "result_count": len(items)})
             return {"items": items, "count": len(items)}
+
+        @app.get("/openai/v1/models", tags=["inference"])
+        def openai_models(
+            request: Request,
+            principal: Principal = Depends(roles("manager", "administrator")),
+            db: Session = Depends(get_db),
+        ):
+            result = openai_model_list(runtime)
+            audit(
+                db, request, principal, "inference.models.list", "/openai/v1/models",
+                {"count": len(result["data"])},
+            )
+            return result
+
+        @app.post("/openai/v1/chat/completions", tags=["inference"])
+        async def openai_chat_completions(
+            payload: dict[str, Any],
+            request: Request,
+            principal: Principal = Depends(roles("manager", "administrator")),
+            db: Session = Depends(get_db),
+        ):
+            audit(
+                db, request, principal, "inference.requested",
+                "/openai/v1/chat/completions",
+                {"model": payload.get("model"), "stream": bool(payload.get("stream"))},
+            )
+            return await proxy_openai_request(
+                runtime, payload, "chat/completions", request.state.request_id
+            )
+
+        @app.post("/openai/v1/completions", tags=["inference"])
+        async def openai_completions(
+            payload: dict[str, Any],
+            request: Request,
+            principal: Principal = Depends(roles("manager", "administrator")),
+            db: Session = Depends(get_db),
+        ):
+            audit(
+                db, request, principal, "inference.requested",
+                "/openai/v1/completions",
+                {"model": payload.get("model"), "stream": bool(payload.get("stream"))},
+            )
+            return await proxy_openai_request(
+                runtime, payload, "completions", request.state.request_id
+            )
+
+        @app.post("/openai/v1/embeddings", tags=["inference"])
+        async def openai_embeddings(
+            payload: dict[str, Any],
+            request: Request,
+            principal: Principal = Depends(roles("manager", "administrator")),
+            db: Session = Depends(get_db),
+        ):
+            audit(
+                db, request, principal, "inference.requested",
+                "/openai/v1/embeddings",
+                {"model": payload.get("model")},
+            )
+            return await proxy_openai_request(
+                runtime, payload, "embeddings", request.state.request_id
+            )
 
     if service_name == "quant-server":
         @app.post("/v1/hub/downloads", tags=["model-hub"], status_code=202)
