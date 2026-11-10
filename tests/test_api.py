@@ -235,3 +235,49 @@ def test_model_server_hub_search_and_artifact_write_boundary(api_client, monkeyp
             headers=auth("manager-test-token"),
         )
         assert denied.status_code == 404
+
+
+
+def test_admin_can_request_running_job_cancellation_idempotently(api_client):
+    from rusamodels.models import ModelJob
+
+    accepted = api_client.post(
+        "/v1/hub/downloads",
+        json={
+            "repo_id": "Qwen/Qwen2.5-0.5B-Instruct",
+            "revision": "main",
+            "model_name": "Qwen 0.5B cancel test",
+            "version": "cancel-test",
+            "license_id": "apache-2.0",
+            "license_accepted": True,
+        },
+        headers=auth("manager-test-token"),
+    )
+    assert accepted.status_code == 202
+    job_id = accepted.json()["job"]["id"]
+    db = api_client.app.state.sessions()
+    job = db.get(ModelJob, job_id)
+    job.status = "running"
+    job.lease_owner = "worker-test"
+    job.lease_epoch = 1
+    db.commit()
+    db.close()
+
+    first = api_client.post(
+        f"/v1/jobs/{job_id}/cancel", headers=auth("admin-test-token")
+    )
+    assert first.status_code == 200
+    assert first.json()["status"] == "running"
+    assert first.json()["cancel_requested"] is True
+
+    second = api_client.post(
+        f"/v1/jobs/{job_id}/cancel", headers=auth("admin-test-token")
+    )
+    assert second.status_code == 200
+    assert second.json()["cancel_requested"] is True
+
+    audit = api_client.get("/v1/platform/audit-events", headers=auth("admin-test-token"))
+    assert sum(
+        item["action"] == "model_job.cancel_requested"
+        for item in audit.json()["items"]
+    ) == 1
