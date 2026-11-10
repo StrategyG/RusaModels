@@ -15,6 +15,14 @@
 
 For S3, non-final multipart parts must be at least 5 MiB. The default configured maximum artifact size is 10 GiB. Use TLS for all non-local transfer paths. Abandoned multipart sessions need an operational cleanup policy; configure an S3 lifecycle rule to abort incomplete multipart uploads.
 
+## Quantization worker
+
+The Quant Server Codespace runs the API and the separate `services.quant_server.worker` process. Local Compose also starts `quant-worker`. The worker claims queued jobs from the shared PostgreSQL queue, downloads approved Hugging Face snapshots or converts registered versions, verifies artifact checksums and registers immutable output artifacts.
+
+Hugging Face downloads require an upstream model-card license identifier and explicit `license_accepted=true`. The worker compares the supplied license identifier to the upstream model card before downloading. Gated repositories additionally require an authorized `HF_TOKEN` secret.
+
+CPU conversion requires the optional `quantization` dependencies. GGUF conversion additionally requires `LLAMA_CPP_CONVERT_SCRIPT` and `LLAMA_QUANTIZE_BIN`. The worker uses a temporary workspace, no shell invocation and a conservative RAM/disk preflight. A 4-vCPU/16-GB Codespace will reject jobs estimated to exceed available resources.
+
 ## Health
 - `/health/live`: process is responsive.
 - `/health/ready`: database, migrated tables and object storage are available.
