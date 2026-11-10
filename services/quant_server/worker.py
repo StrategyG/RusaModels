@@ -174,7 +174,9 @@ def _conversion_job(db, job: ModelJob, settings, storage, work_dir: Path) -> lis
     output_dir.mkdir()
     for artifact in source_artifacts:
         filename = _safe_filename(Path(artifact.original_filename or artifact.id))
-        target = source_dir / f"{artifact.id[:8]}-{filename}"
+        target = source_dir / filename
+        if target.exists():
+            target = source_dir / f"{artifact.id[:8]}-{filename}"
         digest = hashlib.sha256()
         with target.open("xb") as output:
             for chunk in storage.read_stream(artifact.storage_key):
