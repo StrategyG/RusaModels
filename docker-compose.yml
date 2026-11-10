@@ -70,7 +70,12 @@ services:
   model-server:
     build: .
     command: ["uvicorn", "services.model_server.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-    environment: *app-env
+    environment:
+      <<: *app-env
+      RUSAMODELS_INFERENCE_BASE_URL: ${RUSAMODELS_INFERENCE_BASE_URL:-}
+      RUSAMODELS_INFERENCE_MODEL_ID: ${RUSAMODELS_INFERENCE_MODEL_ID:-}
+      RUSAMODELS_INFERENCE_API_KEY: ${RUSAMODELS_INFERENCE_API_KEY:-}
+      RUSAMODELS_INFERENCE_TIMEOUT_SECONDS: ${RUSAMODELS_INFERENCE_TIMEOUT_SECONDS:-300}
     ports: ["8000:8000"]
     depends_on:
       migrate:
