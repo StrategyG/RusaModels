@@ -21,7 +21,7 @@ The Quant Server Codespace runs the API and the separate `services.quant_server.
 
 Hugging Face downloads require an upstream model-card license identifier and explicit `license_accepted=true`. The worker compares the supplied license identifier to the upstream model card before downloading. Gated repositories additionally require an authorized `HF_TOKEN` secret.
 
-CPU conversion requires the optional `quantization` dependencies. GGUF conversion additionally requires `LLAMA_CPP_CONVERT_SCRIPT` and `LLAMA_QUANTIZE_BIN`. The worker uses a temporary workspace, no shell invocation and a conservative RAM/disk preflight. A 4-vCPU/16-GB Codespace will reject jobs estimated to exceed available resources.
+Safetensors precision conversion requires the optional `quantization` dependencies; install them in the Quant Codespace with `python -m pip install --user -e ".[dev,quantization]"`. GGUF conversion additionally requires `LLAMA_CPP_CONVERT_SCRIPT` and `LLAMA_QUANTIZE_BIN` pointing to an installed llama.cpp converter and quantizer. The worker uses a temporary workspace, a separate subprocess for conversion commands, no shell invocation, a sanitized subprocess environment, a hard timeout and a conservative RAM/disk preflight. This is process isolation, not a separate virtual machine or network sandbox. A 4-vCPU/16-GB Codespace will reject jobs estimated to exceed available resources.
 
 ## Health
 - `/health/live`: process is responsive.
