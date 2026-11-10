@@ -1,0 +1,1 @@
+"""Quant Server FastAPI app."""
