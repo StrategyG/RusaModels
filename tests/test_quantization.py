@@ -67,3 +67,15 @@ def test_available_ram_uses_lower_container_or_host_value(monkeypatch):
     monkeypatch.setattr(preflight, "_host_available_ram_bytes", lambda: 12 * 1024**3)
     monkeypatch.setattr(preflight, "_cgroup_available_ram_bytes", lambda: 4 * 1024**3)
     assert preflight.available_ram_bytes() == 4 * 1024**3
+
+
+
+def test_conversion_subprocess_honors_preexisting_cancel_request(tmp_path):
+    from threading import Event
+
+    from rusamodels.quantization.engine import _run
+
+    cancelled = Event()
+    cancelled.set()
+    with pytest.raises(InterruptedError, match="cancelled"):
+        _run(["python", "-c", "print('should not run')"], tmp_path, 10, cancelled)
