@@ -22,7 +22,7 @@ def api_client(tmp_path):
                         service_token_sha256=sha256_hex("service-test-token"))
     engine = build_engine(settings.database_url)
     Base.metadata.create_all(engine)
-    app = create_service_app("test-service", settings, engine=engine)
+    app = create_service_app("quant-server", settings, engine=engine)
     with TestClient(app) as client:
         yield client
     engine.dispose()
