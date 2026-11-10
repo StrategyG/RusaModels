@@ -111,6 +111,9 @@ class JobOut(BaseModel):
     job_type: str
     status: str
     progress_percent: int
+    attempt_count: int
+    max_attempts: int
+    next_attempt_at: datetime | None
     error_code: str | None
     created_by: str
     created_at: datetime | None
