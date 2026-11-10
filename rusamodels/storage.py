@@ -6,11 +6,9 @@ import shutil
 import uuid
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import BinaryIO, Iterator
+from typing import Iterator
 
 import boto3
-from boto3.s3.transfer import TransferConfig
-from botocore.exceptions import ClientError
 
 
 @dataclass(frozen=True)
