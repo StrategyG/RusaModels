@@ -92,6 +92,28 @@ class UploadPart(Base):
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
+class ModelJob(Base):
+    __tablename__ = "model_jobs"
+    __table_args__ = (
+        Index("ix_model_jobs_status_created_at", "status", "created_at"),
+        Index("ix_model_jobs_created_by", "created_by"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    model_id: Mapped[str] = mapped_column(String(36), ForeignKey("model_catalog.id", ondelete="RESTRICT"), nullable=False)
+    input_version_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("model_versions.id", ondelete="RESTRICT"))
+    output_version_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("model_versions.id", ondelete="RESTRICT"))
+    job_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    parameters: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued")
+    progress_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_code: Mapped[str | None] = mapped_column(String(128))
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_by_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class AuditEvent(Base):
     __tablename__ = "audit_events"
     __table_args__ = (
