@@ -15,6 +15,10 @@ def test_migration_and_audit_append_only(tmp_path, monkeypatch):
     tables = set(inspect(engine).get_table_names())
     assert {"model_catalog", "model_versions", "artifacts", "upload_sessions",
             "upload_parts", "model_jobs", "audit_events", "alembic_version"} <= tables
+    with engine.connect() as connection:
+        columns = {column["name"] for column in inspect(engine).get_columns("model_jobs")}
+    assert {"attempt_count", "max_attempts", "lease_owner", "lease_epoch",
+            "lease_expires_at", "last_heartbeat_at", "next_attempt_at"} <= columns
     with engine.begin() as connection:
         connection.execute(text(
             "INSERT INTO audit_events (id, actor_subject, actor_role, action, resource, outcome, request_id, metadata) "
