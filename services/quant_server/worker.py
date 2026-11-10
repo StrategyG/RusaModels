@@ -125,6 +125,16 @@ def _download_job(db, job: ModelJob, settings, storage, work_dir: Path) -> list[
         raise RuntimeError("Upstream model card does not declare a license; manual review is required")
     if model.license_id.lower() != str(upstream_license).lower():
         raise RuntimeError("Submitted license identifier does not match the upstream model card")
+    resolved_revision = getattr(info, "sha", None)
+    if not isinstance(resolved_revision, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", resolved_revision):
+        raise RuntimeError("Hub did not return a valid immutable commit revision")
+    version.source_revision = resolved_revision.lower()
+    job.parameters = {
+        **job.parameters,
+        "resolved_revision": resolved_revision.lower(),
+        "upstream_license": str(upstream_license).lower(),
+    }
+    db.commit()
     sibling_sizes = [
         int(item.size) for item in (getattr(info, "siblings", None) or [])
         if getattr(item, "size", None) is not None
@@ -138,7 +148,7 @@ def _download_job(db, job: ModelJob, settings, storage, work_dir: Path) -> list[
     local_dir = work_dir / "snapshot"
     snapshot_download(
         repo_id=repo_id,
-        revision=revision,
+        revision=resolved_revision,
         token=token,
         local_dir=str(local_dir),
     )
