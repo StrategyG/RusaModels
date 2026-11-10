@@ -76,7 +76,7 @@ services:
       RUSAMODELS_INFERENCE_MODEL_ID: ${RUSAMODELS_INFERENCE_MODEL_ID:-}
       RUSAMODELS_INFERENCE_API_KEY: ${RUSAMODELS_INFERENCE_API_KEY:-}
       RUSAMODELS_INFERENCE_TIMEOUT_SECONDS: ${RUSAMODELS_INFERENCE_TIMEOUT_SECONDS:-300}
-    ports: ["8000:8000"]
+    ports: ["${MODEL_SERVER_HOST_PORT:-8000}:8000"]
     depends_on:
       migrate:
         condition: service_completed_successfully
