@@ -281,3 +281,54 @@ def test_admin_can_request_running_job_cancellation_idempotently(api_client):
         item["action"] == "model_job.cancel_requested"
         for item in audit.json()["items"]
     ) == 1
+
+
+def test_inference_service_role_can_call_only_openai_compatible_routes(api_client, monkeypatch):
+    from rusamodels.config import Settings
+
+    settings = api_client.app.state.settings
+    settings.inference_base_url = "http://runtime.internal:8088"
+    settings.inference_model_id = "qwen-local"
+
+    class FakeResponse:
+        status_code = 200
+        headers = {"content-type": "application/json"}
+
+        async def aread(self):
+            return b'{"id":"chatcmpl-service","object":"chat.completion"}'
+
+        async def aclose(self):
+            return None
+
+    class FakeClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        def build_request(self, method, url, json, headers):
+            return {"method": method, "url": url, "json": json, "headers": headers}
+
+        async def send(self, request, stream=False):
+            return FakeResponse()
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr("rusamodels.inference.httpx.AsyncClient", FakeClient)
+    inference_headers = auth("inference-test-token")
+    assert api_client.get("/openai/v1/models", headers=inference_headers).status_code == 200
+    chat = api_client.post(
+        "/openai/v1/chat/completions",
+        json={"model": "qwen-local", "messages": [{"role": "user", "content": "hello"}]},
+        headers=inference_headers,
+    )
+    assert chat.status_code == 200
+    assert chat.json()["id"] == "chatcmpl-service"
+
+    # The same principal must not be able to manage models or read administrative audit.
+    assert api_client.get("/v1/models", headers=inference_headers).status_code == 403
+    assert api_client.post(
+        "/v1/models", json={"name": "unauthorized"}, headers=inference_headers
+    ).status_code == 403
+    assert api_client.get(
+        "/v1/platform/audit-events", headers=inference_headers
+    ).status_code == 403
