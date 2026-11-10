@@ -69,7 +69,7 @@ class LocalArtifactStorage:
         (self.multipart_root / upload_id).mkdir(parents=True, exist_ok=False)
         return upload_id
 
-    def upload_part(self, upload_id: str, part_number: int, payload: bytes) -> str:
+    def upload_part(self, key: str, upload_id: str, part_number: int, payload: bytes) -> str:
         folder = self._multipart_folder(upload_id)
         if not 1 <= part_number <= 10000:
             raise ValueError("part_number must be between 1 and 10000")
@@ -97,7 +97,7 @@ class LocalArtifactStorage:
             raise
         shutil.rmtree(folder, ignore_errors=True)
 
-    def abort_multipart(self, upload_id: str) -> None:
+    def abort_multipart(self, key: str, upload_id: str) -> None:
         shutil.rmtree(self._multipart_folder(upload_id), ignore_errors=True)
 
     def _multipart_folder(self, upload_id: str) -> Path:
@@ -157,18 +157,7 @@ class S3ArtifactStorage:
         )
         return result["UploadId"]
 
-    def upload_part(self, upload_id: str, part_number: int, payload: bytes) -> str:
-        result = self.client.upload_part(
-            Bucket=self.bucket, Key=self._active_key(upload_id), UploadId=upload_id,
-            PartNumber=part_number, Body=payload,
-        )
-        return result["ETag"]
-
-    def _active_key(self, upload_id: str) -> str:
-        # The API persists the object key with the upload session and passes it to complete/abort.
-        raise NotImplementedError("Use upload_part_for_key with the persisted storage key")
-
-    def upload_part_for_key(self, key: str, upload_id: str, part_number: int, payload: bytes) -> str:
+    def upload_part(self, key: str, upload_id: str, part_number: int, payload: bytes) -> str:
         result = self.client.upload_part(
             Bucket=self.bucket, Key=validate_storage_key(key), UploadId=upload_id,
             PartNumber=part_number, Body=payload,
