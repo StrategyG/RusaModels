@@ -7,7 +7,7 @@ Source snapshot: StrategyG/RusaAi, commit c2866e2d9747b9de4ea9d5f9696b8ded111210
 from enum import Enum
 
 
-class WorkerRole(str, Enum):
+class WorkerRole(str, Enum):  # noqa: UP042 - preserve the source contract's exact enum behavior
     ANALYST = "analyst"
     ARCHITECT = "architect"
     DEVELOPER = "developer"
