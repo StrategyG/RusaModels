@@ -1,4 +1,4 @@
-"""OpenAI-compatible proxy for an explicitly configured inference runtime."""
+"""OpenAI-compatible proxy for configured local model runtimes."""
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -7,34 +7,41 @@ from fastapi import HTTPException
 from fastapi.responses import Response, StreamingResponse
 
 
-def _runtime_configuration(settings) -> tuple[str, str, dict[str, str]]:
-    if not settings.inference_base_url or not settings.inference_model_id:
-        raise HTTPException(503, "Inference runtime is not configured")
+def _runtime_configuration(settings, endpoint: str) -> tuple[str, str, dict[str, str], int]:
+    if endpoint == "embeddings" and settings.embedding_base_url:
+        base_url = settings.embedding_base_url
+        model_id = settings.embedding_model_id
+        api_key = settings.embedding_api_key
+        timeout = settings.embedding_timeout_seconds
+    else:
+        base_url = settings.inference_base_url
+        model_id = settings.inference_model_id
+        api_key = settings.inference_api_key
+        timeout = settings.inference_timeout_seconds
+    if not base_url or not model_id:
+        raise HTTPException(503, f"{endpoint} runtime is not configured")
     headers = {"Content-Type": "application/json"}
-    if settings.inference_api_key:
-        headers["Authorization"] = (
-            f"Bearer {settings.inference_api_key.get_secret_value()}"
-        )
-    return (
-        settings.inference_base_url.rstrip("/"),
-        settings.inference_model_id,
-        headers,
-    )
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key.get_secret_value()}"
+    return base_url.rstrip("/"), model_id, headers, timeout
 
 
 def openai_model_list(settings) -> dict[str, Any]:
-    _base_url, model_id, _headers = _runtime_configuration(settings)
-    return {
-        "object": "list",
-        "data": [
-            {
-                "id": model_id,
-                "object": "model",
-                "created": 0,
-                "owned_by": "rusamodels",
-            }
-        ],
-    }
+    _base_url, model_id, _headers, _timeout = _runtime_configuration(settings, "chat/completions")
+    models = [{
+        "id": model_id,
+        "object": "model",
+        "created": 0,
+        "owned_by": "rusamodels",
+    }]
+    if settings.embedding_base_url and settings.embedding_model_id:
+        models.append({
+            "id": settings.embedding_model_id,
+            "object": "model",
+            "created": 0,
+            "owned_by": "rusamodels",
+        })
+    return {"object": "list", "data": models}
 
 
 async def proxy_openai_request(
@@ -43,7 +50,7 @@ async def proxy_openai_request(
     endpoint: str,
     request_id: str,
 ) -> Response:
-    base_url, model_id, headers = _runtime_configuration(settings)
+    base_url, model_id, headers, timeout = _runtime_configuration(settings, endpoint)
     requested_model = payload.get("model")
     if not isinstance(requested_model, str) or not requested_model:
         raise HTTPException(422, "An inference model ID is required")
@@ -53,7 +60,7 @@ async def proxy_openai_request(
     if request_id:
         headers["X-Request-ID"] = request_id
     url = f"{base_url}/v1/{endpoint.lstrip('/')}"
-    client = httpx.AsyncClient(timeout=settings.inference_timeout_seconds)
+    client = httpx.AsyncClient(timeout=timeout)
     try:
         request = client.build_request("POST", url, json=forwarded, headers=headers)
         upstream = await client.send(request, stream=bool(payload.get("stream")))
