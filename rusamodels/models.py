@@ -97,6 +97,7 @@ class ModelJob(Base):
     __table_args__ = (
         Index("ix_model_jobs_status_created_at", "status", "created_at"),
         Index("ix_model_jobs_created_by", "created_by"),
+        Index("ix_model_jobs_lease_expires_at", "lease_expires_at"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     model_id: Mapped[str] = mapped_column(String(36), ForeignKey("model_catalog.id", ondelete="RESTRICT"), nullable=False)
@@ -106,6 +107,13 @@ class ModelJob(Base):
     parameters: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued")
     progress_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    lease_owner: Mapped[str | None] = mapped_column(String(255))
+    lease_epoch: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_code: Mapped[str | None] = mapped_column(String(128))
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     created_by_role: Mapped[str] = mapped_column(String(32), nullable=False)
