@@ -59,3 +59,29 @@ def test_inference_base_url_must_not_include_an_api_path():
             inference_base_url="http://runtime.example/v1",
             inference_model_id="qwen-local",
         )
+
+
+def test_embedding_url_and_model_id_must_be_configured_together():
+    with pytest.raises(ValidationError, match="configured together"):
+        Settings(environment="test", embedding_base_url="http://embedding.internal")
+
+
+def test_production_embedding_requires_https_and_upstream_key():
+    with pytest.raises(ValidationError, match="HTTPS"):
+        production_settings(
+            embedding_base_url="http://embedding.example",
+            embedding_model_id="e5-small",
+            embedding_api_key="embedding-secret",
+        )
+    with pytest.raises(ValidationError, match="HTTPS"):
+        production_settings(
+            embedding_base_url="https://embedding.example",
+            embedding_model_id="e5-small",
+            embedding_api_key="",
+        )
+    settings = production_settings(
+        embedding_base_url="https://embedding.example",
+        embedding_model_id="e5-small",
+        embedding_api_key="embedding-secret",
+    )
+    assert settings.embedding_model_id == "e5-small"
