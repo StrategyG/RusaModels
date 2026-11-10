@@ -3,7 +3,7 @@
 ## Local development
 1. Copy `.env.example` to `.env` and replace development passwords.
 2. Start the stack with `docker compose up --build -d`. The migration service applies Alembic migrations before the API services start.
-3. Check Model Server on port 8000 and Quant Server on port 8001.
+3. Check Model Server on the configured `MODEL_SERVER_HOST_PORT` (8100 in the sample environment) and Quant Server on port 8001. Use port 8100 when RusaAi's own API is bound to host port 8000.
 4. Apply later schema changes with `alembic upgrade head`; do not use ORM `create_all` outside isolated tests.
 
 ## Resumable artifact uploads
