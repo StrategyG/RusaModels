@@ -566,7 +566,7 @@ def create_service_app(
                 name=payload.model_name.strip(),
                 publisher=payload.repo_id.split("/", maxsplit=1)[0],
                 architecture=payload.architecture,
-                license_id=payload.license_id,
+                license_id=payload.license_id.strip().lower(),
                 source_uri=f"https://huggingface.co/{payload.repo_id}",
                 created_by=principal.subject,
             )
@@ -597,7 +597,12 @@ def create_service_app(
                 raise HTTPException(409, "Requested model version already exists") from exc
             db.refresh(job)
             audit(db, request, principal, "hub.download_queued", f"job:{job.id}",
-                  {"repo_id": payload.repo_id, "revision": payload.revision})
+                  {
+                      "repo_id": payload.repo_id,
+                      "revision": payload.revision,
+                      "license_id": payload.license_id,
+                      "license_accepted": payload.license_accepted,
+                  })
             return {
                 "job": JobOut.model_validate(job),
                 "model_id": model.id,
