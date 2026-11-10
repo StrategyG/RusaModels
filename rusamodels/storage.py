@@ -4,9 +4,9 @@ import hmac
 import os
 import shutil
 import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Iterator
 
 import boto3
 
