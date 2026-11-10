@@ -30,7 +30,11 @@ class UploadCreate(BaseModel):
     filename: str = Field(min_length=1, max_length=512)
     expected_size: int = Field(gt=0)
     expected_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
-    media_type: str = Field(default="application/octet-stream", max_length=255)
+    media_type: str = Field(
+        default="application/octet-stream",
+        max_length=255,
+        pattern=r"^[A-Za-z0-9.+-]+/[A-Za-z0-9.+-]+$",
+    )
 
 
 class ModelOut(BaseModel):
