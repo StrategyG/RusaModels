@@ -1,0 +1,2 @@
+# Optional GPU-only QLoRA training environment. Not required for CPU inference.
+-e .[training]
