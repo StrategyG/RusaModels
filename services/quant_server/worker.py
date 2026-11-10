@@ -437,7 +437,7 @@ def process_job(
             job.error_code = type(exc).__name__[:128]
             job.lease_owner = None
             job.lease_expires_at = None
-            if isinstance(exc, JobCancelled) or cancel_event.is_set():
+            if isinstance(exc, JobCancelled) or cancel_event.is_set() or job.cancel_requested:
                 for key in uploaded_keys:
                     try:
                         storage.delete(key)
