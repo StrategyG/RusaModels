@@ -13,7 +13,6 @@ services:
       timeout: 5s
       retries: 20
     restart: unless-stopped
-
   minio:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: server /data --console-address ":9001"
@@ -29,7 +28,6 @@ services:
       timeout: 5s
       retries: 20
     restart: unless-stopped
-
   minio-init:
     image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     depends_on:
@@ -44,7 +42,6 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-rusamodels_minio_dev_only_change_me}
       S3_BUCKET: ${S3_BUCKET:-rusamodels-artifacts}
     restart: "no"
-
   migrate:
     build: .
     command: ["alembic", "upgrade", "head"]
@@ -57,7 +54,7 @@ services:
       S3_BUCKET: ${S3_BUCKET:-rusamodels-artifacts}
       S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-rusamodels_minio}
       S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-rusamodels_minio_dev_only_change_me}
-      RUSAMODELS_API_PRINCIPALS: ${RUSAMODELS_API_PRINCIPALS:-{}}
+      RUSAMODELS_API_PRINCIPALS: ${RUSAMODELS_API_PRINCIPALS:-}
       RUSAMODELS_SERVICE_TOKEN_SHA256: ${RUSAMODELS_SERVICE_TOKEN_SHA256:-}
     depends_on:
       postgres:
@@ -65,7 +62,6 @@ services:
       minio-init:
         condition: service_completed_successfully
     restart: "no"
-
   model-server:
     build: .
     command: ["uvicorn", "services.model_server.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
@@ -75,7 +71,6 @@ services:
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
-
   quant-server:
     build: .
     command: ["uvicorn", "services.quant_server.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
@@ -85,7 +80,6 @@ services:
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
-
 volumes:
   rusamodels-postgres:
   rusamodels-minio:
