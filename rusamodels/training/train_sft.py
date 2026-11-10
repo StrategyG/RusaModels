@@ -6,7 +6,7 @@ import argparse
 import json
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
@@ -288,7 +288,7 @@ def run_training(config_path: Path, *, train_path: Path | None = None, eval_path
     gpu = torch.cuda.get_device_properties(torch.cuda.current_device())
     provenance = {
         "schema_version": 1,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "model": {
             "id": model_cfg["id"],
             "configured_revision": model_cfg["revision"],
