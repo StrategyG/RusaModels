@@ -23,7 +23,9 @@ RusaAi is an authenticated service consumer. It does not connect directly to the
 - Resumable multipart uploads, per-part checksums, object-level SHA-256 verification and streamed artifact downloads.
 - Hugging Face Hub search and queued model download jobs with upstream license verification and explicit license acknowledgement.
 - Queued F32/F16/BF16 safetensors conversion, GGUF F32/F16/BF16 conversion and Q8/Q6/Q5/Q4 GGUF quantization adapters.
-- Conservative CPU/RAM/disk preflight and a separate Quant Worker that runs jobs outside API request processes.
+- Immutable Hugging Face commit pinning, upstream license verification, and artifact manifests with SHA-256 digests.
+- Separate Quant Worker with database leases, heartbeat renewal, stale-worker fencing, and bounded retries for transient failures.
+- Conservative RAM/disk preflight and conversion subprocess isolation outside API request processes.
 - Append-only audit events enforced by database triggers.
 - Docker Compose, separate Codespaces profiles and GitHub Actions CI.
 
