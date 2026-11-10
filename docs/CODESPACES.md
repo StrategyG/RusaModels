@@ -15,6 +15,9 @@ Configure identical repository Codespaces secrets for both:
 - S3_SECRET_ACCESS_KEY
 - RUSAMODELS_API_PRINCIPALS — JSON map of SHA-256 token digests to subject/role
 - RUSAMODELS_SERVICE_TOKEN_SHA256 — digest of the service token
+- HF_TOKEN — optional Hugging Face token for gated/private model repositories
+- LLAMA_CPP_CONVERT_SCRIPT — optional absolute path to llama.cpp conversion script in Quant Codespace
+- LLAMA_QUANTIZE_BIN — optional llama-quantize binary path
 
 Do not use per-Codespace local databases or object stores. Run `alembic upgrade head` once against the shared database before checking readiness.
 
