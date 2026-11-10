@@ -11,3 +11,25 @@ RusaModels now exposes authenticated model registry, model-version, artifact dow
 - The token is verified against RUSAMODELS_SERVICE_TOKEN_SHA256.
 
 The Model Server optionally exposes an OpenAI-compatible proxy under `/openai/v1` when `RUSAMODELS_INFERENCE_BASE_URL` and `RUSAMODELS_INFERENCE_MODEL_ID` are configured. It supports model listing, chat completions, completions, embeddings and streaming. Only Manager and Administrator roles can invoke it. This is a single-upstream proxy: dynamic model loading, routing, tool-call compatibility verification, rate limiting and usage metering remain future work. A dependency check does not prove that a model is loaded or compatible with tool calling.
+
+
+## OpenAI SDK example
+
+Configure the Model Server with a reachable OpenAI-compatible upstream, then point RusaAi at the proxy. The upstream URL is a server-side setting; RusaAi never receives the upstream runtime key.
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://MODEL-SERVER-HOST/openai/v1",
+    api_key="RUSAMODELS_MANAGER_OR_ADMIN_TOKEN",
+)
+
+response = client.chat.completions.create(
+    model="qwen-local",
+    messages=[{"role": "user", "content": "Hello"}],
+)
+print(response.choices[0].message.content)
+```
+
+For streaming, pass `stream=True`. Use a Manager or Administrator token. The configured model ID is the only model exposed by this initial single-upstream proxy.
