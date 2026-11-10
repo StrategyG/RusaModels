@@ -13,6 +13,7 @@ def api_client(tmp_path):
     token_map = {
         "viewer-test-token": {"subject": "test-viewer", "role": "viewer"},
         "manager-test-token": {"subject": "test-manager", "role": "manager"},
+        "inference-test-token": {"subject": "rusa-ai-inference", "role": "inference"},
         "admin-test-token": {"subject": "test-admin", "role": "administrator"},
     }
     principals = {sha256_hex(token): value for token, value in token_map.items()}
