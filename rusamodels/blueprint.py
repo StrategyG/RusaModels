@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 
 @dataclass
@@ -21,7 +20,7 @@ class ModelSpec:
     positional_encoding: str = "rope"
     normalization: str = "rmsnorm"
     activation: str = "swiglu"
-    modalities: List[str] = field(default_factory=lambda: ["text", "image"])
+    modalities: list[str] = field(default_factory=lambda: ["text", "image"])
     moe: MoESpec = field(default_factory=MoESpec)
 
     def validate(self) -> None:
