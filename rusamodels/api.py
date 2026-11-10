@@ -184,7 +184,7 @@ def create_service_app(
     def create_model(
         payload: ModelCreate,
         request: Request,
-        principal: Principal = Depends(roles("inference", "manager", "administrator")),
+        principal: Principal = Depends(roles("manager", "administrator")),
         db: Session = Depends(get_db),
     ):
         item = ModelCatalog(
@@ -217,7 +217,7 @@ def create_service_app(
         model_id: str,
         payload: ModelPatch,
         request: Request,
-        principal: Principal = Depends(roles("inference", "manager", "administrator")),
+        principal: Principal = Depends(roles("manager", "administrator")),
         db: Session = Depends(get_db),
     ):
         item = db.get(ModelCatalog, model_id)
@@ -266,7 +266,7 @@ def create_service_app(
         model_id: str,
         payload: VersionCreate,
         request: Request,
-        principal: Principal = Depends(roles("inference", "manager", "administrator")),
+        principal: Principal = Depends(roles("manager", "administrator")),
         db: Session = Depends(get_db),
     ):
         model = db.get(ModelCatalog, model_id)
@@ -294,7 +294,7 @@ def create_service_app(
         version_id: str,
         payload: UploadCreate,
         request: Request,
-        principal: Principal = Depends(roles("inference", "manager", "administrator")),
+        principal: Principal = Depends(roles("manager", "administrator")),
         db: Session = Depends(get_db),
     ):
 
@@ -340,7 +340,7 @@ def create_service_app(
         upload_id: str,
         part_number: int,
         request: Request,
-        principal: Principal = Depends(roles("inference", "manager", "administrator")),
+        principal: Principal = Depends(roles("manager", "administrator")),
         db: Session = Depends(get_db),
     ):
 
@@ -401,7 +401,7 @@ def create_service_app(
     def get_upload_status(
         upload_id: str,
         request: Request,
-        principal: Principal = Depends(roles("inference", "manager", "administrator")),
+        principal: Principal = Depends(roles("manager", "administrator")),
         db: Session = Depends(get_db),
     ):
         upload = get_upload(db, upload_id)
@@ -412,7 +412,7 @@ def create_service_app(
     def complete_upload(
         upload_id: str,
         request: Request,
-        principal: Principal = Depends(roles("inference", "manager", "administrator")),
+        principal: Principal = Depends(roles("manager", "administrator")),
         db: Session = Depends(get_db),
     ):
 
@@ -619,7 +619,7 @@ def create_service_app(
         def create_hub_download(
             payload: HubDownloadCreate,
             request: Request,
-            principal: Principal = Depends(roles("inference", "manager", "administrator")),
+            principal: Principal = Depends(roles("manager", "administrator")),
             db: Session = Depends(get_db),
         ):
             if not payload.license_accepted:
@@ -682,7 +682,7 @@ def create_service_app(
             version_id: str,
             payload: ConversionCreate,
             request: Request,
-            principal: Principal = Depends(roles("inference", "manager", "administrator")),
+            principal: Principal = Depends(roles("manager", "administrator")),
             db: Session = Depends(get_db),
         ):
             source = db.get(ModelVersion, version_id)
