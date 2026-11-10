@@ -296,7 +296,9 @@ def create_service_app(
         principal: Principal = Depends(roles("manager", "administrator")),
         db: Session = Depends(get_db),
     ):
-        if payload.expected_size > runtime.max_upload_bytes:
+
+        if service_name != "quant-server":
+            raise HTTPException(404, "Artifact writes are available only on Quant Server")        if payload.expected_size > runtime.max_upload_bytes:
             raise HTTPException(413, "Upload exceeds configured MAX_UPLOAD_BYTES")
         version = db.get(ModelVersion, version_id)
         if version is None or version.model_id != model_id:
@@ -339,7 +341,9 @@ def create_service_app(
         principal: Principal = Depends(roles("manager", "administrator")),
         db: Session = Depends(get_db),
     ):
-        if part_number < 1 or part_number > 10000:
+
+        if service_name != "quant-server":
+            raise HTTPException(404, "Artifact writes are available only on Quant Server")        if part_number < 1 or part_number > 10000:
             raise HTTPException(422, "part_number must be between 1 and 10000")
         upload = get_upload(db, upload_id)
         if upload.status != "open":
@@ -408,7 +412,9 @@ def create_service_app(
         principal: Principal = Depends(roles("manager", "administrator")),
         db: Session = Depends(get_db),
     ):
-        upload = get_upload(db, upload_id)
+
+        if service_name != "quant-server":
+            raise HTTPException(404, "Artifact writes are available only on Quant Server")        upload = get_upload(db, upload_id)
         if upload.status != "open":
             raise HTTPException(409, "Upload session is not open")
         parts = db.scalars(
@@ -513,7 +519,9 @@ def create_service_app(
         principal: Principal = Depends(roles("administrator")),
         db: Session = Depends(get_db),
     ):
-        upload = get_upload(db, upload_id)
+
+        if service_name != "quant-server":
+            raise HTTPException(404, "Artifact writes are available only on Quant Server")        upload = get_upload(db, upload_id)
         if upload.status != "open":
             raise HTTPException(409, "Only open uploads can be aborted")
         artifact_storage.abort_multipart(upload.storage_key, upload.storage_upload_id)
