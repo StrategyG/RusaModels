@@ -2,9 +2,18 @@
 
 ## Local development
 1. Copy `.env.example` to `.env` and replace development passwords.
-2. Start `docker compose up --build -d`.
-3. Run health checks on ports 8000 and 8001.
-4. Apply schema changes only with `alembic upgrade head`.
+2. Start the stack with `docker compose up --build -d`. The migration service applies Alembic migrations before the API services start.
+3. Check Model Server on port 8000 and Quant Server on port 8001.
+4. Apply later schema changes with `alembic upgrade head`; do not use ORM `create_all` outside isolated tests.
+
+## Resumable artifact uploads
+1. Create an upload session with the model/version endpoint and expected byte size plus SHA-256.
+2. Upload numbered raw binary parts to `PUT /v1/uploads/{upload_id}/parts/{part_number}`. The maximum part size is 64 MiB.
+3. Re-uploading a part number replaces that part, allowing interrupted transfers to resume.
+4. Complete the upload. The server checks contiguous part numbers, expected size and the full SHA-256 by streaming the stored object back.
+5. Download immutable artifacts from `GET /v1/artifacts/{artifact_id}/download`.
+
+For S3, non-final multipart parts must be at least 5 MiB. The default configured maximum artifact size is 10 GiB. Use TLS for all non-local transfer paths. Abandoned multipart sessions need an operational cleanup policy; configure an S3 lifecycle rule to abort incomplete multipart uploads.
 
 ## Health
 - `/health/live`: process is responsive.
@@ -20,4 +29,4 @@
 - Do not expose PostgreSQL or object-store administration publicly.
 
 ## Current scope
-Model CRUD and version metadata APIs are available in the initial implementation. Artifact upload/download, resumable multipart transfer, conversion, quantization, inference, routing, scheduling and dashboard are later phases. No model weights are included.
+Model CRUD, immutable model-version registration, resumable artifact uploads, checksum verification and artifact download are implemented. Model discovery/download, conversion, quantization, inference, routing, scheduling, benchmark/evaluation, training orchestration and dashboard remain future phases.
