@@ -337,7 +337,7 @@ def create_service_app(
         if upload.status != "open":
             raise HTTPException(409, "Upload session is not open")
         content_length = request.headers.get("content-length")
-        if content_length and int(content_length) > _PART_SIZE_LIMIT:
+        if content_length and content_length.isdigit() and int(content_length) > _PART_SIZE_LIMIT:
             raise HTTPException(413, "Upload part exceeds 64 MiB")
         payload = bytearray()
         async for chunk in request.stream():
@@ -347,6 +347,14 @@ def create_service_app(
         if not payload:
             raise HTTPException(400, "Upload part must not be empty")
         data = bytes(payload)
+        previous_parts = db.scalars(
+            select(UploadPart).where(UploadPart.upload_id == upload_id)
+        ).all()
+        already_uploaded = sum(
+            part.size_bytes for part in previous_parts if part.part_number != part_number
+        )
+        if already_uploaded + len(data) > upload.expected_size:
+            raise HTTPException(413, "Uploaded parts exceed expected_size")
         digest = hashlib.sha256(data).hexdigest()
         try:
             etag = artifact_storage.upload_part(
