@@ -2,7 +2,7 @@
 import hashlib
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from collections.abc import Generator
 from typing import Any
 from urllib.parse import quote
@@ -689,7 +689,7 @@ def create_service_app(
         if job.status != "queued":
             raise HTTPException(409, "Only queued jobs can be cancelled")
         job.status = "cancelled"
-        job.finished_at = datetime.now(timezone.utc)
+        job.finished_at = datetime.now(UTC)
         db.commit()
         audit(db, request, principal, "model_job.cancelled", f"job:{job_id}")
         return job
