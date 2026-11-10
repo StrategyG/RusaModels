@@ -12,9 +12,10 @@ from sqlalchemy.orm import Session
 
 from rusamodels.models import AuditEvent
 
-Role = Literal["viewer", "manager", "administrator"]
+Role = Literal["viewer", "inference", "manager", "administrator"]
 ROLE_PERMISSIONS = {
     "viewer": frozenset({"platform:read", "models:read", "artifacts:read"}),
+    "inference": frozenset({"inference:invoke"}),
     "manager": frozenset({"platform:read", "models:read", "artifacts:read", "models:write", "quantization:run"}),
     "administrator": frozenset({"platform:read", "models:read", "artifacts:read", "models:write", "quantization:run", "admin:destructive", "audit:read", "users:manage"}),
 }
@@ -46,7 +47,7 @@ def parse_principals(raw: str) -> dict[str, Principal]:
         if not isinstance(item, dict) or not isinstance(item.get("subject"), str):
             raise RuntimeError("Each API principal needs a subject and role")
         if item.get("role") not in ROLE_PERMISSIONS:
-            raise RuntimeError("Role must be viewer, manager or administrator")
+            raise RuntimeError("Role must be viewer, inference, manager or administrator")
         result[digest] = Principal(item["subject"], item["role"])
     return result
 
