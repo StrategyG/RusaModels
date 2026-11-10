@@ -1,0 +1,69 @@
+project: rusamodels
+status: t4_qlora_experiment_ready_training_not_run
+
+model:
+  id: Qwen/Qwen3-4B-Instruct-2507
+  revision: eb25fbe4f35f7147763bc24445679d1c00588d89
+  license: apache-2.0
+
+dataset:
+  train_file: data/agent_sft/train.jsonl
+  eval_file: data/agent_sft/eval.jsonl
+  min_train_examples: 100
+  min_eval_examples: 30
+  min_blocked_eval_fraction: 0.10
+  min_unblocked_eval_fraction: 0.50
+  required_roles: [analyst, architect, developer, debugger, tester, security]
+  max_seq_length: 2048
+
+qlora:
+  quant_type: nf4
+  double_quant: true
+  compute_dtype: float16
+
+lora:
+  r: 8
+  alpha: 16
+  dropout: 0.05
+  target_modules: all-linear
+
+training:
+  method: qlora
+  output_dir: artifacts/rusa-agent-qwen3-4b-qlora-t4
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 16
+  num_train_epochs: 3
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  lr_scheduler_type: cosine
+  logging_steps: 5
+  eval_strategy: epoch
+  save_strategy: epoch
+  save_total_limit: 2
+  max_grad_norm: 0.3
+  gradient_checkpointing: true
+  dataloader_num_workers: 0
+  seed: 42
+
+evaluation:
+  max_new_tokens: 256
+  min_valid_contract_rate: 1.0
+  min_blocked_recall: 0.90
+  max_blocked_false_positive_rate: 0.10
+
+hardware_target:
+  gpu: NVIDIA Tesla T4
+  minimum_vram_gib: 14
+  precision: fp16
+  notes:
+    - This is a constrained experimental profile for a 16 GB T4, not a guarantee against out-of-memory errors.
+    - If CUDA OOM occurs, reduce max_seq_length to 1024 and LoRA rank to 4 in a separately reviewed run.
+    - Keep the evaluation split held out and do not promote an adapter unless the configured evaluation gates pass.
+
+notes:
+  - This profile is tuned for an NVIDIA T4 class GPU using 4-bit NF4 QLoRA and FP16 compute.
+  - The dataset contains 120 synthetic training examples and 36 held-out evaluation examples; this is a seed experiment, not production-scale training data.
+  - The QLoRA run has not been executed and no fine-tuned weights are included.
+  - Runtime authorization remains deterministic in the tool gateway and Policy Engine; model output is never an authorization decision.

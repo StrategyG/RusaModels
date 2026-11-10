@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RUSA-AI Agent SFT Example",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "agent_role", "messages", "response"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "agent_role": {
+      "type": "string",
+      "enum": ["analyst", "architect", "developer", "debugger", "tester", "security"]
+    },
+    "messages": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "content"],
+        "properties": {
+          "role": {"type": "string", "enum": ["system", "user", "assistant"]},
+          "content": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message", "actions", "done"],
+      "properties": {
+        "message": {"type": "string", "minLength": 1},
+        "actions": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "arguments"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "enum": ["list_files", "read_file", "write_file", "run_check", "git_diff", "search_knowledge", "get_document", "list_collections"]
+              },
+              "arguments": {"type": "object"}
+            }
+          }
+        },
+        "done": {"type": "boolean"},
+        "blocked": {"type": "boolean"},
+        "blockers": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

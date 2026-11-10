@@ -44,3 +44,19 @@ Example principal JSON:
 ```
 
 Store raw tokens only in the secret manager.
+
+
+## CPU inference Model Server (16 GB)
+
+For local CPU inference in the Model Server Codespace, select `.devcontainer/model-server-cpu/devcontainer.json`. It requests 4 CPUs, 16 GB RAM and 32 GB storage, and adds two private services:
+- llama.cpp serving one pinned GGUF chat model.
+- SentenceTransformers serving the local multilingual embedding model.
+
+Configure these additional Codespaces environment variables/secrets:
+- `RUSAMODELS_GGUF_MODEL_PATH` — absolute path to the local GGUF file.
+- `RUSAMODELS_GGUF_MODEL_SHA256` — approved SHA-256 for the GGUF file (verify with `scripts/verify_gguf_model.py`).
+- `RUSAMODELS_EMBEDDING_MODEL_PATH` — absolute path to the local embedding model snapshot.
+- `RUSAMODELS_EMBEDDING_INTERNAL_TOKEN` — random secret of at least 32 characters, shared only by Model Server and the embedding container.
+- Optional CPU limits: `RUSAMODELS_CPU_THREADS`, `RUSAMODELS_LLM_MEMORY_LIMIT`, `RUSAMODELS_LLM_CPU_LIMIT`, `RUSAMODELS_EMBEDDING_CPU_THREADS`, `RUSAMODELS_EMBEDDING_MEMORY_LIMIT`, `RUSAMODELS_EMBEDDING_CPU_LIMIT`.
+
+The CPU profile sets Model Server inference upstreams to private Compose addresses. Do not publish llama.cpp or embedding ports. Only Model Server port 8000 is forwarded. See [CPU inference runbook](CPU_INFERENCE.md) for artifact download, checksums, smoke tests and RUSA AI integration.

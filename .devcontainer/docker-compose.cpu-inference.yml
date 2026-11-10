@@ -1,0 +1,74 @@
+services:
+  model-server:
+    environment:
+      RUSAMODELS_INFERENCE_BASE_URL: http://llama-cpp:8080
+      RUSAMODELS_INFERENCE_MODEL_ID: ${RUSAMODELS_INFERENCE_MODEL_ID:-rusa-general-4b}
+      RUSAMODELS_INFERENCE_API_KEY: ""
+      RUSAMODELS_EMBEDDING_BASE_URL: http://embedding-server:8081
+      RUSAMODELS_EMBEDDING_MODEL_ID: ${RUSAMODELS_EMBEDDING_MODEL_ID:-rusa-embedding-small}
+      RUSAMODELS_EMBEDDING_API_KEY: ${RUSAMODELS_EMBEDDING_INTERNAL_TOKEN:?Set RUSAMODELS_EMBEDDING_INTERNAL_TOKEN}
+      RUSAMODELS_EMBEDDING_TIMEOUT_SECONDS: ${RUSAMODELS_EMBEDDING_TIMEOUT_SECONDS:-120}
+    depends_on:
+      llama-cpp:
+        condition: service_started
+      embedding-server:
+        condition: service_started
+
+  llama-cpp:
+    image: ${LLAMA_CPP_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}
+    restart: unless-stopped
+    init: true
+    command:
+      - --model
+      - /models/model.gguf
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --ctx-size
+      - "${RUSAMODELS_MODEL_CONTEXT:-4096}"
+      - --threads
+      - "${RUSAMODELS_CPU_THREADS:-3}"
+      - --threads-batch
+      - "${RUSAMODELS_CPU_THREADS:-3}"
+      - --parallel
+      - "1"
+      - --n-gpu-layers
+      - "0"
+      - --alias
+      - "${RUSAMODELS_INFERENCE_MODEL_ID:-rusa-general-4b}"
+    volumes:
+      - "${RUSAMODELS_GGUF_MODEL_PATH:?Set absolute RUSAMODELS_GGUF_MODEL_PATH}:/models/model.gguf:ro"
+    expose:
+      - "8080"
+    mem_limit: ${RUSAMODELS_LLM_MEMORY_LIMIT:-8g}
+    cpus: ${RUSAMODELS_LLM_CPU_LIMIT:-3.0}
+    pids_limit: 128
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+
+  embedding-server:
+    build:
+      context: ..
+      dockerfile: Dockerfile.embedding
+    restart: unless-stopped
+    environment:
+      RUSAMODELS_EMBEDDING_MODEL_PATH: /models/embedding
+      RUSAMODELS_EMBEDDING_MODEL_ID: ${RUSAMODELS_EMBEDDING_MODEL_ID:-rusa-embedding-small}
+      RUSAMODELS_EMBEDDING_INTERNAL_TOKEN: ${RUSAMODELS_EMBEDDING_INTERNAL_TOKEN:?Set RUSAMODELS_EMBEDDING_INTERNAL_TOKEN}
+      RUSAMODELS_EMBEDDING_CPU_THREADS: ${RUSAMODELS_EMBEDDING_CPU_THREADS:-1}
+    volumes:
+      - "${RUSAMODELS_EMBEDDING_MODEL_PATH:?Set absolute RUSAMODELS_EMBEDDING_MODEL_PATH}:/models/embedding:ro"
+    expose:
+      - "8081"
+    mem_limit: ${RUSAMODELS_EMBEDDING_MEMORY_LIMIT:-2g}
+    cpus: ${RUSAMODELS_EMBEDDING_CPU_LIMIT:-1.0}
+    pids_limit: 96
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m

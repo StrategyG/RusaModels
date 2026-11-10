@@ -46,6 +46,7 @@ jobs:
         run: |
           python -m json.tool .devcontainer/model-server/devcontainer.json >/dev/null
           python -m json.tool .devcontainer/quant-server/devcontainer.json >/dev/null
+          python -m json.tool .devcontainer/model-server-cpu/devcontainer.json >/dev/null
       - name: Validate Docker Compose configurations
         run: |
           cp .env.example .env
@@ -60,3 +61,16 @@ jobs:
           RUSAMODELS_API_PRINCIPALS='{}' \
           RUSAMODELS_SERVICE_TOKEN_SHA256='0000000000000000000000000000000000000000000000000000000000000000' \
           docker compose -f .devcontainer/docker-compose.codespaces.yml config --quiet
+          RUSAMODELS_GGUF_MODEL_PATH='/tmp/model.gguf' \
+          RUSAMODELS_EMBEDDING_MODEL_PATH='/tmp/embedding' \
+          RUSAMODELS_EMBEDDING_INTERNAL_TOKEN='ci-embedding-internal-token-000000000000000000000000' \
+          DATABASE_URL='postgresql+psycopg://dev:dev@db.example:5432/rusamodels' \
+          S3_ENDPOINT_URL='https://s3.example.test' \
+          S3_BUCKET='rusamodels-artifacts' \
+          S3_READ_ACCESS_KEY_ID='ci-read-key' \
+          S3_READ_SECRET_ACCESS_KEY='ci-read-secret' \
+          S3_WRITE_ACCESS_KEY_ID='ci-write-key' \
+          S3_WRITE_SECRET_ACCESS_KEY='ci-write-secret' \
+          RUSAMODELS_API_PRINCIPALS='{}' \
+          RUSAMODELS_SERVICE_TOKEN_SHA256='0000000000000000000000000000000000000000000000000000000000000000' \
+          docker compose -f .devcontainer/docker-compose.codespaces.yml -f .devcontainer/docker-compose.cpu-inference.yml config --quiet

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rusa-models.local/schemas/llm/model-artifact-manifest.schema.json",
+  "title": "RUSA-AI Local Model Artifact Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "model_id", "revision", "license", "tokenizer_id", "tokenizer_revision", "files"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "model_id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "revision": {"type": "string", "minLength": 1, "maxLength": 256},
+    "license": {"type": "string", "minLength": 1, "maxLength": 512},
+    "tokenizer_id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "tokenizer_revision": {"type": "string", "minLength": 1, "maxLength": 256},
+    "files": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"type": "string", "minLength": 1},
+      "additionalProperties": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"}
+    }
+  }
+}

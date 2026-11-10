@@ -1,0 +1,43 @@
+project_name: llm-project
+status: planned
+
+model:
+  name: opus-5.5-blueprint
+  type: decoder-only-transformer
+  architecture:
+    layers: 96
+    hidden_size: 12288
+    attention_heads: 96
+    kv_heads: 8
+    context_window: 1000000
+    positional_encoding: rope
+    normalization: rmsnorm
+    activation: swiglu
+  moe:
+    enabled: true
+    num_experts: 64
+    experts_per_token: 2
+  modalities:
+    - text
+    - image
+
+training:
+  objective: next_token_prediction
+  precision: bf16
+  pipeline:
+    - pretraining
+    - supervised_fine_tuning
+    - rlhf_rlaif
+    - reasoning_rl
+    - safety_alignment
+
+inference:
+  quantization:
+    - int8
+    - fp8
+  speculative_decoding: true
+  tool_use: true
+
+notes:
+  - This config is a target blueprint and not a verified production configuration.
+  - Model, dataset, benchmark, and deployment evidence must be recorded before claiming verification.

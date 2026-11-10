@@ -1,0 +1,35 @@
+project: llm-project
+status: planned
+
+inference:
+  backend: local-runtime
+  quantization: int8/fp8
+  speculative_decoding: true
+  batching:
+    enabled: true
+    max_batch_size: 32
+  kv_cache:
+    enabled: true
+    strategy: paged
+  tools:
+    enabled: true
+    calls:
+      - function_calling
+      - retrieval
+      - code_execution
+
+runtime:
+  local_only: true
+  external_model_apis_enabled_by_default: false
+  requires_internet: false
+
+observability:
+  logging: json
+  metrics:
+    - latency
+    - throughput
+    - memory
+    - error_rate
+
+notes:
+  - Inference should be independently benchmarked before claiming runtime readiness.

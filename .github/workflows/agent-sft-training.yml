@@ -1,0 +1,109 @@
+name: RusaModels Agent SFT GPU Training
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_gpu_run:
+        description: "Confirm this manually starts the Qwen3-4B QLoRA experiment on an NVIDIA T4 runner."
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rusamodels-agent-sft-training
+  cancel-in-progress: false
+
+jobs:
+  train-and-evaluate:
+    if: inputs.confirm_gpu_run == true
+    name: Train and evaluate QLoRA adapter on T4
+    runs-on: [self-hosted, linux, x64, cuda, gpu, t4]
+    environment: rusamodels-model-training
+    timeout-minutes: 360
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-training.txt
+
+      - name: Install dedicated training dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-train.txt
+
+      - name: Verify NVIDIA T4 and CUDA capacity
+        run: |
+          nvidia-smi
+          python - <<'PY'
+          import torch
+
+          if not torch.cuda.is_available():
+              raise SystemExit("A CUDA-enabled PyTorch runtime and NVIDIA GPU are required.")
+          device = torch.cuda.current_device()
+          props = torch.cuda.get_device_properties(device)
+          gpu_name = props.name
+          vram_gib = props.total_memory / (1024 ** 3)
+          print(f"GPU: {gpu_name}")
+          print(f"VRAM: {vram_gib:.2f} GiB")
+          if "t4" not in gpu_name.lower():
+              raise SystemExit(f"Expected an NVIDIA T4 runner, found: {gpu_name}")
+          if vram_gib < 14:
+              raise SystemExit(f"Expected at least 14 GiB visible VRAM, found {vram_gib:.2f} GiB")
+          if torch.cuda.is_bf16_supported():
+              print("BF16 is available, but this T4 profile intentionally uses FP16.")
+          else:
+              print("BF16 is not supported; FP16 profile confirmed.")
+          PY
+
+      - name: Train and evaluate T4 QLoRA adapter
+        run: bash scripts/train_agent_sft_t4.sh
+
+      - name: Add evaluation summary
+        if: always()
+        run: |
+          if [ -f artifacts/agent-sft-evaluation-t4.json ]; then
+            python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path("artifacts/agent-sft-evaluation-t4.json").read_text())
+          metrics = report.get("metrics", {})
+          print("## RusaModels Agent SFT T4 evaluation")
+          print()
+          print("| Metric | Result |")
+          print("|---|---:|")
+          for key in (
+              "valid_json_rate",
+              "valid_contract_rate",
+              "blocked_recall",
+              "blocked_precision",
+              "blocked_false_positive_rate",
+          ):
+              value = metrics.get(key)
+              print(f"| {key} | {value if value is not None else 'not available'} |")
+          print()
+          print("This is an experimental candidate adapter, not production certification.")
+          PY
+          else
+            echo "Training or evaluation did not produce a report." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload unpromoted T4 adapter and evaluation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rusa-agent-sft-t4-candidate-${{ github.run_id }}
+          path: |
+            artifacts/rusa-agent-qwen3-4b-qlora-t4/adapter/
+            artifacts/agent-sft-evaluation-t4.json
+          if-no-files-found: ignore
+          retention-days: 14
+          compression-level: 6

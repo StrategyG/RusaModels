@@ -1,0 +1,90 @@
+project: rusamodels
+status: curated_seed_dataset_ready_training_not_run
+
+model:
+  id: Qwen/Qwen3-4B-Instruct-2507
+  # Immutable Hugging Face model revision used for reproducible experiments.
+  revision: eb25fbe4f35f7147763bc24445679d1c00588d89
+  license: apache-2.0
+
+dataset:
+  train_file: data/agent_sft/train.jsonl
+  eval_file: data/agent_sft/eval.jsonl
+  min_train_examples: 100
+  min_eval_examples: 30
+  min_blocked_eval_fraction: 0.10
+  min_unblocked_eval_fraction: 0.50
+  required_roles: [analyst, architect, developer, debugger, tester, security]
+  max_seq_length: 4096
+
+qlora:
+  quant_type: nf4
+  double_quant: true
+  compute_dtype: bfloat16
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: all-linear
+
+training:
+  method: qlora
+  output_dir: artifacts/rusa-agent-qwen3-4b-qlora
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 16
+  num_train_epochs: 3
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  lr_scheduler_type: cosine
+  logging_steps: 5
+  eval_strategy: epoch
+  save_strategy: epoch
+  save_total_limit: 3
+  max_grad_norm: 0.3
+  gradient_checkpointing: true
+  dataloader_num_workers: 2
+  seed: 42
+
+evaluation:
+  max_new_tokens: 512
+  min_valid_contract_rate: 1.0
+  min_blocked_recall: 0.90
+  max_blocked_false_positive_rate: 0.10
+
+notes:
+  - A 120-example synthetic seed training split and 36-example held-out evaluation split are committed; the QLoRA run has not been executed and no fine-tuned weights are included.
+  - The seed corpus is synthetic and documented in data/agent_sft/PROVENANCE.md; review and expand it with authorized examples before production promotion.
+  - Curated training and evaluation datasets must be reviewed, licensed, redacted, and split without leakage.
+  - The 100-example minimum is a guardrail, not a claim that 100 examples are sufficient for production quality.
+  - The model's native context is not the training target; use the configured 4096-token training window until hardware benchmarks justify a change.
+  - Runtime authorization remains deterministic in the tool gateway and Policy Engine; model output is never an authorization decision.
+
+future_roadmap:
+  training:
+    pretraining:
+      objective: next_token_prediction
+      precision: bf16
+      distributed:
+        enabled: true
+        strategy: fsdp
+    post_training:
+      - supervised_fine_tuning
+      - rlhf_rlaif
+      - reasoning_rl
+      - safety_alignment
+    checkpointing:
+      enabled: true
+      save_interval_steps: 500
+      keep_last_n: 5
+  optimization:
+    gradient_checkpointing: true
+    mixed_precision: bf16
+    flash_attention: true
+  safety:
+    alignment_layers:
+      - constitutional_feedback
+      - red_teaming
+      - classifier_filtering
