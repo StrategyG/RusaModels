@@ -26,6 +26,7 @@ The migration is additive first. The original RusaAi modules remain in the sourc
 | `scripts/benchmark_inference.py` | `scripts/benchmark_inference.py` | Migrated to the authenticated RusaModels Model Server API |
 | `scripts/train_rusa_agent_t4.sh` | `scripts/train_agent_sft_t4.sh` | Migrated |
 | `agent-sft-training.yml` | `.github/workflows/agent-sft-training.yml` | Migrated as a manual, GPU-runner-only workflow |
+| `notebooks/RUSA_AI_QLoRA_T4_Colab.ipynb` | `notebooks/RusaModels_QLoRA_T4_Colab.ipynb` | Migrated with repository paths and output locations updated |
 
 ## Components intentionally retained in RUSA AI
 
