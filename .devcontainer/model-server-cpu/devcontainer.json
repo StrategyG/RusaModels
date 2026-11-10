@@ -1,0 +1,23 @@
+{
+  "name": "RusaModels — CPU Model Server (16 GB)",
+  "dockerComposeFile": [
+    "../docker-compose.codespaces.yml",
+    "../docker-compose.cpu-inference.yml"
+  ],
+  "service": "model-server",
+  "workspaceFolder": "/workspace",
+  "runServices": ["model-server", "llama-cpp", "embedding-server"],
+  "overrideCommand": false,
+  "shutdownAction": "stopCompose",
+  "hostRequirements": { "cpus": 4, "memory": 16, "storage": 64 },
+  "postCreateCommand": "python -m pip install --user -e '.[dev]'",
+  "forwardPorts": [8000],
+  "portsAttributes": {
+    "8000": { "label": "RusaModels CPU Model API", "onAutoForward": "notify" }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python", "charliermarsh.ruff"]
+    }
+  }
+}
