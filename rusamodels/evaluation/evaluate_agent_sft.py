@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -145,7 +145,7 @@ def run_evaluation(adapter_dir: Path, eval_file: Path, config_path: Path, output
     )
     report = {
         "schema_version": 1,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "adapter_dir": str(adapter_dir),
         "eval_file": str(eval_file),
         "examples": total,
