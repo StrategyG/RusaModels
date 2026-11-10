@@ -298,7 +298,8 @@ def create_service_app(
     ):
 
         if service_name != "quant-server":
-            raise HTTPException(404, "Artifact writes are available only on Quant Server")        if payload.expected_size > runtime.max_upload_bytes:
+            raise HTTPException(404, "Artifact writes are available only on Quant Server")
+        if payload.expected_size > runtime.max_upload_bytes:
             raise HTTPException(413, "Upload exceeds configured MAX_UPLOAD_BYTES")
         version = db.get(ModelVersion, version_id)
         if version is None or version.model_id != model_id:
@@ -414,7 +415,8 @@ def create_service_app(
     ):
 
         if service_name != "quant-server":
-            raise HTTPException(404, "Artifact writes are available only on Quant Server")        upload = get_upload(db, upload_id)
+            raise HTTPException(404, "Artifact writes are available only on Quant Server")
+        upload = get_upload(db, upload_id)
         if upload.status != "open":
             raise HTTPException(409, "Upload session is not open")
         parts = db.scalars(
