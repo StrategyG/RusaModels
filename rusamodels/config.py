@@ -46,7 +46,7 @@ class Settings(BaseSettings):
         "inference_base_url", "inference_model_id", "inference_api_key", "embedding_base_url", "embedding_model_id", "embedding_api_key", mode="before"
     )
     @classmethod
-    def empty_inference_settings_to_none(cls, value):
+    def empty_optional_runtime_settings_to_none(cls, value):
         if isinstance(value, str):
             value = value.strip()
             return value or None
