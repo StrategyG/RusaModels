@@ -26,6 +26,40 @@ if (
 }
 $ApiBaseUrl = $parsedApiBaseUrl.GetLeftPart([System.UriPartial]::Authority)
 
+function Get-RusaApprovedRuntimeModelId {
+    param([string]$Root)
+
+    $manifestPath = $env:RUSAMODELS_MODEL_MANIFEST
+    if ([string]::IsNullOrWhiteSpace($manifestPath)) {
+        $manifestPath = Join-Path $Root "models/rusaai-edge/manifests/0.1.0-design.json"
+    }
+    elseif (-not [System.IO.Path]::IsPathRooted($manifestPath)) {
+        $manifestPath = Join-Path $Root $manifestPath
+    }
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        throw "Model manifest is missing: $manifestPath"
+    }
+
+    $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+    if ($manifest.status -ne "READY_FOR_DEVICE_VALIDATION") {
+        throw "Acceptance requires manifest status READY_FOR_DEVICE_VALIDATION."
+    }
+    if ($manifest.model_id -ne $manifest.identity_alignment.architecture_reference_model_id) {
+        throw "Manifest model_id must remain the Architecture v2.0 reference identity."
+    }
+    $runtimeModelId = [string]$manifest.identity_alignment.runtime_model_id
+    if ($manifest.identity_alignment.runtime_model_id_decision -ne "APPROVED" -or
+        [string]::IsNullOrWhiteSpace($runtimeModelId)) {
+        throw "Acceptance blocked: ADR-TRAIN-001 must approve and record identity_alignment.runtime_model_id."
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:RUSAMODELS_INFERENCE_MODEL_ID) -and
+        $env:RUSAMODELS_INFERENCE_MODEL_ID -ne $runtimeModelId) {
+        throw "RUSAMODELS_INFERENCE_MODEL_ID does not match the approved manifest runtime_model_id."
+    }
+    return $runtimeModelId
+}
+
+
 if ([string]::IsNullOrWhiteSpace($env:RUSAMODELS_API_TOKEN)) {
     throw "Set RUSAMODELS_API_TOKEN to the dedicated role=inference bearer token."
 }
@@ -69,6 +103,7 @@ function Assert-RusaSoakProcess {
     }
     $actualPath = $null
     try {
+    $runtimeModelId = Get-RusaApprovedRuntimeModelId -Root $RepoRoot
         $actualPath = $process.Path
     }
     catch {
@@ -117,8 +152,8 @@ try {
     $null = Invoke-RestMethod -Uri "http://127.0.0.1:8081/health" -Method Get -TimeoutSec 10
     $null = Invoke-RestMethod -Uri "$ApiBaseUrl/health/ready" -Method Get -TimeoutSec 10
     $models = Invoke-RestMethod -Uri "$ApiBaseUrl/openai/v1/models" -Headers @{ Authorization = "Bearer $env:RUSAMODELS_API_TOKEN" } -Method Get -TimeoutSec 10
-    if (@($models.data | Where-Object { $_.id -eq "rusaai-edge-1.54b" }).Count -ne 1) {
-        throw "The model ID rusaai-edge-1.54b is not exposed to the inference principal."
+    if (@($models.data | Where-Object { $_.id -eq $runtimeModelId }).Count -ne 1) {
+        throw "The model ID Approved runtime model ID $runtimeModelId is not exposed to the inference principal."
     }
 
     Add-Type -AssemblyName System.Net.Http
@@ -137,7 +172,7 @@ try {
 
         if ([datetime]::UtcNow -ge $nextRequest) {
             $payload = @{
-                model = "rusaai-edge-1.54b"
+                model = $runtimeModelId
                 messages = @(@{ role = "user"; content = "Reply with exactly OK." })
                 temperature = 0
                 max_tokens = 16
@@ -241,7 +276,7 @@ try {
     $report = [pscustomobject]@{
         Status = "PASS"
         Profile = "RUSA-CPU-16-v2.0"
-        ModelId = "rusaai-edge-1.54b"
+        ModelId = $runtimeModelId
         StableSessionMinutes = $DurationMinutes
         ActualElapsedMinutes = [math]::Round($sessionTimer.Elapsed.TotalMinutes, 2)
         RequestIntervalSeconds = $RequestIntervalSeconds

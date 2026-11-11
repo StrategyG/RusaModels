@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$ApiBaseUrl = "http://127.0.0.1:8090"
+    [string]$ApiBaseUrl = "http://127.0.0.1:8090",
+    [string]$RepoRoot = (Split-Path -Parent $PSScriptRoot)
 )
 
 Set-StrictMode -Version Latest
@@ -11,6 +12,43 @@ if (-not $parsedApiBaseUrl.IsAbsoluteUri -or $parsedApiBaseUrl.Scheme -ne "http"
     throw "RUSA-CPU-16 context acceptance must target http://127.0.0.1:8090 only."
 }
 $ApiBaseUrl = $parsedApiBaseUrl.GetLeftPart([System.UriPartial]::Authority)
+
+$RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
+$runtimeModelId = Get-RusaApprovedRuntimeModelId -Root $RepoRoot
+
+function Get-RusaApprovedRuntimeModelId {
+    param([string]$Root)
+
+    $manifestPath = $env:RUSAMODELS_MODEL_MANIFEST
+    if ([string]::IsNullOrWhiteSpace($manifestPath)) {
+        $manifestPath = Join-Path $Root "models/rusaai-edge/manifests/0.1.0-design.json"
+    }
+    elseif (-not [System.IO.Path]::IsPathRooted($manifestPath)) {
+        $manifestPath = Join-Path $Root $manifestPath
+    }
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        throw "Model manifest is missing: $manifestPath"
+    }
+
+    $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+    if ($manifest.status -ne "READY_FOR_DEVICE_VALIDATION") {
+        throw "Acceptance requires manifest status READY_FOR_DEVICE_VALIDATION."
+    }
+    if ($manifest.model_id -ne $manifest.identity_alignment.architecture_reference_model_id) {
+        throw "Manifest model_id must remain the Architecture v2.0 reference identity."
+    }
+    $runtimeModelId = [string]$manifest.identity_alignment.runtime_model_id
+    if ($manifest.identity_alignment.runtime_model_id_decision -ne "APPROVED" -or
+        [string]::IsNullOrWhiteSpace($runtimeModelId)) {
+        throw "Acceptance blocked: ADR-TRAIN-001 must approve and record identity_alignment.runtime_model_id."
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:RUSAMODELS_INFERENCE_MODEL_ID) -and
+        $env:RUSAMODELS_INFERENCE_MODEL_ID -ne $runtimeModelId) {
+        throw "RUSAMODELS_INFERENCE_MODEL_ID does not match the approved manifest runtime_model_id."
+    }
+    return $runtimeModelId
+}
+
 
 if ($env:RUSAMODELS_CONTEXT_SIZE -ne "8192" -or $env:RUSAMODELS_CONTEXT_8K_TEST_MODE -ne "true") {
     throw "Set RUSAMODELS_CONTEXT_SIZE=8192 and RUSAMODELS_CONTEXT_8K_TEST_MODE=true for this acceptance test."
@@ -49,8 +87,8 @@ try {
 
     $null = Invoke-RestMethod -Uri "http://127.0.0.1:8081/health" -Method Get -TimeoutSec 10
     $models = Invoke-RestMethod -Uri "$ApiBaseUrl/openai/v1/models" -Headers @{ Authorization = "Bearer $env:RUSAMODELS_API_TOKEN" } -Method Get -TimeoutSec 10
-    if (@($models.data | Where-Object { $_.id -eq "rusaai-edge-1.54b" }).Count -ne 1) {
-        throw "The model ID rusaai-edge-1.54b is not exposed to the inference principal."
+    if (@($models.data | Where-Object { $_.id -eq $runtimeModelId }).Count -ne 1) {
+        throw "The model ID Approved runtime model ID $runtimeModelId is not exposed to the inference principal."
     }
 
     $seed = "RusaAi local context acceptance sequence 0123456789. "
@@ -78,7 +116,7 @@ try {
     }
 
     $payload = @{
-        model = "rusaai-edge-1.54b"
+        model = $runtimeModelId
         messages = @(@{ role = "user"; content = $bestContent })
         temperature = 0
         max_tokens = 64
@@ -152,7 +190,7 @@ try {
     $report = [pscustomobject]@{
         Status = "PASS"
         Profile = "RUSA-CPU-16-v2.0"
-        ModelId = "rusaai-edge-1.54b"
+        ModelId = $runtimeModelId
         ContextLimitTokens = 8192
         TokenizerProbeTokens = $bestPromptTokens
         ActualPromptTokens = $actualPromptTokens
@@ -170,8 +208,7 @@ try {
         ManifestUpdateRequired = "Set benchmark.context_8192_status to PASS only after reviewing this report."
     }
 
-    $RepoRoot = (Resolve-Path -LiteralPath (Split-Path -Parent $PSScriptRoot)).Path
-    $reportDir = Join-Path $RepoRoot (Join-Path ".local" "logs")
+        $reportDir = Join-Path $RepoRoot (Join-Path ".local" "logs")
     New-Item -ItemType Directory -Path $reportDir -Force | Out-Null
     $reportPath = Join-Path $reportDir ("rusa-cpu-16-context-8k-{0}.json" -f [datetime]::UtcNow.ToString("yyyyMMdd-HHmmss"))
     $report | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $reportPath

@@ -60,10 +60,6 @@ model:
     quantization: Q4_K_M
     filename: null
     sha256: null
-  training:
-    status: NOT_STARTED
-  benchmark:
-    status: NOT_TESTED
   benchmark:
     status: NOT_TESTED
 runtime:

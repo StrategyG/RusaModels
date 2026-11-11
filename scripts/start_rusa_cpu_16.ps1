@@ -106,9 +106,6 @@ try {
         throw "Inference must target http://127.0.0.1:8081."
     }
     $modelId = $env:RUSAMODELS_INFERENCE_MODEL_ID
-    if ($modelId -ne "rusaai-edge-1.54b") {
-        throw "RusaAi Architecture v2.0 requires model ID rusaai-edge-1.54b."
-    }
     $manifestPath = $env:RUSAMODELS_MODEL_MANIFEST
     if ([string]::IsNullOrWhiteSpace($manifestPath)) {
         $manifestPath = "models/rusaai-edge/manifests/0.1.0-design.json"
@@ -119,6 +116,14 @@ try {
     $modelManifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
     if ($modelManifest.model_id -ne $modelManifest.identity_alignment.architecture_reference_model_id) {
         throw "The manifest model_id must remain the Architecture v2.0 reference identity."
+    }
+    $approvedRuntimeModelId = [string]$modelManifest.identity_alignment.runtime_model_id
+    if ($modelManifest.identity_alignment.runtime_model_id_decision -ne "APPROVED" -or
+        [string]::IsNullOrWhiteSpace($approvedRuntimeModelId)) {
+        throw "Deployment blocked: ADR-TRAIN-001 must approve and record identity_alignment.runtime_model_id before startup."
+    }
+    if ([string]::IsNullOrWhiteSpace($modelId) -or $modelId -ne $approvedRuntimeModelId) {
+        throw "RUSAMODELS_INFERENCE_MODEL_ID must exactly match the approved manifest runtime_model_id."
     }
     if ($modelManifest.status -ne "READY_FOR_DEVICE_VALIDATION") {
         throw "The model manifest must be READY_FOR_DEVICE_VALIDATION before runtime startup."

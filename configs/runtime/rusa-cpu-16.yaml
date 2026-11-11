@@ -111,7 +111,8 @@ services:
     database: sqlite
     artifact_storage: local
     upstream_url: http://127.0.0.1:8081
-    model_id: rusaai-edge-1.54b
+    model_id: null
+    model_id_source: approved_manifest_identity_alignment_runtime_model_id
   llama_cpp:
     host: 127.0.0.1
     port: 8081

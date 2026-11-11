@@ -131,7 +131,7 @@ def edge_settings(**overrides):
         ),
         "service_token_sha256": "b" * 64,
         "inference_base_url": "http://127.0.0.1:8081",
-        "inference_model_id": "rusaai-edge-1.54b",
+        "inference_model_id": "rusaai-edge-test-runtime",
         "inference_timeout_seconds": 360,
     }
     values.update(overrides)

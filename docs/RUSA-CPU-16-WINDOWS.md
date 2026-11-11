@@ -10,7 +10,7 @@ This document supersedes the Qwen3-based v1.0 deployment instructions for the v2
 
 ## 1. Model readiness gate
 
-The v2.0 architecture reference model is **RusaAi-Edge-1.54B** (`rusaai-edge-1.54b`). The separate Training Engine v1.0 source uses `rusaai-edge-derived` as the pre-audit product model identity. This repository records both names and leaves `runtime_model_id_decision: PENDING`; the Windows launcher blocks startup until the user-approved runtime alias is written to the manifest and matches the configured model ID. The architecture source explicitly records:
+The v2.0 architecture reference model is **RusaAi-Edge-1.54B** (`rusaai-edge-1.54b`). The separate Training Engine v1.0 source uses `rusaai-edge-derived` as the pre-audit product model identity. These are distinct source identities, not an approved runtime alias. The manifest leaves `runtime_model_id_decision: PENDING` and `runtime_model_id: null`; the Windows launcher and all acceptance scripts now fail closed until ADR-TRAIN-001 approves a runtime ID, the manifest records it, and `.env` matches it. The architecture source explicitly records:
 
 - Checkpoint: `NOT_SELECTED`
 - Tokenizer: `NOT_SELECTED`
@@ -36,7 +36,8 @@ The Windows launcher intentionally fails closed while the manifest remains in it
 | Operating system | Windows 11 64-bit |
 | CPU | Intel Core i5; exact SKU, physical cores and logical processors detected |
 | Physical RAM | 16 GB |
-| Model ID | `rusaai-edge-1.54b` |
+| Architecture reference ID | `rusaai-edge-1.54b` |
+| Approved runtime model ID | PENDING — must be approved in ADR-TRAIN-001 and recorded in the manifest |
 | Model architecture | Dense decoder-only Transformer; 1,541,277,696 target parameters |
 | Checkpoint | Non-Qwen open-weight checkpoint; not yet selected |
 | Artifact | GGUF Q4_K_M target; not yet built |
@@ -104,9 +105,9 @@ Do not perform these steps with the current design-only manifest. They become va
 7. Record tokenizer repository/revision and chat-template validation.
 8. Set the manifest statuses to `SELECTED`, `VERIFIED`, `VALIDATED`, and `BUILT` only when each step has evidence, then set the top-level status to `READY_FOR_DEVICE_VALIDATION`.
 9. For an 8K test, set `benchmark.context_8192_status: TESTING`, `RUSAMODELS_CONTEXT_SIZE=8192` and `RUSAMODELS_CONTEXT_8K_TEST_MODE=true`; run `scripts/verify_rusa_cpu_16_context.ps1`. Change the manifest status to `PASS` only after reviewing its report and confirming at least 2 GB free RAM; then set test mode to `false` and restart to verify the normal production gate.
-10. Populate `.env` from `.env.rusa-cpu-16.example`, including the local artifact path and the same SHA-256 as the manifest.
+10. Populate `.env` from `.env.rusa-cpu-16.example`, including the local artifact path and the same SHA-256 as the manifest. Replace `RUSAMODELS_INFERENCE_MODEL_ID=REPLACE_AFTER_ADR_APPROVAL` only after the ADR and manifest record the approved runtime model ID.
 
-The manifest gate in `scripts/start_rusa_cpu_16.ps1` checks the non-Qwen repository and lineage, immutable revision, license, audited architecture relation and actual parameter count/configuration hash, tokenizer/chat-template validation, GGUF Q4_K_M status, filename and SHA-256 agreement. It refuses to start while any required evidence is missing.
+The manifest gate in `scripts/start_rusa_cpu_16.ps1` checks the approved runtime model ID and its agreement with `.env`, the non-Qwen repository and lineage, immutable revision, license, audited architecture relation and actual parameter count/configuration hash, tokenizer/chat-template validation, GGUF Q4_K_M status, filename and SHA-256 agreement. It refuses to start while any required evidence is missing.
 
 ## 6. Local edge service configuration
 
@@ -130,14 +131,14 @@ Generate independent high-entropy inference and service tokens. Keep raw tokens 
 Rusaai connects through the Model Access Gateway using:
 
 - Base URL: `http://127.0.0.1:8090/openai/v1`
-- Model ID: `rusaai-edge-1.54b`
+- Model ID: the approved `identity_alignment.runtime_model_id` in the manifest (currently PENDING; do not treat the architecture reference ID as runtime approval)
 - Bearer token: raw inference token held by Rusaai.
 
 The llama.cpp and Model Server ports remain bound to loopback. Do not publish them to the public internet.
 
 ## 7. Start, stop and acceptance
 
-After the model manifest and local artifact are complete:
+After the model manifest and local artifact are complete, including an approved `identity_alignment.runtime_model_id` and matching `.env` value:
 
 ```powershell
 .\scripts\start_rusa_cpu_16.ps1
@@ -147,7 +148,7 @@ After the model manifest and local artifact are complete:
 .\scripts\stop_rusa_cpu_16.ps1
 ```
 
-The launcher detects Windows/CPU/RAM, records Windows-reported instruction features, records the llama.cpp version, verifies the manifest and GGUF SHA-256, applies migrations, and starts the runtime with GPU offload disabled. It defaults to 4K. For 8K, the manifest must record `PASS`, or be explicitly set to `TESTING` while `RUSAMODELS_CONTEXT_8K_TEST_MODE=true`; the latter is acceptance-only and must not be treated as production approval.
+The launcher detects Windows/CPU/RAM, records Windows-reported instruction features, records the llama.cpp version, verifies the manifest, approved runtime alias and GGUF SHA-256, applies migrations, and starts the runtime with GPU offload disabled. It defaults to 4K. For 8K, the manifest must record `PASS`, or be explicitly set to `TESTING` while `RUSAMODELS_CONTEXT_8K_TEST_MODE=true`; the latter is acceptance-only and must not be treated as production approval.
 
 The sequential acceptance script checks the authenticated model ID and performs 20 streaming requests distributed across prompt-body targets of 128, 1,024 and 4,096 tokens. It records TTFT, end-to-end latency and generation tokens/second per prompt size, plus sampled CPU/free RAM. The separate 8K context script tokenizes a long probe, sends a 7,400–7,600-token prompt, checks returned usage against the 8,192-token limit and samples system free RAM every 500 ms while the request and response body are pending. This is sampled system free RAM, not process-specific peak-RAM telemetry. Neither script replaces the architecture's full device acceptance.
 
