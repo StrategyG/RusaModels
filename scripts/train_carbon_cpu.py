@@ -447,18 +447,61 @@ def main() -> int:
         train_memmap = train_memmap[:split]
         eval_hash = None
 
+    tokenizer_name = data_config.get("tokenizer", "byte-level-v1")
+    if tokenizer_name != "byte-level-v1":
+        raise ValueError("Carbon CPU trainer currently supports only byte-level-v1")
+    require_export_manifest = data_config.get("require_export_manifest", False)
+    if type(require_export_manifest) is not bool:
+        raise ValueError("data.require_export_manifest must be a boolean")
+    train_export = load_dataset_export_manifest(data_path, {"train"})
+    eval_export = (
+        load_dataset_export_manifest(eval_path, {"validation", "test"})
+        if eval_path is not None and eval_path.is_file() and not args.smoke_test
+        else None
+    )
+    if require_export_manifest and train_export is None:
+        raise ValueError("a verified Dataset Engine train export manifest is required")
+    if (train_export is None) != (eval_export is None) and eval_path is not None:
+        raise ValueError("train and evaluation corpora must both have Dataset Engine export manifests")
+    if train_export is not None:
+        if eval_export is None:
+            raise ValueError("a separate verified validation/test export is required with a train export")
+        for export in (train_export, eval_export):
+            if export["dataset_id"] != dataset_id or export["dataset_version"] != dataset_version:
+                raise ValueError("dataset export identity does not match the training configuration")
+        if train_export["license_ids"] != license_ids:
+            raise ValueError("training license declarations do not match the Dataset Engine export")
+        if eval_export["license_ids"] != eval_license_ids:
+            raise ValueError("evaluation license declarations do not match the Dataset Engine export")
+        if (
+            train_export["release_manifest_sha256"]
+            != eval_export["release_manifest_sha256"]
+        ):
+            raise ValueError("train and evaluation exports come from different dataset releases")
+    elif require_export_manifest:
+        raise ValueError("Dataset Engine export manifests are required for this training run")
+
     dataset_metadata = {
         "dataset_id": dataset_id,
         "dataset_version": dataset_version,
-        "license_id": license_id,
-        "eval_license_id": eval_license_id,
+        "license_ids": license_ids,
+        "eval_license_ids": eval_license_ids,
         "source_uri": source_uri,
         "train_file_name": data_path.name,
         "train_sha256": source_hash,
+        "train_export_manifest_sha256": (
+            train_export["sidecar_sha256"] if train_export else None
+        ),
         "eval_file_name": eval_path.name if eval_path and eval_path.is_file() else None,
         "eval_sha256": eval_hash,
+        "eval_export_manifest_sha256": (
+            eval_export["sidecar_sha256"] if eval_export else None
+        ),
+        "dataset_release_manifest_sha256": (
+            train_export["release_manifest_sha256"] if train_export else None
+        ),
         "validation_split": validation_split,
-        "tokenizer": data_config.get("tokenizer", "byte-level-v1"),
+        "tokenizer": tokenizer_name,
     }
     dataset_fingerprint = canonical_digest(dataset_metadata)
     effective_training = {
