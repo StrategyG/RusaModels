@@ -210,11 +210,44 @@ def main() -> int:
 
     config_path = args.config.resolve()
     config = json.loads(config_path.read_text(encoding="utf-8"))
+    if not isinstance(config, dict) or not {"model", "training", "data"}.issubset(config):
+        raise ValueError("training config must contain model, training, and data objects")
     model_values = config["model"]
     training = config["training"]
     data_config = config["data"]
-    output_dir = (args.output_dir or resolve_path(training["output_dir"])).resolve()
+    if not all(isinstance(value, dict) for value in (model_values, training, data_config)):
+        raise ValueError("model, training, and data configuration values must be objects")
+    output_dir = (
+        args.output_dir if args.output_dir is not None
+        else resolve_path(training["output_dir"])
+    ).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    if not args.smoke_test:
+        dataset_id = data_config.get("dataset_id")
+        dataset_version = data_config.get("dataset_version")
+        license_id = data_config.get("license_id")
+        if not isinstance(dataset_id, str) or not dataset_id.strip():
+            raise ValueError("data.dataset_id is required for non-smoke training")
+        if not isinstance(dataset_version, str) or not dataset_version.strip():
+            raise ValueError("data.dataset_version is required for non-smoke training")
+        if not isinstance(license_id, str) or not license_id.strip() or "REPLACE" in license_id.upper():
+            raise ValueError("data.license_id must contain a reviewed, non-placeholder declaration")
+        source_uri = data_config.get("source_uri")
+        if source_uri is not None:
+            if not isinstance(source_uri, str) or len(source_uri) > 2048:
+                raise ValueError("data.source_uri must be a string of at most 2048 characters")
+            try:
+                parsed_uri = urlsplit(source_uri)
+            except ValueError as exc:
+                raise ValueError("data.source_uri is malformed") from exc
+            if parsed_uri.username or parsed_uri.password or parsed_uri.query or parsed_uri.fragment:
+                raise ValueError("data.source_uri must not contain credentials, query, or fragment")
+    else:
+        dataset_id = "carbon-smoke-test"
+        dataset_version = "synthetic"
+        license_id = "LicenseRef-Synthetic-Smoke-Test"
+        source_uri = None
 
     if args.smoke_test:
         data_path = output_dir / "smoke-test-corpus.txt"
@@ -229,15 +262,32 @@ def main() -> int:
         eval_value = args.eval_data or data_config.get("eval_file")
         eval_path = resolve_path(eval_value) if eval_value else None
 
-    steps = args.steps or int(training["steps"])
-    batch_size = args.batch_size or int(training["batch_size"])
-    block_size = args.block_size or int(training["block_size"])
-    threads = args.threads or min(int(training.get("threads", 4)), os.cpu_count() or 1)
+    steps = args.steps if args.steps is not None else int(training["steps"])
+    batch_size = args.batch_size if args.batch_size is not None else int(training["batch_size"])
+    block_size = args.block_size if args.block_size is not None else int(training["block_size"])
+    threads = args.threads if args.threads is not None else min(
+        int(training.get("threads", 4)), os.cpu_count() or 1
+    )
     grad_accum = int(training["gradient_accumulation_steps"])
     eval_interval = int(training["eval_interval"])
     eval_batches = int(training["eval_batches"])
     if min(steps, batch_size, block_size, threads, grad_accum, eval_interval, eval_batches) < 1:
         raise ValueError("steps, batch, block, threads and training intervals must be positive")
+    seed = training.get("seed", 42)
+    if type(seed) is not int:
+        raise ValueError("training.seed must be an integer")
+    warmup_steps = training.get("warmup_steps", 20)
+    if type(warmup_steps) is not int or not 0 <= warmup_steps < steps:
+        raise ValueError("warmup_steps must be non-negative and less than total steps")
+    learning_rate_value = float(training["learning_rate"])
+    weight_decay_value = float(training["weight_decay"])
+    max_grad_norm = float(training["max_grad_norm"])
+    if not math.isfinite(learning_rate_value) or learning_rate_value <= 0:
+        raise ValueError("learning_rate must be finite and positive")
+    if not math.isfinite(weight_decay_value) or weight_decay_value < 0:
+        raise ValueError("weight_decay must be finite and non-negative")
+    if not math.isfinite(max_grad_norm) or max_grad_norm <= 0:
+        raise ValueError("max_grad_norm must be finite and positive")
 
     model_config = CarbonConfig.from_dict(model_values)
     if block_size > model_config.max_seq_len:
