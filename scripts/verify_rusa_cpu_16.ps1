@@ -107,6 +107,21 @@ function Get-LlamaMetricSnapshot {
     return $metrics
 }
 
+function Get-RusaMedian {
+    param(
+        [object[]]$Values,
+        [int]$Digits = 3
+    )
+    $sorted = @($Values | Sort-Object)
+    if ($sorted.Count -eq 0) {
+        throw "Cannot calculate a median from an empty sample."
+    }
+    $middle = [int][math]::Floor($sorted.Count / 2)
+    if (($sorted.Count % 2) -eq 0) {
+        return [math]::Round((([double]$sorted[$middle - 1] + [double]$sorted[$middle]) / 2), $Digits)
+    }
+    return [math]::Round([double]$sorted[$middle], $Digits)
+}
 if ([string]::IsNullOrWhiteSpace($env:RUSAMODELS_API_TOKEN)) {
     throw "Set RUSAMODELS_API_TOKEN to the dedicated role=inference bearer token."
 }
@@ -326,11 +341,11 @@ try {
             ContentTokens = $promptProfiles[$profileName].Tokens
             RequestCount = $latencyByPrompt[$profileName].Count
             AverageLatencySeconds = [math]::Round((($latencyByPrompt[$profileName] | Measure-Object -Average).Average), 3)
-            P50LatencySeconds = $profileLatency[[int][math]::Floor(($profileLatency.Count - 1) * 0.5)]
+            P50LatencySeconds = (Get-RusaMedian -Values $latencyByPrompt[$profileName] -Digits 3)
             AverageTTFTSeconds = [math]::Round((($ttftByPrompt[$profileName] | Measure-Object -Average).Average), 3)
-            P50TTFTSeconds = $profileTtft[[int][math]::Floor(($profileTtft.Count - 1) * 0.5)]
+            P50TTFTSeconds = (Get-RusaMedian -Values $ttftByPrompt[$profileName] -Digits 3)
             AverageGenerationTokensPerSecond = [math]::Round((($tpsByPrompt[$profileName] | Measure-Object -Average).Average), 2)
-            P50GenerationTokensPerSecond = $profileTps[[int][math]::Floor(($profileTps.Count - 1) * 0.5)]
+            P50GenerationTokensPerSecond = (Get-RusaMedian -Values $tpsByPrompt[$profileName] -Digits 2)
         }
     }
 
@@ -342,12 +357,12 @@ try {
         PromptSizeClassesTokens = @(128, 1024, 4096)
         PromptBenchmarks = $promptReports
         AverageLatencySeconds = [math]::Round((($latencies | Measure-Object -Average).Average), 3)
-        P50LatencySeconds = $sortedLatency[[int][math]::Floor(($sortedLatency.Count - 1) * 0.5)]
+        P50LatencySeconds = (Get-RusaMedian -Values $latencies -Digits 3)
         MaximumLatencySeconds = ($latencies | Measure-Object -Maximum).Maximum
         AverageTTFTSeconds = [math]::Round((($ttfts | Measure-Object -Average).Average), 3)
-        P50TTFTSeconds = $sortedTtft[[int][math]::Floor(($sortedTtft.Count - 1) * 0.5)]
+        P50TTFTSeconds = (Get-RusaMedian -Values $ttfts -Digits 3)
         AverageGenerationTokensPerSecond = [math]::Round((($tokensPerSecond | Measure-Object -Average).Average), 2)
-        P50GenerationTokensPerSecond = $sortedTps[[int][math]::Floor(($sortedTps.Count - 1) * 0.5)]
+        P50GenerationTokensPerSecond = (Get-RusaMedian -Values $tokensPerSecond -Digits 2)
         MinimumSampledFreeMemoryGiB = $script:minimumFreeMemoryGiB
         MaximumObservedSystemMemoryUsedGiB = [math]::Round(($totalMemoryGiB - $script:minimumFreeMemoryGiB), 2)
         AverageSampledCpuLoadPercent = $cpuAverage

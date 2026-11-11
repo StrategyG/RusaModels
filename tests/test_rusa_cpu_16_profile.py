@@ -104,6 +104,7 @@ def test_native_windows_launcher_fails_closed_until_model_is_ready():
     assert "tokens_predicted_seconds_total" in verify
     assert "PromptSizeClassesTokens = @(128, 1024, 4096)" in verify
     assert "Get-LlamaTokenCount" in verify
+    assert "function Get-RusaMedian" in verify
     assert "PromptBenchmarks = $promptReports" in verify
     assert "requests_processing" in verify
     assert "requests_deferred" in verify
