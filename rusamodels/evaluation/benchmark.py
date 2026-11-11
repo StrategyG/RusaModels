@@ -129,6 +129,87 @@ def _validate_record(record: Any, line_number: int) -> dict[str, Any]:
     }
 
 
+def freeze_benchmark_suite(
+    suite_path: str | Path,
+    suite_id: str,
+    suite_version: str,
+    license_ids: list[str],
+    *,
+    source_uri: str | None = None,
+) -> dict[str, Any]:
+    """Validate a JSONL suite and create its immutable digest manifest."""
+    raw_path = Path(suite_path).expanduser()
+    if raw_path.is_symlink():
+        raise BenchmarkError("benchmark suite must not be a symlink")
+    path = raw_path.resolve()
+    if not path.is_file():
+        raise BenchmarkError("benchmark suite file does not exist")
+    sidecar = path.with_suffix(path.suffix + ".manifest.json")
+    if sidecar.exists() or sidecar.is_symlink():
+        raise BenchmarkError("frozen benchmark manifest already exists; create a new suite version")
+    if not isinstance(suite_id, str) or not suite_id.strip() or len(suite_id) > 128:
+        raise BenchmarkError("suite_id must be a non-empty string of at most 128 characters")
+    if not isinstance(suite_version, str) or not suite_version.strip() or len(suite_version) > 64:
+        raise BenchmarkError("suite_version must be a non-empty string of at most 64 characters")
+    if (
+        not isinstance(license_ids, list)
+        or not license_ids
+        or any(not isinstance(item, str) or not item.strip() for item in license_ids)
+    ):
+        raise BenchmarkError("license_ids must contain at least one declared license")
+    license_ids = sorted(set(license_ids))
+    if source_uri is not None:
+        if not isinstance(source_uri, str) or len(source_uri) > 2048:
+            raise BenchmarkError("source_uri must be a string of at most 2048 characters")
+        try:
+            parsed_source = urlsplit(source_uri)
+        except ValueError as exc:
+            raise BenchmarkError("source_uri is malformed") from exc
+        if parsed_source.username or parsed_source.password or parsed_source.query or parsed_source.fragment:
+            raise BenchmarkError("source_uri must not contain credentials, query, or fragment")
+
+    digest_before, size_bytes = _sha256_file(path)
+    seen_ids: set[str] = set()
+    seen_prompts: set[str] = set()
+    record_count = 0
+    with path.open("r", encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip():
+                raise BenchmarkError(f"benchmark.jsonl:{line_number}: blank lines are not allowed")
+            record = _validate_record(
+                _load_json(line, f"benchmark.jsonl:{line_number}"), line_number
+            )
+            if record["id"] in seen_ids:
+                raise BenchmarkError(f"benchmark suite contains duplicate id: {record['id']}")
+            prompt_digest = _canonical_digest(record["messages"])
+            if prompt_digest in seen_prompts:
+                raise BenchmarkError("benchmark suite contains duplicate prompts with different IDs")
+            seen_ids.add(record["id"])
+            seen_prompts.add(prompt_digest)
+            record_count += 1
+    digest_after, size_after = _sha256_file(path)
+    if digest_before != digest_after or size_bytes != size_after:
+        raise BenchmarkError("benchmark suite changed while it was being frozen")
+    if record_count < 1:
+        raise BenchmarkError("benchmark suite must contain at least one record")
+
+    manifest = {
+        "schema_version": "1.0.0",
+        "suite_id": suite_id,
+        "suite_version": suite_version,
+        "frozen": True,
+        "file_name": path.name,
+        "file_sha256": digest_before,
+        "size_bytes": size_bytes,
+        "record_count": record_count,
+        "license_ids": license_ids,
+        "source_uri": source_uri,
+        "created_at": datetime.now(UTC).isoformat(),
+    }
+    _atomic_write_json(sidecar, manifest)
+    return manifest
+
+
 def load_benchmark_suite(suite_path: str | Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     raw_path = Path(suite_path).expanduser()
     if raw_path.is_symlink():
