@@ -300,3 +300,28 @@ def test_inference_service_role_can_call_only_openai_compatible_routes(api_clien
         assert client.get(
             "/v1/platform/audit-events", headers=inference_headers
         ).status_code == 403
+
+
+def test_openai_model_list_supports_embedding_only_runtime(api_client, monkeypatch):
+    settings = api_client.app.state.settings
+    settings.inference_base_url = None
+    settings.inference_model_id = None
+    settings.embedding_base_url = "http://embedding.internal:8081"
+    settings.embedding_model_id = "rusa-embedding-small"
+    settings.embedding_api_key = SecretStr("embedding-runtime-secret")
+    monkeypatch.setattr("rusamodels.inference.httpx.AsyncClient", FakeAsyncClient)
+
+    with _model_client(api_client, settings) as client:
+        listed = client.get("/openai/v1/models", headers=auth("manager-test-token"))
+        embedded = client.post(
+            "/openai/v1/embeddings",
+            json={"model": "rusa-embedding-small", "input": ["RusaModels runtime test"]},
+            headers=auth("manager-test-token"),
+        )
+
+    assert listed.status_code == 200
+    assert [item["id"] for item in listed.json()["data"]] == ["rusa-embedding-small"]
+    assert embedded.status_code == 200
+    assert FakeAsyncClient.last_request["url"] == (
+        "http://embedding.internal:8081/v1/embeddings"
+    )
