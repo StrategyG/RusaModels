@@ -10,9 +10,7 @@ from torch import nn
 from torch.nn import functional as F
 
 
-EOS_TOKEN_ID = 256
-BOS_TOKEN_ID = 257
-BYTE_VOCAB_SIZE = 258
+from .constants import BOS_TOKEN_ID, BYTE_VOCAB_SIZE, EOS_TOKEN_ID
 
 
 @dataclass
