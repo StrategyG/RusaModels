@@ -413,11 +413,14 @@ def _assign_splits(connection: sqlite3.Connection, config: DatasetReleaseConfig)
         )
     connection.execute(
         """
-        WITH ranked_groups AS (
-            SELECT group_key,
-                   ROW_NUMBER() OVER (ORDER BY sort_key, group_key) AS position
-            FROM groups
-        )
+        CREATE TEMP TABLE group_ranks AS
+        SELECT group_key,
+               ROW_NUMBER() OVER (ORDER BY sort_key, group_key) AS position
+        FROM groups
+        """
+    )
+    connection.execute(
+        """
         UPDATE groups
         SET split = (
             SELECT CASE
@@ -425,12 +428,13 @@ def _assign_splits(connection: sqlite3.Connection, config: DatasetReleaseConfig)
                 WHEN position <= ? THEN 'validation'
                 ELSE 'train'
             END
-            FROM ranked_groups
-            WHERE ranked_groups.group_key = groups.group_key
+            FROM group_ranks
+            WHERE group_ranks.group_key = groups.group_key
         )
         """,
         (test_count, test_count + validation_count),
     )
+    connection.execute("DROP TABLE group_ranks")
     connection.execute(
         "UPDATE records SET split = (SELECT split FROM groups WHERE groups.group_key = records.group_key)"
     )
