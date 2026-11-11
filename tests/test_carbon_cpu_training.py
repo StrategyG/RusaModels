@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import random
 import sys
@@ -11,15 +12,20 @@ import pytest
 np = pytest.importorskip("numpy")
 torch = pytest.importorskip("torch")
 
-from scripts.train_carbon_cpu import (  # noqa: E402
-    build_token_cache,
-    capture_rng_state,
-    main,
-    restore_rng_state,
-    sample_batch,
-    save_checkpoint,
-    training_contract,
+ROOT = Path(__file__).resolve().parents[1]
+SPEC = importlib.util.spec_from_file_location(
+    "rusamodels_carbon_cpu_training", ROOT / "scripts" / "train_carbon_cpu.py"
 )
+assert SPEC is not None and SPEC.loader is not None
+TRAINER = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(TRAINER)
+build_token_cache = TRAINER.build_token_cache
+capture_rng_state = TRAINER.capture_rng_state
+main = TRAINER.main
+restore_rng_state = TRAINER.restore_rng_state
+sample_batch = TRAINER.sample_batch
+save_checkpoint = TRAINER.save_checkpoint
+training_contract = TRAINER.training_contract
 
 
 def _write_corpus(path: Path, text: str) -> Path:
