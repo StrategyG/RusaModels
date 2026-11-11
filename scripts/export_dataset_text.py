@@ -143,6 +143,14 @@ def export_dataset_split(
         raise DatasetTextExportError(f"dataset release verification failed: {exc}") from exc
 
     source = root / f"{split}.jsonl"
+    release_manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    source_metadata = release_manifest["files"][source.name]
+    source_sha256_before, source_size_before = _sha256_file(source)
+    if (
+        source_sha256_before != source_metadata["sha256"]
+        or source_size_before != source_metadata["size_bytes"]
+    ):
+        raise DatasetTextExportError("source split changed after release verification")
     temporary_output: Path | None = None
     published_output = False
     try:
@@ -180,9 +188,13 @@ def export_dataset_split(
         temporary_output = None
         published_output = True
         output_sha256, output_size = _sha256_file(output)
+        source_sha256_after, source_size_after = _sha256_file(source)
+        if (
+            source_sha256_after != source_metadata["sha256"]
+            or source_size_after != source_metadata["size_bytes"]
+        ):
+            raise DatasetTextExportError("source split changed while text export was running")
         release_manifest_sha256 = verification["manifest_sha256"]
-        release_manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-        source_metadata = release_manifest["files"][source.name]
         export_manifest = {
             "schema_version": "1.0.0",
             "exporter": "rusamodels.dataset_text_export",
