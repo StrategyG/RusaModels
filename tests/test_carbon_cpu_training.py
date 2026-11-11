@@ -230,3 +230,28 @@ def test_cpu_training_requires_reviewed_license_declaration(
     monkeypatch.setattr(sys, "argv", ["train_carbon_cpu.py", "--config", str(config_path)])
     with pytest.raises(ValueError, match="non-placeholder declaration"):
         main()
+
+
+def test_cpu_training_rejects_tampered_dataset_export(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config_path = _write_config(tmp_path)
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    train_path = Path(config["data"]["train_file"])
+    train_path.write_text("tampered training corpus", encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["train_carbon_cpu.py", "--config", str(config_path)])
+    with pytest.raises(ValueError, match="checksum or size"):
+        main()
+
+
+def test_cpu_training_rejects_exports_from_different_dataset_releases(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_path = _write_config(tmp_path)
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    eval_path = Path(config["data"]["eval_file"])
+    sidecar = eval_path.with_suffix(eval_path.suffix + ".manifest.json")
+    export_manifest = json.loads(sidecar.read_text(encoding="utf-8"))
+    export_manifest["release_manifest_sha256"] = "f" * 64
+    sidecar.write_text(json.dumps(export_manifest), encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["train_carbon_cpu.py", "--config", str(config_path)])
+    with pytest.raises(ValueError, match="different dataset releases"):
+        main()
