@@ -74,6 +74,7 @@ such as `latest`.
 Required variables:
 
 - `RUSAMODELS_IMAGE`
+- `RUSAMODELS_WORKER_IMAGE` (built with the `quantization` extra)
 - `RUSAMODELS_MIGRATION_DATABASE_URL`
 - `RUSAMODELS_MODEL_DATABASE_URL`
 - `RUSAMODELS_QUANT_DATABASE_URL`
@@ -108,7 +109,11 @@ The Compose file binds API ports to loopback only:
 - Quant Server: `127.0.0.1:8001`
 
 Expose them only through an authenticated TLS reverse proxy and firewall.
-The worker has no published port. The Compose file uses read-only root
+The worker image is separate because it includes the optional `quantization`
+dependencies; keep the larger ML dependency set out of the Model Server image.
+GGUF conversion additionally requires the compatible llama.cpp converter and
+quantizer to be installed in that worker image at the configured paths. The
+worker has no published port. The Compose file uses read-only root
 filesystems, non-root execution from the image, dropped Linux capabilities,
 no-new-privileges, resource limits, and bounded log rotation.
 

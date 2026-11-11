@@ -116,7 +116,7 @@ services:
     command:
       - python
       - -c
-      - "import os; os.makedirs('/var/lib/rusamodels/workspace/tmp', exist_ok=True); os.execvp('python', ['python', '-m', 'services.quant_server.worker'])"
+      - "import os; os.makedirs('/var/lib/rusamodels/workspace/tmp', exist_ok=True); os.makedirs('/var/lib/rusamodels/workspace/hf', exist_ok=True); os.execvp('python', ['python', '-m', 'services.quant_server.worker'])"
     restart: unless-stopped
     init: true
     stop_grace_period: 120s
@@ -137,6 +137,8 @@ services:
       LLAMA_QUANTIZE_BIN: \${LLAMA_QUANTIZE_BIN:-llama-quantize}
       RUSAMODELS_GGUF_MODEL_TYPES: \${RUSAMODELS_GGUF_MODEL_TYPES:-}
       TMPDIR: /var/lib/rusamodels/workspace/tmp
+      HF_HOME: /var/lib/rusamodels/workspace/hf
+      HF_HUB_CACHE: /var/lib/rusamodels/workspace/hf/hub
     volumes:
       - \${RUSAMODELS_WORKSPACE_ROOT:?Set a persistent worker workspace directory}:/var/lib/rusamodels/workspace:rw
     read_only: true

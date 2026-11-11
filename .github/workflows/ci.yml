@@ -27,15 +27,21 @@ jobs:
         run: pytest -q
       - name: Build container image
         run: docker build --pull --tag rusamodels-ci:${GITHUB_SHA} .
+      - name: Build quantization-enabled worker image
+        run: docker build --pull --file Dockerfile.quant-worker --tag rusamodels-worker-ci:${GITHUB_SHA} .
       - name: Install Trivy
         uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.70.0, immutable commit
         with:
           version: v0.70.0
           cache: true
       - name: Report CRITICAL and HIGH image vulnerabilities
-        run: trivy image --scanners vuln --severity CRITICAL,HIGH --pkg-types os,library "rusamodels-ci:${GITHUB_SHA}"
+        run: |
+          trivy image --scanners vuln --severity CRITICAL,HIGH --pkg-types os,library "rusamodels-ci:${GITHUB_SHA}"
+          trivy image --scanners vuln --severity CRITICAL,HIGH --pkg-types os,library "rusamodels-worker-ci:${GITHUB_SHA}"
       - name: Block on fixable CRITICAL and HIGH image vulnerabilities
-        run: trivy image --scanners vuln --exit-code 1 --ignore-unfixed --severity CRITICAL,HIGH --pkg-types os,library "rusamodels-ci:${GITHUB_SHA}"
+        run: |
+          trivy image --scanners vuln --exit-code 1 --ignore-unfixed --severity CRITICAL,HIGH --pkg-types os,library "rusamodels-ci:${GITHUB_SHA}"
+          trivy image --scanners vuln --exit-code 1 --ignore-unfixed --severity CRITICAL,HIGH --pkg-types os,library "rusamodels-worker-ci:${GITHUB_SHA}"
       - name: Smoke test container health endpoint
         run: |
           docker run -d --name rusamodels-smoke -p 127.0.0.1:18000:8000 \
@@ -89,6 +95,7 @@ jobs:
       - name: Validate production deployment Compose configuration
         env:
           RUSAMODELS_IMAGE: ghcr.io/strategyg/rusamodels@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          RUSAMODELS_WORKER_IMAGE: ghcr.io/strategyg/rusamodels-quant-worker@sha256:1111111111111111111111111111111111111111111111111111111111111111
           RUSAMODELS_MIGRATION_DATABASE_URL: postgresql+psycopg://rusa_migration:ci@db.internal/rusamodels?sslmode=verify-full
           RUSAMODELS_MODEL_DATABASE_URL: postgresql+psycopg://rusa_model:ci@db.internal/rusamodels?sslmode=verify-full
           RUSAMODELS_QUANT_DATABASE_URL: postgresql+psycopg://rusa_quant:ci@db.internal/rusamodels?sslmode=verify-full

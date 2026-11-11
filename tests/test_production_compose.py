@@ -60,5 +60,6 @@ def test_production_containers_are_hardened_and_worker_has_no_published_port():
 
 def test_production_images_are_digest_pinned_by_operator_input():
     compose = (ROOT / "docker-compose.production.yml").read_text(encoding="utf-8")
-    assert compose.count("${RUSAMODELS_IMAGE:?Set RUSAMODELS_IMAGE to an immutable GHCR digest}") == 4
+    assert compose.count("${RUSAMODELS_IMAGE:?Set RUSAMODELS_IMAGE to an immutable GHCR digest}") == 3
+    assert "${RUSAMODELS_WORKER_IMAGE:?Set RUSAMODELS_WORKER_IMAGE to a quantization-enabled immutable GHCR digest}" in compose
     assert "latest" not in compose
