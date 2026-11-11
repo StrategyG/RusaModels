@@ -122,7 +122,7 @@ Copy-Item .env.rusa-cpu-16.example .env
 notepad .env
 ```
 
-Generate independent high-entropy inference and service tokens. Keep raw tokens in Rusaai secret storage; only their SHA-256 digests belong in the RusaModels `.env`. Never commit raw tokens or the populated `.env`.
+Generate independent high-entropy inference and service tokens. Keep raw tokens in Rusaai secret storage; only their SHA-256 digests belong in the RusaModels `.env`. Never commit raw tokens or the populated `.env`. Before running either acceptance script, expose the raw inference token from the secret store to the current PowerShell process as `RUSAMODELS_API_TOKEN`; do not put that raw token in `.env` or a committed script. The launcher temporarily clears inherited raw tokens from child services and restores the caller's environment when it exits.
 
 Rusaai connects through the Model Access Gateway using:
 
