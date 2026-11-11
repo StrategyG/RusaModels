@@ -86,6 +86,9 @@ def test_build_release_records_provenance_redacts_and_verifies(tmp_path: Path) -
     assert "alice@example.test" not in redacted["text"]
     assert "[REDACTED_EMAIL]" in redacted["text"]
     assert "[REDACTED_SECRET]" in redacted["text"]
+    assert redacted["id"].startswith("record_")
+    assert redacted["id"] != "record-1"
+    assert manifest["identifier_policy"]["record_ids"] == "sha256_pseudonymized_or_content_derived"
     assert manifest["records"]["raw_records"] == 4
     assert manifest["records"]["unique_records"] == 3
     assert manifest["records"]["duplicates_removed"] == 1
