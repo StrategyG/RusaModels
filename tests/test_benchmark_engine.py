@@ -245,20 +245,29 @@ def _write_report(
     results: list[dict] | None = None,
 ) -> Path:
     if results is None:
+        passed_count = round(accuracy * 100)
         results = [
             {
-                "record_id": "language-1",
+                "record_id": f"language-{index:03d}",
                 "category": "language",
                 "scorer": "contains",
-                "score": True,
-            },
+                "score": index < passed_count - 1,
+            }
+            for index in range(99)
+        ]
+        results.append(
             {
-                "record_id": "safety-1",
+                "record_id": "safety-001",
                 "category": "safety",
                 "scorer": "contains",
-                "score": False,
-            },
-        ]
+                "score": True,
+            }
+        )
+    scored = [item for item in results if item["score"] is not None]
+    passed = sum(item["score"] is True for item in scored)
+    failed = sum(item["score"] is False for item in scored)
+    failed_requests = sum(bool(item.get("error")) for item in results)
+    manual_review = sum(item["score"] is None and not item.get("error") for item in results)
     report = {
         "schema_version": "1.0.0",
         "benchmark": {
@@ -267,13 +276,20 @@ def _write_report(
             "file_sha256": suite_sha,
         },
         "model": {"id": model_id, "artifact_sha256": "b" * 64},
-        "summary": {"accuracy": accuracy, "failed_requests": 0},
+        "summary": {
+            "total": len(results),
+            "scored": len(scored),
+            "passed": passed,
+            "failed": failed,
+            "manual_review": manual_review,
+            "failed_requests": failed_requests,
+            "accuracy": round(passed / len(scored), 4) if scored else None,
+        },
         "latency_ms": {"mean": latency},
         "results": results,
     }
     path.write_text(json.dumps(report), encoding="utf-8")
     return path
-
 
 def test_benchmark_comparison_passes_within_accuracy_and_latency_gates(
     tmp_path: Path,
@@ -305,19 +321,26 @@ def test_benchmark_comparison_passes_within_accuracy_and_latency_gates(
 def test_benchmark_comparison_blocks_protected_category_regression(
     tmp_path: Path,
 ) -> None:
-    baseline = _write_report(tmp_path / "baseline.json", accuracy=0.9)
-    candidate = _write_report(
-        tmp_path / "candidate.json",
-        accuracy=0.9,
+    baseline = _write_report(
+        tmp_path / "baseline.json",
         results=[
             {"record_id": "language-1", "category": "language", "scorer": "contains", "score": True},
             {"record_id": "safety-1", "category": "safety", "scorer": "contains", "score": True},
+        ],
+    )
+    candidate = _write_report(
+        tmp_path / "candidate.json",
+        results=[
+            {"record_id": "language-1", "category": "language", "scorer": "contains", "score": True},
+            {"record_id": "safety-1", "category": "safety", "scorer": "contains", "score": False},
         ],
     )
     result = compare_benchmark_reports(
         baseline,
         candidate,
         tmp_path / "comparison.json",
+        max_accuracy_drop=0.5,
+        max_category_drop=1.0,
     )
     assert result["release_gate"]["passed"] is False
     assert "protected_category_regression" in result["release_gate"]["failed_gates"]
@@ -331,7 +354,13 @@ def test_benchmark_comparison_rejects_different_frozen_suites(tmp_path: Path) ->
 
 
 def test_benchmark_comparison_rejects_changed_record_contract(tmp_path: Path) -> None:
-    baseline = _write_report(tmp_path / "baseline.json")
+    baseline = _write_report(
+        tmp_path / "baseline.json",
+        results=[
+            {"record_id": "language-1", "category": "language", "scorer": "contains", "score": True},
+            {"record_id": "safety-1", "category": "safety", "scorer": "contains", "score": False},
+        ],
+    )
     candidate = _write_report(
         tmp_path / "candidate.json",
         results=[
