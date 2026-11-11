@@ -135,6 +135,7 @@ class ConversionEngine:
             torch_dtype=dtype,
             low_cpu_mem_usage=True,
             trust_remote_code=False,
+            use_safetensors=True,
             local_files_only=True,
         )
         model.save_pretrained(output_dir, safe_serialization=True)

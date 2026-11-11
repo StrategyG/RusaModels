@@ -60,7 +60,7 @@ async def proxy_openai_request(
     if request_id:
         headers["X-Request-ID"] = request_id
     url = f"{base_url}/v1/{endpoint.lstrip('/')}"
-    client = httpx.AsyncClient(timeout=timeout)
+    client = httpx.AsyncClient(timeout=timeout, trust_env=False)
     try:
         request = client.build_request("POST", url, json=forwarded, headers=headers)
         upstream = await client.send(request, stream=bool(payload.get("stream")))
@@ -114,3 +114,28 @@ async def proxy_openai_request(
         headers=response_headers,
         media_type=response_headers.get("content-type"),
     )
+
+
+async def check_runtime_readiness(settings, endpoint: str) -> None:
+    """Verify that the configured upstream is reachable and exposes the pinned model ID."""
+    base_url, model_id, headers, _timeout = _runtime_configuration(settings, endpoint)
+    try:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(5.0, connect=2.0),
+            trust_env=False,
+        ) as client:
+            response = await client.get(f"{base_url}/v1/models", headers=headers)
+            response.raise_for_status()
+            payload = response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise RuntimeError(f"{endpoint} runtime readiness check failed") from exc
+
+    items = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(items, list):
+        raise RuntimeError(f"{endpoint} runtime returned an invalid model catalog")
+    available = {
+        item.get("id") for item in items
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    if model_id not in available:
+        raise RuntimeError(f"Configured {endpoint} model is not exposed by the upstream runtime")

@@ -28,14 +28,13 @@ quantization = [
   "accelerate>=1,<2",
   "safetensors>=0.4,<1",
   "torch>=2.4,<3",
-  "transformers>=4.48,<6",
+  "transformers>=5.22.2,<6",
 ]
 training = [
   "datasets>=3,<5",
-  "peft>=0.18,<1",
+  "peft>=0.21.2,<1",
   "torch>=2.4,<3",
-  "transformers>=4.48,<6",
-  "trl>=0.15,<1",
+  "transformers>=5.22.2,<6",
   "accelerate>=1,<2",
   "bitsandbytes>=0.46,<1",
   "PyYAML>=6,<7",

@@ -14,8 +14,13 @@ as a production credential or availability model.
   retention, and incomplete multipart-upload cleanup.
 - A secret manager for database DSNs, API principal digests, service-token
   digest, S3 credentials, Hugging Face token, and upstream model keys.
-- A reverse proxy that terminates TLS and forwards only to the loopback-bound
-  Model Server and Quant Server ports.
+- An API gateway/reverse proxy that terminates TLS, forwards only to the
+  loopback-bound Model Server and Quant Server ports, and enforces a WAF,
+  per-principal/IP rate limits, request-body limits, connection/concurrency
+  limits, and upstream timeouts. The application does not provide distributed
+  rate limiting or per-principal usage quotas.
+- Network egress controls for the Quant Worker. Restrict downloads to approved
+  model sources and do not allow arbitrary egress from conversion subprocesses.
 - A persistent worker workspace with sufficient free disk for the largest
   source and converted model artifacts.
 - Monitoring for API latency/errors, database connections, S3 failures, queue
@@ -57,7 +62,26 @@ an inference runtime is configured, startup requires at least one
 `inference`-role principal. Production inference and embedding upstreams must
 use HTTPS and authenticated service keys.
 
-## 4. Prepare the host and secrets
+
+## 4. Model supply chain and conversion isolation
+
+Hugging Face downloads are resolved to an immutable commit SHA and checked
+against the declared upstream license. Conversion accepts Safetensors weights
+only; pickle-based `.bin` and `.pt` checkpoints are rejected. The converter
+uses `trust_remote_code=False` and local-only model loading.
+
+Safetensors reduces deserialization risk but does not make model files
+trustworthy. Model weights and tokenizer metadata remain untrusted input.
+Before production use, run conversion in an ephemeral, isolated job sandbox
+(for example, a dedicated one-shot container with a read-only root filesystem,
+no database credentials, no long-lived object-store credentials, restricted
+network egress, bounded CPU/memory/disk/PIDs, and only scoped input/output
+capabilities). The current Compose worker is a long-running service with
+database and object-store access; container hardening alone is not a per-job
+sandbox. Treat this isolation as a production launch gate.
+
+
+## 5. Prepare the host and secrets
 
 Create the workspace for the non-root container user (UID/GID 1000):
 
@@ -91,7 +115,7 @@ S3 read/write static key pairs, embedding settings, and `HF_TOKEN` are
 optional according to the selected workload identity and enabled features.
 If a custom S3 endpoint is configured, it must be credential-free HTTPS.
 
-## 5. Validate and deploy
+## 6. Validate and deploy
 
 Run the migration explicitly with the DDL-only identity, then start the
 services:
@@ -117,23 +141,64 @@ worker has no published port. The Compose file uses read-only root
 filesystems, non-root execution from the image, dropped Linux capabilities,
 no-new-privileges, resource limits, and bounded log rotation.
 
-## 6. Acceptance and rollback
+## 7. Acceptance and rollback
 
 Before enabling production traffic:
-1. Verify `/health/ready` through the TLS ingress for both servers.
+1. Verify `/health/ready` through the TLS ingress for both servers. Model
+   Server readiness checks the configured upstream model catalog and confirms
+   that the configured chat and embedding model IDs are actually exposed.
 2. Verify the RusaAi inference principal can call `/openai/v1/models` and
    one bounded chat/embedding request, and cannot access model-management or
    audit-administration routes.
-3. Verify Model Server cannot write to the artifact bucket.
-4. Verify Quant Server can complete an upload and checksum verification.
-5. Verify Quant Worker can claim, heartbeat, cancel, and finish a test job.
-6. Restore the database and artifact bucket from backup in an isolated
+3. Verify ingress rate limits, WAF policy, request-body caps, concurrency
+   limits, and timeout behavior under load.
+4. Verify Model Server cannot write to the artifact bucket.
+5. Verify Quant Server can complete an upload and checksum verification.
+6. Verify the isolated conversion sandbox cannot read application secrets,
+   access the database, or make unrestricted outbound network requests.
+7. Verify Quant Worker can claim, heartbeat, cancel, and finish a test job.
+8. Restore the database and artifact bucket from backup in an isolated
    environment; record measured RPO/RTO.
-7. Exercise a previous immutable image digest and database rollback plan.
-8. Obtain Security, SRE, QA, Data Governance, and process-owner approval.
+9. Exercise a previous immutable image digest and database rollback plan.
+10. Verify signed image provenance and attach an SBOM to each released image.
+11. Obtain Security, SRE, QA, Data Governance, and process-owner approval.
 
 This Compose file is not an HA topology and does not itself configure TLS,
 backups, bucket versioning, IAM policies, network firewalls, branch protection,
 image signing, SBOM/provenance verification, load tests, or disaster recovery.
 Those controls require evidence from the target infrastructure before
 production certification.
+
+
+## 8. GitHub governance gate
+
+The repository's current `main` branch is not protected and has no repository
+ruleset. Configure this in GitHub repository settings before production:
+
+- Require pull requests before merging to `main`.
+- Require at least one independent approval and require CODEOWNERS review.
+- Dismiss stale approvals when new commits are pushed.
+- Require the `test` status check from the RusaModels CI workflow.
+- Require branches to be up to date before merging.
+- Block force pushes and branch deletion.
+- Enable secret scanning, push protection, and Dependabot security updates
+  where available.
+
+The GitHub connection used for this engineering pass can inspect repository
+settings but cannot change branch-protection/ruleset administration. A
+repository administrator must apply and verify these settings.
+
+## 9. Release security gates and known exceptions
+
+- Build images from reviewed commits and publish immutable digests only.
+- Scan both Model Server and Quant Worker images. Fix all fixable CRITICAL and
+  HIGH findings before release; document any remaining unfixable findings
+  with package, CVE, exposure analysis, owner, and review date. Do not suppress
+  findings solely to obtain a green workflow.
+- Publish an SBOM and build provenance for each image and verify the signature
+  before deployment.
+- Pin Python dependencies to security-supported versions and run
+  `pip check` in the final image.
+- Keep training adapters experimental until the full held-out evaluation,
+  safety regression, and human promotion gates pass. Fine-tuning is not a
+  prerequisite for the base inference service.

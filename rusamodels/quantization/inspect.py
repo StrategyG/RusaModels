@@ -24,13 +24,24 @@ def inspect_model_directory(model_dir: Path) -> ModelInspection:
     architectures = config.get("architectures") or []
     if not isinstance(architectures, list) or not all(isinstance(x, str) for x in architectures):
         raise ValueError("Model config architectures must be a list of strings")
+    # Never pass pickle-based .bin/.pt checkpoints to a deserializer. If a
+    # repository contains both formats, only the Safetensors files are used.
     weight_files = tuple(sorted(
         path for path in model_dir.rglob("*")
-        if path.is_file() and path.suffix.lower() in {".safetensors", ".bin", ".pt"}
+        if path.is_file() and path.suffix.lower() == ".safetensors"
         and ".cache" not in path.parts
     ))
     if not weight_files:
-        raise ValueError("No supported model weight files found")
+        unsafe_files = tuple(
+            path for path in model_dir.rglob("*")
+            if path.is_file() and path.suffix.lower() in {".bin", ".pt"}
+            and ".cache" not in path.parts
+        )
+        if unsafe_files:
+            raise ValueError(
+                "Only Safetensors weights are supported; pickle-based .bin/.pt files are prohibited"
+            )
+        raise ValueError("No supported Safetensors model weights found")
     total_bytes = sum(path.stat().st_size for path in weight_files)
     parameter_count = config.get("num_parameters")
     if isinstance(parameter_count, str) and parameter_count.isdigit():

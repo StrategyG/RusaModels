@@ -139,8 +139,6 @@ services:
       TMPDIR: /var/lib/rusamodels/workspace/tmp
       HF_HOME: /var/lib/rusamodels/workspace/hf
       HF_HUB_CACHE: /var/lib/rusamodels/workspace/hf/hub
-      HF_HOME: /var/lib/rusamodels/workspace/hf
-      HF_HUB_CACHE: /var/lib/rusamodels/workspace/hf/hub
     volumes:
       - ${RUSAMODELS_WORKSPACE_ROOT:?Set a persistent worker workspace directory}:/var/lib/rusamodels/workspace:rw
     read_only: true

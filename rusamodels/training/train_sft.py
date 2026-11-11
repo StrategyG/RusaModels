@@ -176,7 +176,7 @@ def run_training(config_path: Path, *, train_path: Path | None = None, eval_path
             TrainingArguments,
         )
     except ImportError as exc:
-        raise RuntimeError("Install requirements-train.txt in the dedicated training environment") from exc
+        raise RuntimeError("Install requirements-training.txt in the dedicated training environment") from exc
 
     if not torch.cuda.is_available():
         raise RuntimeError("QLoRA training requires a CUDA GPU; CPU training is intentionally disabled")
