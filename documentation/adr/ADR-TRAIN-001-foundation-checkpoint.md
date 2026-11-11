@@ -41,14 +41,16 @@ If the selected checkpoint differs from the reference configuration, record the 
 
 `BhinekaIntiLabs/bhineka-gpt`
 
-The Training Engine v1.0 source describes the published model card as a Llama-style Indonesian-English causal model of approximately 556.3M parameters, with a 2,048-token context, 64K vocabulary, GQA, SwiGLU, RoPE and RMSNorm, Apache-2.0 metadata, and a documented GGUF/llama.cpp path.
+The Training Engine v1.0 source and the current Hugging Face model card describe a Llama-style Indonesian-English causal model with 556,269,696 parameters, a 2,048-token context, 64K vocabulary, hidden size 1,152, 28 layers, 16 attention heads, 8 key/value heads, 3,072 feed-forward size, GQA, SwiGLU, RoPE and RMSNorm. The model card declares Apache-2.0 metadata and advertises GGUF/llama.cpp integration. The model card reports validation on 53,678,481 held-out tokens with loss 2.5355 and perplexity 12.6227, evaluated on CUDA; this is not a CPU-device benchmark or a complete instruction/safety evaluation.
+
+**Research snapshot (2026-11-11):** [Current Hugging Face model card](https://huggingface.co/BhinekaIntiLabs/bhineka-gpt). The page's quick-start Transformers snippet loads without `trust_remote_code`, while its detailed usage section says the custom `bhineka` architecture may require custom modeling files and `trust_remote_code=True`. Treat this documentation inconsistency as an audit blocker. The current immutable repository revision, exact files, tokenizer/chat-template files, GGUF artifact filename and artifact checksum have not yet been pinned or independently verified.
 
 Disposition: **PENDING_AUDIT / PILOT_CANDIDATE_ONLY**.
 
 Mandatory caveats from the source:
 
-- The card describes a custom `bhineka` implementation and may require `trust_remote_code=True`; inspect and pin the exact code revision before loading.
-- The published context is 2K, not the desired 4K/8K; keep 2K until extension is independently validated.
+- The card's Transformers instructions are inconsistent about custom `bhineka` code and `trust_remote_code=True`; inspect the exact files and pin the immutable revision before loading or executing any repository code.
+- The published context is 2K, not the desired 4K/8K; keep 2K until extension is independently validated. Its 556.3M parameter count is below the architecture's 1B–1.5B 8 GB target range, so it remains a lightweight pilot candidate and not a match for that model-size target.
 - Published validation-loss evaluation used CUDA and does not prove CPU training performance.
 - Broader instruction-following, factuality and safety evaluations remain necessary.
 - Published claims and benchmark numbers are not independent certification.
@@ -73,17 +75,17 @@ Each requires its own language-coverage, license, architecture, context, hardwar
 | Evidence | Required value | Current status |
 |---|---|---|
 | Candidate repository | Exact repository identifier | NOT_SELECTED |
-| Immutable revision | 40-character commit/revision | NOT_RECORDED |
+| Immutable revision | 40-character commit/revision | NOT_PINNED |
 | Model files | Exact filenames and SHA-256 | NOT_RECORDED |
 | Model lineage | Base model and provenance report | NOT_VERIFIED |
-| License | License file and acceptable-use terms | NOT_REVIEWED |
+| License | Model-card metadata says Apache-2.0; inspect license file, training data and dependency terms | METADATA_DECLARED / REVIEW_PENDING |
 | Actual architecture | Config and actual parameter count | NOT_AUDITED |
 | Architecture relation | IDENTICAL or DERIVATIVE_ADAPTATION | NOT_AUDITED |
 | Tokenizer | Repository, revision, files and special tokens | NOT_VALIDATED |
 | Chat template | Exact template and validation result | NOT_VALIDATED |
 | Custom code | Source audit and sandbox result | NOT_REVIEWED |
 | PEFT/LoRA | Module compatibility, if applicable | NOT_TESTED |
-| GGUF | Conversion/verification and Q4_K_M checksum | NOT_BUILT |
+| GGUF | Model card advertises GGUF/llama.cpp; verify exact file, format, quantization and SHA-256 | NOT_VERIFIED |
 | CPU inference | Target-device test report | NOT_TESTED |
 | Indonesian baseline | Frozen evaluation report | NOT_TESTED |
 | English baseline | Frozen evaluation report | NOT_TESTED |
