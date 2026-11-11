@@ -38,6 +38,35 @@ jobs:
         run: |
           trivy image --scanners vuln --severity CRITICAL,HIGH --pkg-types os,library "rusamodels-ci:${GITHUB_SHA}"
           trivy image --scanners vuln --severity CRITICAL,HIGH --pkg-types os,library "rusamodels-worker-ci:${GITHUB_SHA}"
+      - name: Diagnose setuptools vulnerability package origin
+        shell: bash
+        run: |
+          set -euo pipefail
+          for image in "rusamodels-ci:${GITHUB_SHA}" "rusamodels-worker-ci:${GITHUB_SHA}"; do
+            report="$(mktemp)"
+            trivy image --scanners vuln --format json --output "$report" "$image"
+            python - "$report" "$image" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          report = json.loads(Path(sys.argv[1]).read_text())
+          image = sys.argv[2]
+          found = False
+          for result in report.get("Results", []):
+              for package in result.get("Packages", []):
+                  if package.get("Name", "").lower() == "setuptools":
+                      print(json.dumps({"image": image, "target": result.get("Target"), "package": package}, indent=2))
+                      found = True
+              for vulnerability in result.get("Vulnerabilities", []):
+                  if vulnerability.get("VulnerabilityID") == "CVE-2025-47273":
+                      print(json.dumps({"image": image, "target": result.get("Target"), "vulnerability": vulnerability}, indent=2))
+                      found = True
+          if not found:
+              print(json.dumps({"image": image, "setuptools_vulnerability": "not found"}))
+          PY
+            rm -f "$report"
+          done
       - name: Block on fixable CRITICAL and HIGH image vulnerabilities
         run: |
           trivy image --scanners vuln --exit-code 1 --ignore-unfixed --severity CRITICAL,HIGH --pkg-types os,library "rusamodels-ci:${GITHUB_SHA}"
