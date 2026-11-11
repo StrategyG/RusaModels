@@ -31,11 +31,11 @@ Verify the environment:
 python -c 'import numpy, torch; print("NumPy", numpy.__version__); print("PyTorch", torch.__version__); print("CUDA available:", torch.cuda.is_available())'
 ```
 
-The Carbon trainer explicitly creates tensors and the model on `cpu`; it does not use CUDA even if a CUDA-enabled PyTorch build happens to be installed.
+The Carbon trainer explicitly creates tensors and the model on `cpu`; it does not use CUDA even if a CUDA-enabled PyTorch build happens to be installed. The byte tokenizer is a reversible UTF-8 byte mapping with 256 byte IDs and reserved BOS/EOS IDs; it is not a learned subword tokenizer.
 
 ## Prepare data
 
-Place an authorized UTF-8 text corpus at `data/carbon_cpu/corpus.txt`, or pass another file with `--data`. The trainer makes a 95/5 train/validation split when no separate evaluation file is supplied. Alternatively, pass `--eval-data path/to/heldout.txt`.
+Place an authorized UTF-8 text corpus at `data/carbon_cpu/corpus.txt`, or pass another file with `--data`. Set `data.dataset_id`, `data.dataset_version`, and a reviewed, non-placeholder `data.license_id` in the training config before a non-smoke run. The trainer records the corpus SHA-256 and dataset declaration; it does not legally validate the license. The trainer makes a 95/5 train/validation split when no separate evaluation file is supplied. Alternatively, pass `--eval-data path/to/heldout.txt` and declare `data.eval_license_id` if the evaluation corpus has a different license. The trainer rejects identical train/eval files or identical SHA-256 values.
 
 A few kilobytes can validate code paths but will overfit immediately. For actual pretraining, curate a large, diverse corpus with documented source, license, language distribution, deduplication, and held-out evaluation. Keep the held-out set out of training.
 
@@ -54,7 +54,7 @@ For a short pipeline-only check (uses synthetic text and must not be described a
 python scripts/train_carbon_cpu.py --smoke-test --steps 3 --batch-size 1 --block-size 32
 ```
 
-Resume from the latest checkpoint:
+Resume from the latest checkpoint. Resume is accepted only when the model configuration, training contract, dataset fingerprint, and source checksums match. You may increase the requested total step count; changing the data, seed, batch/block settings, optimizer configuration, or thread count requires a new run:
 
 ```bash
 python scripts/train_carbon_cpu.py \
@@ -69,10 +69,10 @@ Override steps, batch size, context block, and thread count with `--steps`, `--b
 
 The output directory contains:
 
-- `checkpoint.pt`: resumable model + optimizer state.
+- `checkpoint.pt`: resumable model + optimizer state, dataset/training fingerprints, and Python/NumPy/PyTorch RNG state.
 - `final.pt`: final model state and architecture config.
 - `metrics.jsonl`: train and validation loss snapshots.
-- `run_metadata.json`: CPU/software details, corpus SHA-256, model provenance, and smoke-test marker.
+- `run_metadata.json`: CPU/software details, dataset/license declaration, corpus SHA-256, training-contract digest, artifact checksums, and smoke-test marker.
 - `model_config.json`: architecture configuration.
 - `train_tokens.u16` / `eval_tokens.u16`: local byte-token caches.
 
