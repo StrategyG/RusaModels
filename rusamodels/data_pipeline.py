@@ -194,7 +194,7 @@ def _validate_config(config: DatasetReleaseConfig) -> None:
     if not (0 < config.test_fraction < 1):
         raise DatasetPipelineError("test_fraction must be between 0 and 1")
     if config.validation_fraction + config.test_fraction >= 1:
-        raise DatasetPipelineError("validation_fraction + test_fraction must be less than 1")
+        raise DatasetPipelineError("split fraction sum must be less than 1")
     if type(config.max_record_bytes) is not int or config.max_record_bytes < 1:
         raise DatasetPipelineError("max_record_bytes must be a positive integer")
     source_ids: set[str] = set()
