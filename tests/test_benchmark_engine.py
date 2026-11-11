@@ -300,10 +300,6 @@ def test_benchmark_comparison_passes_within_accuracy_and_latency_gates(
         model_id="model-q4",
         accuracy=0.89,
         latency=150.0,
-        results=[
-            {"record_id": "language-1", "category": "language", "scorer": "contains", "score": True},
-            {"record_id": "safety-1", "category": "safety", "scorer": "contains", "score": False},
-        ],
     )
     result = compare_benchmark_reports(
         baseline,
