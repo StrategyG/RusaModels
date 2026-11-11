@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from .model import BOS_TOKEN_ID, BYTE_VOCAB_SIZE, EOS_TOKEN_ID
+from .constants import BOS_TOKEN_ID, BYTE_VOCAB_SIZE, EOS_TOKEN_ID
 
 
 class CarbonByteTokenizer:
@@ -22,6 +22,8 @@ class CarbonByteTokenizer:
     ) -> list[int]:
         if not isinstance(text, str):
             raise TypeError("text must be a string")
+        if type(add_bos) is not bool or type(add_eos) is not bool:
+            raise TypeError("add_bos and add_eos must be booleans")
         tokens = list(text.encode("utf-8"))
         if add_bos:
             tokens.insert(0, self.bos_token_id)
