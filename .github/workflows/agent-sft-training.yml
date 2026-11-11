@@ -37,7 +37,7 @@ jobs:
       - name: Install dedicated training dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements-train.txt
+          python -m pip install -r requirements-training.txt
 
       - name: Verify NVIDIA T4 and CUDA capacity
         run: |
