@@ -107,6 +107,9 @@ def test_native_windows_launcher_fails_closed_until_model_is_ready():
     assert "http://127.0.0.1:8081/tokenize" in context_test
     assert "ActualPromptTokens" in context_test
     assert "MinimumSampledFreeMemoryGiB" in context_test
+    assert "while (-not $sendTask.IsCompleted)" in context_test
+    assert "while (-not $bodyTask.IsCompleted)" in context_test
+    assert "MemorySampleIntervalMilliseconds = 500" in context_test
     assert "totalTokens -gt 8192" in context_test
 
 
