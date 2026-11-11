@@ -90,6 +90,19 @@ def check_production_evidence(
 ) -> dict[str, Any]:
     if not isinstance(evidence, dict) or evidence.get("schema_version") != "1.0.0":
         raise ProductionEvidenceError("unsupported production evidence schema_version")
+    if not _is_digest(evidence_sha256):
+        raise ProductionEvidenceError("evidence_sha256 must be a lowercase SHA-256 digest")
+    if (
+        not _is_finite_number(min_soak_hours)
+        or min_soak_hours <= 0
+        or not _is_finite_number(max_soak_error_rate)
+        or not 0 <= max_soak_error_rate <= 1
+        or type(min_soak_requests) is not int
+        or min_soak_requests < 1
+        or not _is_finite_number(max_backup_age_hours)
+        or max_backup_age_hours <= 0
+    ):
+        raise ProductionEvidenceError("production readiness thresholds are invalid")
     release = evidence.get("release") if isinstance(evidence.get("release"), dict) else {}
     ci = evidence.get("ci") if isinstance(evidence.get("ci"), dict) else {}
     security = evidence.get("security") if isinstance(evidence.get("security"), dict) else {}
@@ -140,9 +153,9 @@ def check_production_evidence(
             "security",
             [
                 (security.get("status") == "passed", "security scan status must be passed"),
-                (security.get("critical_findings") == 0, "critical security findings must be zero"),
-                (security.get("high_findings") == 0, "high security findings must be zero"),
-                (security.get("secret_findings") == 0, "secret findings must be zero"),
+                (type(security.get("critical_findings")) is int and security["critical_findings"] == 0, "critical security findings must be zero"),
+                (type(security.get("high_findings")) is int and security["high_findings"] == 0, "high security findings must be zero"),
+                (type(security.get("secret_findings")) is int and security["secret_findings"] == 0, "secret findings must be zero"),
                 (_is_nonempty(security.get("report_url")), "security report reference is required"),
             ],
         ),
@@ -174,7 +187,7 @@ def check_production_evidence(
                 (runtime.get("model_artifact_sha256") == release_artifact_sha, "runtime artifact digest must match release"),
                 (runtime.get("health_check_passed") is True, "runtime health check must pass"),
                 (runtime.get("cpu_only") is True, "release runtime must confirm CPU-only execution"),
-                (runtime.get("oom_events") == 0, "runtime OOM event count must be zero"),
+                (type(runtime.get("oom_events")) is int and runtime["oom_events"] == 0, "runtime OOM event count must be zero"),
                 (_is_nonempty(runtime.get("hardware_profile")), "named CPU hardware profile is required"),
                 (_is_finite_number(runtime.get("peak_ram_mb")) and runtime["peak_ram_mb"] > 0, "runtime peak RAM measurement is required"),
                 (_is_finite_number(runtime.get("free_ram_reserve_mb")) and runtime["free_ram_reserve_mb"] > 0, "runtime free-RAM reserve measurement is required"),
@@ -189,8 +202,8 @@ def check_production_evidence(
                 (_is_finite_number(soak.get("duration_hours")) and soak["duration_hours"] >= min_soak_hours, f"soak test must run at least {min_soak_hours} hours"),
                 (type(soak.get("requests")) is int and soak["requests"] >= min_soak_requests, f"soak test must include at least {min_soak_requests} requests"),
                 (_is_finite_number(soak.get("error_rate")) and 0 <= soak["error_rate"] <= max_soak_error_rate, f"soak error rate must be at most {max_soak_error_rate}"),
-                (soak.get("oom_events") == 0, "soak OOM event count must be zero"),
-                (soak.get("crash_count") == 0, "soak crash count must be zero"),
+                (type(soak.get("oom_events")) is int and soak["oom_events"] == 0, "soak OOM event count must be zero"),
+                (type(soak.get("crash_count")) is int and soak["crash_count"] == 0, "soak crash count must be zero"),
                 (_is_finite_number(soak.get("p95_latency_ms")) and soak["p95_latency_ms"] > 0, "soak p95 latency measurement is required"),
                 (_is_nonempty(soak.get("report_url")), "soak-test report reference is required"),
             ],
