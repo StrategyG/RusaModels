@@ -16,8 +16,11 @@ class BenchmarkComparisonError(ValueError):
 
 
 def _load_report(path: str | Path) -> dict[str, Any]:
-    source = Path(path).expanduser().resolve()
-    if not source.is_file() or source.is_symlink():
+    raw_source = Path(path).expanduser()
+    if raw_source.is_symlink():
+        raise BenchmarkComparisonError(f"benchmark report must not be a symlink: {raw_source}")
+    source = raw_source.resolve()
+    if not source.is_file():
         raise BenchmarkComparisonError(f"benchmark report does not exist or is unsafe: {source}")
     try:
         report = json.loads(source.read_text(encoding="utf-8"))
@@ -38,6 +41,9 @@ def _validate_report(report: dict[str, Any], label: str) -> tuple[dict, dict[str
     for key in ("suite_id", "suite_version", "file_sha256"):
         if not isinstance(benchmark.get(key), str) or not benchmark[key]:
             raise BenchmarkComparisonError(f"{label} report is missing benchmark.{key}")
+    suite_digest = benchmark["file_sha256"]
+    if len(suite_digest) != 64 or any(char not in "0123456789abcdef" for char in suite_digest):
+        raise BenchmarkComparisonError(f"{label} report has an invalid benchmark digest")
     if not isinstance(model.get("id"), str) or not model["id"]:
         raise BenchmarkComparisonError(f"{label} report is missing model.id")
     if not isinstance(results, list) or not results:
@@ -69,7 +75,7 @@ def _validate_report(report: dict[str, Any], label: str) -> tuple[dict, dict[str
         raise BenchmarkComparisonError(f"{label} report scored count does not match its result rows")
     if summary.get("passed") != passed_count or summary.get("failed") != failed_count:
         raise BenchmarkComparisonError(f"{label} report pass/fail counts do not match its result rows")
-    if summary.get("failed_requests") != request_failures:
+    if type(summary.get("failed_requests")) is not int or summary["failed_requests"] != request_failures:
         raise BenchmarkComparisonError(f"{label} report request-failure count does not match its result rows")
     if summary.get("manual_review") != manual_count:
         raise BenchmarkComparisonError(f"{label} report manual-review count does not match its result rows")
@@ -83,7 +89,10 @@ def _validate_report(report: dict[str, Any], label: str) -> tuple[dict, dict[str
         or not math.isclose(float(accuracy), expected_accuracy, abs_tol=0.0001)
     ):
         raise BenchmarkComparisonError(f"{label} report accuracy does not match its result rows")
-    latency = report.get("latency_ms", {}).get("mean")
+    latency_summary = report.get("latency_ms")
+    if not isinstance(latency_summary, dict):
+        raise BenchmarkComparisonError(f"{label} report has no latency summary")
+    latency = latency_summary.get("mean")
     if latency is not None and (
         not isinstance(latency, (int, float)) or isinstance(latency, bool)
         or not math.isfinite(latency) or latency < 0
