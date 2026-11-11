@@ -128,11 +128,14 @@ try {
     $os = Get-CimInstance -ClassName Win32_OperatingSystem
     $freeMemoryGiB = [math]::Round((($os.FreePhysicalMemory * 1KB) / 1GB), 2)
 
+    if ($os.Caption -notmatch "Windows 11") {
+        throw "RUSA-CPU-16 requires Windows 11 64-bit; detected $($os.Caption)."
+    }
     if ($memoryGiB -lt 15) { throw "RUSA-CPU-16 expects a nominal 16-GB host; detected $memoryGiB GiB." }
     if ($freeMemoryGiB -lt 2) { throw "Only $freeMemoryGiB GiB RAM is free; minimum is 2 GiB." }
     $cpuNames = @($processors | ForEach-Object { $_.Name })
     if (($cpuNames | Where-Object { $_ -notmatch 'Intel.*Core.*i5' }).Count -gt 0) {
-        Write-Warning "Detected CPU is not identified as Intel Core i5: $($cpuNames -join '; ')."
+        throw "RUSA-CPU-16 requires an Intel Core i5 processor; detected: $($cpuNames -join '; ')."
     }
     if ($physicalCores -lt 1) { throw "Could not detect physical CPU cores." }
     $threads = [math]::Min(4, $physicalCores)
@@ -162,7 +165,7 @@ try {
         "--port", "8081",
         "--ctx-size", "8192",
         "--threads", "$threads",
-        "--threads-batch", "$threads",
+        "--threads-batch", "4",
         "--threads-http", "2",
         "--parallel", "1",
         "--batch-size", "512",

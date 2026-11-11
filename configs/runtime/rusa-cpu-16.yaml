@@ -34,7 +34,6 @@ runtime:
     adjustment: min_4_or_detected_physical_core_count
   batch_threads:
     initial: 4
-    adjustment: min_4_or_detected_physical_core_count
   http_threads: 2
   parallel_slots: 1
   batch_size: 512

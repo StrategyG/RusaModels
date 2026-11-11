@@ -16,6 +16,7 @@ $headers = @{ Authorization = "Bearer $env:RUSAMODELS_API_TOKEN" }
 $freeBefore = [math]::Round(((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory * 1KB) / 1GB, 2)
 if ($freeBefore -lt 2) { throw "Only $freeBefore GiB RAM is free before acceptance testing; minimum is 2 GiB." }
 
+$null = Invoke-RestMethod -Uri "http://127.0.0.1:8081/health" -Method Get -TimeoutSec 10
 $null = Invoke-RestMethod -Uri "$ApiBaseUrl/health/ready" -Method Get -TimeoutSec 10
 $models = Invoke-RestMethod -Uri "$ApiBaseUrl/openai/v1/models" -Headers $headers -Method Get -TimeoutSec 10
 if (@($models.data | Where-Object { $_.id -eq "rusa-cpu-4b" }).Count -ne 1) {

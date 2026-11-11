@@ -17,7 +17,7 @@ This is the native local/edge deployment baseline. It is deliberately separate f
 | Runtime | llama.cpp llama-server.exe |
 | Context | 8,192 tokens |
 | Generation threads | 4 initially; reduce to detected physical core count when below 4 |
-| Batch threads | 4 initially; same hardware-aware adjustment |
+| Batch threads | 4 |
 | HTTP threads | 2 |
 | Concurrent generations | 1 |
 | Pending inference queue | 3; owned by the Rusaai scheduler |
