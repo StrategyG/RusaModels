@@ -231,6 +231,8 @@ class CarbonTiny(nn.Module):
             raise ValueError("max_new_tokens must be a non-negative integer")
         if type(top_k) is not int or top_k < 0:
             raise ValueError("top_k must be a non-negative integer")
+        if isinstance(temperature, bool) or not isinstance(temperature, (int, float)):
+            raise ValueError("temperature must be a number")
         if not math.isfinite(float(temperature)) or temperature <= 0:
             raise ValueError("temperature must be finite and greater than zero")
         if type(eos_token_id) is not int or not 0 <= eos_token_id < self.config.vocab_size:
