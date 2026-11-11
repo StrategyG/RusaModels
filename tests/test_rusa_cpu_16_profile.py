@@ -102,3 +102,5 @@ def test_raw_rusaai_tokens_are_kept_out_of_rusamodels_env_and_child_processes():
     assert "$env:RUSAMODELS_SERVICE_TOKEN = $serviceToken" not in docs
     assert "RUSAMODELS_API_TOKEN=" not in env
     assert "RUSAMODELS_SERVICE_TOKEN=" not in env
+    assert "LLAMA_SERVER_EXE=" in env
+    assert "C:\\tools\\llama.cpp" not in env

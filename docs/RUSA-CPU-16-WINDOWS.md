@@ -66,7 +66,7 @@ These host-wide backpressure thresholds are owned by the Rusaai resource monitor
 ## 3. Install prerequisites
 
 1. Install Python 3.11 or newer.
-2. Install llama.cpp using the approved Windows distribution. The baseline source lists winget install llama.cpp; verify that llama-server.exe is available.
+2. Install llama.cpp using the approved Windows distribution. The baseline source lists winget install llama.cpp. Verify that llama-server.exe is available with Get-Command llama-server.exe; if it is not on PATH, set LLAMA_SERVER_EXE in .env to the exact installed executable path.
 3. Clone this repository and create a virtual environment:
 
     py -3.12 -m venv .venv
