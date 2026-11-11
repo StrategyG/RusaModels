@@ -72,10 +72,14 @@ Resource protection thresholds:
     python -m pip install --upgrade pip
     python -m pip install -e ".[dev]"
 
-4. Prepare the model directory inside RusaModels local artifact storage, which is excluded from Git. Download the official Qwen3-4B GGUF Q4_K_M artifact, record the upstream immutable revision and exact filename, and calculate SHA-256:
+4. Prepare the model directory inside RusaModels local artifact storage, which is excluded from Git. Download the official Qwen3-4B GGUF Q4_K_M artifact from the pinned immutable revision:
 
+    python -m pip install --upgrade "huggingface_hub[cli]"
     New-Item -ItemType Directory -Path "C:\RusaModels\.local\artifacts\models" -Force
+    hf download Qwen/Qwen3-4B-GGUF Qwen3-4B-Q4_K_M.gguf --revision a9a60d009fa7ff9606305047c2bf77ac25dbec49 --local-dir "C:\RusaModels\.local\artifacts\models"
     Get-FileHash "C:\RusaModels\.local\artifacts\models\Qwen3-4B-Q4_K_M.gguf" -Algorithm SHA256
+
+The pinned file is 2,497,280,256 bytes with SHA-256 7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5. The local hash must match this value; do not start the runtime with a different file or an unreviewed model revision.
 
 Do not assume a filename or revision. Use the exact artifact downloaded and approved. Keep model weights outside the repository; .local/ is ignored by Git.
 
@@ -189,6 +193,6 @@ Do not set a tokens/second target until the exact CPU SKU and runtime build have
 
 ## References
 
-- [Qwen3-4B-GGUF official repository](https://huggingface.co/Qwen/Qwen3-4B-GGUF) — confirm the exact Q4_K_M filename and record the immutable revision before provisioning.
+- [Pinned Qwen3-4B-Q4_K_M artifact](https://huggingface.co/Qwen/Qwen3-4B-GGUF/blob/a9a60d009fa7ff9606305047c2bf77ac25dbec49/Qwen3-4B-Q4_K_M.gguf) — immutable revision a9a60d009fa7ff9606305047c2bf77ac25dbec49, 2,497,280,256 bytes, SHA-256 7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5.
 - [llama.cpp server parameters and metrics](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md) — validate supported runtime flags and Prometheus counters against the pinned llama.cpp build.
 - [Windows IsProcessorFeaturePresent API](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-isprocessorfeaturepresent) — source of OS-reported CPU instruction-feature flags.

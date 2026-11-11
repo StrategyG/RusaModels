@@ -18,6 +18,9 @@ def test_rusa_cpu_16_profile_matches_locked_windows_baseline():
     assert profile["model"]["repository"] == "Qwen/Qwen3-4B-GGUF"
     assert profile["model"]["quantization"] == "Q4_K_M"
     assert profile["model"]["artifact_filename"] == "Qwen3-4B-Q4_K_M.gguf"
+    assert profile["model"]["repository_revision"] == "a9a60d009fa7ff9606305047c2bf77ac25dbec49"
+    assert profile["model"]["artifact_sha256"] == "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5"
+    assert profile["model"]["artifact_size_bytes"] == 2497280256
     assert profile["runtime"]["context_size"] == 8192
     assert profile["runtime"]["generation_threads"]["initial"] == 4
     assert profile["runtime"]["http_threads"] == 2
@@ -79,6 +82,8 @@ def test_windows_edge_example_uses_official_qwen3_q4_k_m_filename():
 
     assert "Qwen3-4B-Q4_K_M.gguf" in env
     assert "Qwen3-4B-Q4_K_M.gguf" in docs
+    assert "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5" in env
+    assert "a9a60d009fa7ff9606305047c2bf77ac25dbec49" in docs
     assert ".local\\artifacts\\models" in env
     assert ".local\\artifacts\\models" in docs
 
