@@ -1,8 +1,10 @@
 import json
+from types import SimpleNamespace
+
 import pytest
 from pydantic import ValidationError
+
 from rusamodels.config import Settings
-from types import SimpleNamespace
 
 from rusamodels.security import (
     ROLE_PERMISSIONS,

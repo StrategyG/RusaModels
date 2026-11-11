@@ -1,6 +1,6 @@
 """Validated configuration shared by Model Server and Quant Server."""
-from functools import lru_cache
 import re
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 from urllib.parse import parse_qs, urlsplit
