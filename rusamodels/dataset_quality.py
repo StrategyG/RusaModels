@@ -332,7 +332,7 @@ def main(argv: list[str] | None = None) -> int:
             max_hamming_distance=args.max_hamming_distance,
             max_candidates_per_record=args.max_candidates_per_record,
         )
-    except (DatasetQualityError, OSError, UnicodeError) as exc:
+    except (DatasetQualityError, OSError, UnicodeError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
     print(json.dumps(result, ensure_ascii=False, indent=2))
