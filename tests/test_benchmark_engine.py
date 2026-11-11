@@ -274,6 +274,7 @@ def _write_report(
             "suite_id": "rusaai-core",
             "suite_version": "1.0.0",
             "file_sha256": suite_sha,
+            "manifest_sha256": "d" * 64,
         },
         "model": {"id": model_id, "artifact_sha256": "b" * 64},
         "summary": {
