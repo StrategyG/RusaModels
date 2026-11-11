@@ -137,7 +137,7 @@ python scripts/export_dataset_text.py \\
   --output artifacts/corpora/rusaai-agent-sft-curated-0.1.0-validation.txt
 ~~~
 
-Each text file has a sibling manifest named <output-file>.manifest.json. It records the source dataset ID/version, split, declared license IDs, source release-manifest digest, source split digest, output digest, record count, encoding, and byte-tokenizer identifier. The exporter omits record IDs, group IDs, and metadata from the text corpus. The output and sidecar are written outside the immutable dataset release; existing outputs are not overwritten.
+Each text file has a sibling manifest whose name appends .manifest.json to the output filename. It records the source dataset ID/version, split, declared license IDs, source release-manifest digest, source split digest, output digest, record count, encoding, and byte-tokenizer identifier. The exporter omits record IDs, group IDs, and metadata from the text corpus. The output and sidecar are written outside the immutable dataset release; existing outputs are not overwritten.
 
 Use the train export as the Carbon trainer's training corpus and the validation export as its held-out evaluation corpus. Copy the dataset identity and reviewed license declaration into the training config. The trainer independently hashes both text files and rejects identical train/evaluation corpora.
 
