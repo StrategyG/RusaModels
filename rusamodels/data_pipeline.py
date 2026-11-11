@@ -19,10 +19,11 @@ import sys
 import tempfile
 import unicodedata
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 
 PIPELINE_VERSION = "0.1.0"
@@ -355,7 +356,7 @@ def _ingest_source(
                 canonical_id = existing_fingerprint[0]
             else:
                 sort_key = hashlib.sha256(
-                    f"{config.seed}\0record\0{record_id}".encode("utf-8")
+                    f"{config.seed}\0record\0{record_id}".encode()
                 ).hexdigest()
                 connection.execute(
                     "INSERT INTO records(record_id, fingerprint, group_key, payload, sort_key) "
@@ -363,7 +364,7 @@ def _ingest_source(
                     (record_id, fingerprint, group_key, payload, sort_key),
                 )
                 group_sort_key = hashlib.sha256(
-                    f"{config.seed}\0group\0{group_key}".encode("utf-8")
+                    f"{config.seed}\0group\0{group_key}".encode()
                 ).hexdigest()
                 connection.execute(
                     "INSERT OR IGNORE INTO groups(group_key, sort_key) VALUES (?, ?)",
