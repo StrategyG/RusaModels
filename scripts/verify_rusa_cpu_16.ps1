@@ -103,6 +103,10 @@ try {
             $sendTask = $client.SendAsync($request, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead)
             while (-not $sendTask.IsCompleted) {
                 Add-RusaResourceSample
+                if ($timer.Elapsed.TotalSeconds -gt 360) {
+                    $client.CancelPendingRequests()
+                    throw "Inference request $index exceeded the 360-second request limit."
+                }
                 Start-Sleep -Milliseconds 500
             }
             $response = $sendTask.GetAwaiter().GetResult()
@@ -120,6 +124,10 @@ try {
                 $lineTask = $reader.ReadLineAsync()
                 while (-not $lineTask.IsCompleted) {
                     Add-RusaResourceSample
+                    if ($timer.Elapsed.TotalSeconds -gt 360) {
+                        $client.CancelPendingRequests()
+                        throw "Inference request $index exceeded the 360-second request limit."
+                    }
                     Start-Sleep -Milliseconds 500
                 }
                 $line = $lineTask.GetAwaiter().GetResult()
