@@ -205,3 +205,17 @@ def test_source_uri_cannot_embed_credentials_or_query_tokens(tmp_path: Path) -> 
     )
     with pytest.raises(DatasetPipelineError, match="must not contain credentials"):
         build_dataset_release(config)
+
+
+def test_exact_duplicate_content_with_conflicting_group_ids_is_rejected(tmp_path: Path) -> None:
+    source = _write_jsonl(
+        tmp_path / "conflicting-groups.jsonl",
+        [
+            {"id": "first", "group_id": "conversation-a", "text": "same content"},
+            {"id": "second", "group_id": "conversation-b", "text": "same content"},
+            _record(3),
+            _record(4),
+        ],
+    )
+    with pytest.raises(DatasetPipelineError, match="different group_id values"):
+        build_dataset_release(_config(tmp_path, source))
