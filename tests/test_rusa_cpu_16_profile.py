@@ -37,8 +37,8 @@ def test_rusa_cpu_16_profile_matches_locked_windows_baseline():
     assert profile["orchestration"]["owner"] == "Rusaai"
     assert profile["orchestration"]["agent_identity_policy"] == "preserve_all_registered_agents"
     assert profile["memory_budget_gb"]["reserved_free_memory"] == 2.0
-    assert profile["memory_budget_gib"]["kv_cache_q8_0"] == 0.6
-    assert profile["memory_budget_gib"]["kv_cache_fallback"] == "runtime_default_requires_memory_revalidation"
+    assert profile["memory_budget_gb"]["kv_cache_q8_0"] == 0.6
+    assert profile["memory_budget_gb"]["kv_cache_fallback"] == "runtime_default_requires_memory_revalidation"
     assert profile["runtime"]["kv_cache"]["fallback_policy"] == "runtime_default_requires_memory_revalidation"
     assert profile["resource_protection"]["owner"] == "Rusaai"
     assert profile["services"]["external_inference_fallback"] is False
