@@ -67,7 +67,7 @@ while ($low -le $high) {
     }
 }
 if ($bestPromptTokens -lt 7400) {
-    throw "Could not construct a safe 7,400–7,600 token context probe; observed $bestPromptTokens tokens."
+    throw "Could not construct a safe 7400-7600 token context probe; observed $bestPromptTokens tokens."
 }
 
 $payload = @{
