@@ -55,6 +55,19 @@ def _normalize(value: str) -> str:
     return " ".join(value.split()).casefold()
 
 
+def _load_json(raw: str, source: str) -> Any:
+    try:
+        return json.loads(
+            raw,
+            parse_constant=lambda value: (_ for _ in ()).throw(
+                ValueError(f"non-standard JSON constant: {value}")
+            ),
+            object_pairs_hook=_object_pairs_without_duplicates,
+        )
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise BenchmarkError(f"{source}: invalid JSON: {exc}") from exc
+
+
 def _validate_record(record: Any, line_number: int) -> dict[str, Any]:
     if not isinstance(record, dict):
         raise BenchmarkError(f"benchmark.jsonl:{line_number}: record must be an object")
@@ -66,14 +79,18 @@ def _validate_record(record: Any, line_number: int) -> dict[str, Any]:
         raise BenchmarkError(f"benchmark.jsonl:{line_number}: invalid record id")
     if not isinstance(category, str) or not category.strip() or len(category) > 128:
         raise BenchmarkError(f"benchmark.jsonl:{line_number}: invalid category")
-    if scorer not in _SCORERS:
+    if not isinstance(scorer, str) or scorer not in _SCORERS:
         raise BenchmarkError(f"benchmark.jsonl:{line_number}: unsupported scorer {scorer!r}")
     if not isinstance(messages, list) or not messages:
         raise BenchmarkError(f"benchmark.jsonl:{line_number}: messages must be a non-empty array")
     has_user = False
     clean_messages = []
     for index, message in enumerate(messages):
-        if not isinstance(message, dict) or message.get("role") not in _ALLOWED_ROLES:
+        if (
+            not isinstance(message, dict)
+            or not isinstance(message.get("role"), str)
+            or message.get("role") not in _ALLOWED_ROLES
+        ):
             raise BenchmarkError(
                 f"benchmark.jsonl:{line_number}: messages[{index}] has an invalid role"
             )
@@ -121,7 +138,7 @@ def load_benchmark_suite(suite_path: str | Path) -> tuple[dict[str, Any], list[d
     if sidecar.is_symlink() or not path.is_file() or not sidecar.is_file():
         raise BenchmarkError("benchmark suite and its frozen manifest must both exist as regular files")
     try:
-        manifest = json.loads(sidecar.read_text(encoding="utf-8"))
+        manifest = _load_json(sidecar.read_text(encoding="utf-8"), "benchmark manifest")
     except (json.JSONDecodeError, UnicodeError) as exc:
         raise BenchmarkError("benchmark manifest is invalid JSON") from exc
     if not isinstance(manifest, dict) or manifest.get("schema_version") != "1.0.0":
@@ -133,6 +150,7 @@ def load_benchmark_suite(suite_path: str | Path) -> tuple[dict[str, Any], list[d
             raise BenchmarkError(f"benchmark manifest is missing {key}")
     if manifest["file_name"] != path.name or not _SHA256.fullmatch(manifest["file_sha256"]):
         raise BenchmarkError("benchmark manifest file identity or digest is invalid")
+    sidecar_digest_before, _ = _sha256_file(sidecar)
     digest, size = _sha256_file(path)
     if digest != manifest["file_sha256"] or manifest.get("size_bytes") != size:
         raise BenchmarkError("benchmark suite checksum or size does not match its frozen manifest")
@@ -155,14 +173,8 @@ def load_benchmark_suite(suite_path: str | Path) -> tuple[dict[str, Any], list[d
             if not line.strip():
                 raise BenchmarkError(f"benchmark.jsonl:{line_number}: blank lines are not allowed")
             try:
-                raw = json.loads(
-                    line,
-                    parse_constant=lambda value: (_ for _ in ()).throw(
-                        ValueError(f"non-standard JSON constant: {value}")
-                    ),
-                    object_pairs_hook=_object_pairs_without_duplicates,
-                )
-            except (json.JSONDecodeError, ValueError) as exc:
+                raw = _load_json(line, f"benchmark.jsonl:{line_number}")
+            except BenchmarkError as exc:
                 raise BenchmarkError(f"benchmark.jsonl:{line_number}: invalid JSON") from exc
             record = _validate_record(raw, line_number)
             if record["id"] in seen_ids:
@@ -173,12 +185,16 @@ def load_benchmark_suite(suite_path: str | Path) -> tuple[dict[str, Any], list[d
             seen_ids.add(record["id"])
             seen_prompts.add(prompt_digest)
             records.append(record)
+    digest_after, _ = _sha256_file(path)
+    sidecar_digest_after, _ = _sha256_file(sidecar)
+    if digest_after != digest or sidecar_digest_after != sidecar_digest_before:
+        raise BenchmarkError("frozen benchmark suite changed while it was being loaded")
     if len(records) != manifest["record_count"]:
         raise BenchmarkError("benchmark record count does not match frozen manifest")
     return {
         "suite_id": manifest["suite_id"],
         "suite_version": manifest["suite_version"],
-        "manifest_sha256": _sha256_file(sidecar)[0],
+        "manifest_sha256": sidecar_digest_before,
         "file_sha256": digest,
         "license_ids": licenses,
     }, records
@@ -312,11 +328,18 @@ def run_benchmark(
         raise BenchmarkError("model must be a non-empty string")
     if not isinstance(base_url, str) or not base_url.strip():
         raise BenchmarkError("base_url must be a non-empty URL")
-    parsed_url = urlsplit(base_url)
+    try:
+        parsed_url = urlsplit(base_url)
+    except ValueError as exc:
+        raise BenchmarkError("base_url is malformed") from exc
     if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
         raise BenchmarkError("base_url must be an absolute HTTP(S) URL")
     if parsed_url.username or parsed_url.password or parsed_url.query or parsed_url.fragment:
         raise BenchmarkError("base_url must not contain credentials, query, or fragment")
+    if parsed_url.scheme != "https" and parsed_url.hostname not in {"localhost", "127.0.0.1", "::1"}:
+        raise BenchmarkError("HTTPS is required for non-local benchmark endpoints")
+    if api_key is not None and not isinstance(api_key, str):
+        raise BenchmarkError("api_key must be a string")
     if not isinstance(completion_path, str) or not completion_path.strip():
         raise BenchmarkError("completion_path must be a non-empty relative path")
     parsed_completion_path = urlsplit(completion_path)
@@ -527,12 +550,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model-artifact-sha256")
     parser.add_argument("--runtime-profile")
     parser.add_argument("--min-accuracy", type=float)
-    parser.add_argument("--allow-http", action="store_true")
     args = parser.parse_args(argv)
-    parsed = urlsplit(args.base_url)
-    if parsed.scheme != "https" and not args.allow_http:
-        if parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
-            parser.error("HTTPS is required for non-local benchmark endpoints; use --allow-http only for development")
     api_key = os.environ.get(args.api_key_env)
     try:
         report = run_benchmark(
