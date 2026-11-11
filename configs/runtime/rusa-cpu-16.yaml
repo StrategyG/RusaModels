@@ -23,6 +23,7 @@ model:
   repository: Qwen/Qwen3-4B-GGUF
   format: GGUF
   quantization: Q4_K_M
+  artifact_filename: Qwen3-4B-Q4_K_M.gguf
   artifact_path_env: RUSAMODELS_GGUF_MODEL_PATH
   artifact_sha256_env: RUSAMODELS_GGUF_MODEL_SHA256
   revision_policy: record_immutable_upstream_revision_at_provisioning
@@ -52,6 +53,16 @@ runtime:
   web_ui: disabled
   metrics: enabled
   maximum_reasoning_budget: 1536
+  version_policy: record_llama_server_version_and_build_at_startup
+context_budget_tokens:
+  system_instruction_and_agent_policy: 1000
+  user_task_and_conversation: 1500
+  retrieved_project_context: 2500
+  tool_result_and_evidence: 1144
+  output_and_reasoning: 1536
+  margin: 512
+  total: 8192
+  allocation_policy: dynamic_but_never_exceed_active_context
 services:
   rusamodels_api:
     host: 127.0.0.1
@@ -73,6 +84,10 @@ orchestration:
   pending_inference_queue_limit: 3
   high_reasoning_candidates: 2
   high_reasoning_execution: sequential
+  resource_limits:
+    light_file_indexing_workers: 2
+    heavy_build_test_jobs: 1
+    resident_models: 1
   tool_execution_owner: Rusaai_Tool_Gateway
   policy_enforcement_owner: Rusaai_Policy_Engine
   workflow_decision_owner: Rusaai_Supreme_Orchestrator
@@ -125,6 +140,16 @@ resource_protection:
     limit_new_model_loads_above: 75
     reduce_context_and_tasks_above: 85
   thermal_throttling_telemetry: when_available
+memory_retrieval:
+  memory_types: [working, episodic, semantic, procedural, project]
+  chunking:
+    chunk_size_tokens: {minimum: 300, maximum: 700}
+    overlap_tokens: {minimum: 50, maximum: 100}
+    initial_retrieval_chunks: {minimum: 3, maximum: 6}
+  context_policy:
+    retrieve_only_relevant_repository_content: true
+    summarize_before_expanding_context: true
+    checkpoint_long_running_workflows: true
 storage_and_memory:
   rusai_memory_database: SQLite
   rusai_text_search: FTS5

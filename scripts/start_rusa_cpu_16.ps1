@@ -133,6 +133,34 @@ try {
         $llamaExe = (Resolve-Path -LiteralPath $env:LLAMA_SERVER_EXE).Path
     }
 
+    $llamaVersionOutput = (& $llamaExe --version 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($llamaVersionOutput)) {
+        throw "Could not read llama.cpp version. Verify LLAMA_SERVER_EXE."
+    }
+    $llamaHelpOutput = & $llamaExe --help 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($llamaHelpOutput)) {
+        throw "Could not inspect llama.cpp options. Verify the installed runtime build."
+    }
+    $requiredLlamaOptions = @(
+        "--model", "--alias", "--host", "--port", "--ctx-size",
+        "--threads", "--threads-batch", "--threads-http", "--parallel",
+        "--batch-size", "--ubatch-size", "--n-gpu-layers", "--flash-attn",
+        "--jinja", "--reasoning-budget", "--no-webui", "--metrics"
+    )
+    foreach ($option in $requiredLlamaOptions) {
+        if ($llamaHelpOutput -notmatch [regex]::Escape($option)) {
+            throw "Installed llama.cpp does not support required baseline option $option."
+        }
+    }
+    $kvCacheQ8Supported = (
+        $llamaHelpOutput -match [regex]::Escape("--cache-type-k") -and
+        $llamaHelpOutput -match [regex]::Escape("--cache-type-v") -and
+        $llamaHelpOutput -match "q8_0"
+    )
+    if (-not $kvCacheQ8Supported) {
+        Write-Warning "This llama.cpp build does not advertise Q8_0 K/V cache; using its supported default cache type."
+    }
+
     $processors = @(Get-CimInstance -ClassName Win32_Processor)
     $physicalCores = [int](($processors | Measure-Object -Property NumberOfCores -Sum).Sum)
     $logicalProcessors = [int](($processors | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum)
@@ -178,6 +206,7 @@ if ($availableCpuFeatures.Count -eq 0) {
     $logDir = Join-Path $RepoRoot ".local\logs"
     New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
     New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+    $llamaVersionOutput | Set-Content -LiteralPath (Join-Path $logDir "llama-server-version.txt")
 $hardwareProfile = [ordered]@{
     captured_utc = [datetime]::UtcNow.ToString("o")
     operating_system = $os.Caption
@@ -187,6 +216,8 @@ $hardwareProfile = [ordered]@{
     physical_cores = $physicalCores
     logical_processors = $logicalProcessors
     instruction_features_reported_by_windows = $availableCpuFeatures
+    llama_cpp_version = $llamaVersionOutput
+    kv_cache_q8_0_supported = $kvCacheQ8Supported
     total_memory_gib = $memoryGiB
     free_memory_at_start_gib = $freeMemoryGiB
 }
@@ -218,9 +249,12 @@ $hardwareProfile | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path
         "--threads-http", "2",
         "--parallel", "1",
         "--batch-size", "512",
-        "--ubatch-size", "128",
-        "--cache-type-k", "q8_0",
-        "--cache-type-v", "q8_0",
+        "--ubatch-size", "128"
+    )
+    if ($kvCacheQ8Supported) {
+        $llamaArgs += @("--cache-type-k", "q8_0", "--cache-type-v", "q8_0")
+    }
+    $llamaArgs += @(
         "--n-gpu-layers", "0",
         "--flash-attn", "auto",
         "--jinja",
@@ -267,6 +301,8 @@ $hardwareProfile | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path
     Write-Host "Model Server: http://127.0.0.1:8090"
     Write-Host "OpenAI API:   http://127.0.0.1:8090/openai/v1"
     Write-Host "llama.cpp:    http://127.0.0.1:8081 (loopback only)"
+    Write-Host "llama.cpp version: $llamaVersionOutput"
+    Write-Host "Q8_0 K/V cache supported: $kvCacheQ8Supported"
     Write-Host "Physical cores: $physicalCores | Logical processors: $logicalProcessors | Generation threads: $threads"
 Write-Host ("Windows-reported CPU features: {0}" -f ($availableCpuFeatures -join ", "))
     Write-Host "Total RAM: $memoryGiB GiB | Free RAM at startup: $freeMemoryGiB GiB"

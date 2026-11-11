@@ -17,11 +17,16 @@ def test_rusa_cpu_16_profile_matches_locked_windows_baseline():
     assert profile["platform"]["memory_gib"] == 16
     assert profile["model"]["repository"] == "Qwen/Qwen3-4B-GGUF"
     assert profile["model"]["quantization"] == "Q4_K_M"
+    assert profile["model"]["artifact_filename"] == "Qwen3-4B-Q4_K_M.gguf"
     assert profile["runtime"]["context_size"] == 8192
     assert profile["runtime"]["generation_threads"]["initial"] == 4
     assert profile["runtime"]["http_threads"] == 2
     assert profile["runtime"]["parallel_slots"] == 1
     assert profile["runtime"]["gpu_layers"] == 0
+    assert profile["context_budget_tokens"]["total"] == 8192
+    assert profile["context_budget_tokens"]["retrieved_project_context"] == 2500
+    assert profile["memory_retrieval"]["chunking"]["initial_retrieval_chunks"] == {"minimum": 3, "maximum": 6}
+    assert profile["orchestration"]["resource_limits"]["light_file_indexing_workers"] == 2
     assert profile["orchestration"]["active_generation_limit"] == 1
     assert profile["orchestration"]["pending_inference_queue_limit"] == 3
     assert profile["orchestration"]["owner"] == "Rusaai"
@@ -53,6 +58,9 @@ def test_native_windows_scripts_bind_only_loopback_and_use_expected_ports():
     assert "firstTokenSeconds" in verify
     assert "minimumFreeMemoryGiB" in verify
     assert "IsProcessorFeaturePresent" in start
+    assert "--help" in start
+    assert "--version" in start
+    assert "kvCacheQ8Supported" in start
     assert '$parsedApiBaseUrl.Host -ne "127.0.0.1"' in verify
     assert "$parsedApiBaseUrl.Port -ne 8090" in verify
 

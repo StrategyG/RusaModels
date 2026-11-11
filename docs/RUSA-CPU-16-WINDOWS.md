@@ -29,9 +29,11 @@ This is the native local/edge deployment baseline. It is deliberately separate f
 | Cloud inference fallback | Disabled |
 | Separate embedding process | Disabled in v1.0 |
 
-The exact Core i5 SKU is not present in the source baseline. Startup detects physical and logical cores and starts at min(4, physical cores). Do not raise thread count, context or concurrency without hardware-specific benchmark and acceptance evidence.
+The exact Core i5 SKU is not present in the source baseline. Startup detects physical and logical cores and starts generation at min(4, physical cores), while batch threads remain at 4 as specified. It records Windows-reported SSE, AVX, AVX2, AVX-512F and BMI2 feature flags using IsProcessorFeaturePresent; these are evidence only, not an invented minimum CPU requirement. Startup also records the llama.cpp version and checks that the installed build advertises every required command-line option. Q8_0 K/V cache flags are passed only when that build advertises Q8_0 support. The hardware snapshot is written to .local/rusa-cpu-16/hardware-profile.json and the runtime version to .local/logs/llama-server-version.txt. Do not raise thread count, context or concurrency without hardware-specific benchmark and acceptance evidence.
 
 The matching machine-readable profile is configs/runtime/rusa-cpu-16.yaml.
+
+The 8K context allocation follows the source baseline: 1,000 tokens for system instruction/policy, 1,500 for user task/conversation, 2,500 for retrieved project context, 1,144 for tool results/evidence, 1,536 for output/reasoning and 512 for margin. The allocation is dynamic but must never exceed 8,192 tokens. Initial retrieval tuning is 300–700 token chunks, 50–100 token overlap and 3–6 retrieved chunks. Context and memory retrieval are owned by Rusaai; the profile records the shared baseline.
 
 ## 2. Resource budget
 
@@ -121,12 +123,13 @@ From the repository root, in the PowerShell session containing the required envi
 Startup:
 1. Loads non-secret settings from .env without overriding current process environment variables.
 2. Requires the edge environment, SQLite, local artifact storage, loopback inference URL and inference-role principal.
-3. Detects CPU physical/logical cores, RAM and available memory.
-4. Verifies the GGUF SHA-256 before loading it.
-5. Applies Alembic migrations.
-6. Starts llama.cpp bound to 127.0.0.1:8081 with the locked 8K/CPU-only parameters.
-7. Starts the RusaModels API bound to 127.0.0.1:8090.
-8. Waits for llama.cpp and API readiness.
+3. Detects CPU physical/logical cores, Windows-reported instruction features, RAM and available memory.
+4. Captures llama.cpp version/help, rejects missing required runtime options and uses Q8_0 K/V cache only if advertised by the installed build.
+5. Verifies the GGUF SHA-256 before loading it.
+6. Applies Alembic migrations.
+7. Starts llama.cpp bound to 127.0.0.1:8081 with the locked 8K/CPU-only parameters.
+8. Starts the RusaModels API bound to 127.0.0.1:8090.
+9. Waits for llama.cpp and API readiness.
 
 Logs and process records are written under ignored .local/logs/ and .local/rusa-cpu-16/.
 
@@ -142,7 +145,7 @@ Set RUSAMODELS_API_TOKEN in the current PowerShell session to the raw inference 
 
     .\scripts\verify_rusa_cpu_16.ps1 -SequentialRequests 20
 
-The script verifies API readiness, confirms the model ID is exposed to the inference principal, sends up to 20 sequential bounded chat requests and checks free RAM before and after. This is a sequential smoke test, not a full performance benchmark; it does not prove context-window, queue, thermal or long-duration stability.
+The script verifies llama.cpp and API readiness, confirms the model ID is exposed to the inference principal, then runs exactly 20 sequential streaming chat requests. During each request it samples free RAM and CPU load, measures time-to-first-token (TTFT) and end-to-end latency, and calculates generated tokens/second from the before/after llama.cpp Prometheus counters. It writes a non-secret acceptance report under .local/logs. RAM is sampled every 500 ms while waiting for response headers or stream data; this is sampled evidence, not continuous hardware telemetry. It does not prove context-window, queue, thermal or long-duration stability. Queue wait time must be collected from the Rusaai scheduler because Rusaai owns the pending-request queue.
 
 ## 7. Reasoning and orchestration ownership
 
@@ -177,7 +180,8 @@ The initial memory design is SQLite + FTS5 in Rusaai. Do not load a separate emb
 - [ ] Tool execution is only through Tool Gateway and Policy Engine.
 - [ ] Both runtime ports are bound to localhost only.
 - [ ] Restart and recovery after process failure tested.
-- [ ] TTFT, tokens/second, total latency, peak RAM, minimum free RAM, CPU use and queue wait time recorded.
+- [ ] TTFT, tokens/second, total latency, sampled peak system RAM, minimum sampled free RAM and sampled CPU use recorded by the acceptance report.
+- [ ] Queue wait time recorded separately from Rusaai scheduler telemetry.
 
 Do not set a tokens/second target until the exact CPU SKU and runtime build have been benchmarked. CI validates code, configuration and PowerShell syntax; it does not run the model on the target Windows machine. Production certification still requires the device acceptance evidence above.
 
