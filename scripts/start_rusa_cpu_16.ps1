@@ -117,8 +117,8 @@ try {
         throw "RusaAi-Edge model manifest is missing: $manifestPath"
     }
     $modelManifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
-    if ($modelManifest.model_id -ne $modelId) {
-        throw "The model manifest ID does not match RUSAMODELS_INFERENCE_MODEL_ID."
+    if ($modelManifest.model_id -ne $modelManifest.identity_alignment.architecture_reference_model_id) {
+        throw "The manifest model_id must remain the Architecture v2.0 reference identity."
     }
     if ($modelManifest.status -ne "READY_FOR_DEVICE_VALIDATION") {
         throw "The model manifest must be READY_FOR_DEVICE_VALIDATION before runtime startup."

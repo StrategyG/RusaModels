@@ -26,6 +26,11 @@ model:
   target_parameter_range:
     minimum: 1000000000
     maximum: 1500000000
+  identity_alignment:
+    architecture_reference_model_id: rusaai-edge-1.54b
+    training_engine_pre_audit_product_model_id: rusaai-edge-derived
+    runtime_model_id: null
+    runtime_model_id_decision: PENDING
   architecture_reference:
     model_id: rusaai-edge-1.54b
     parameter_count: 1541277696

@@ -24,6 +24,11 @@ platform:
   accelerator: cpu_only
 model:
   id: rusaai-edge-1.54b
+  identity_alignment:
+    architecture_reference_model_id: rusaai-edge-1.54b
+    training_engine_pre_audit_product_model_id: rusaai-edge-derived
+    runtime_model_id: null
+    runtime_model_id_decision: PENDING
   version: 0.1.0-design
   architecture:
     type: dense_decoder_only_transformer

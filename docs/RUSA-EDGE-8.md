@@ -27,7 +27,7 @@ Reference devices named by the architecture:
 | Lenovo V14 G3 IAP | Intel Core i5-1235U | 8 GB |
 | Infinix GT 30 Pro | MediaTek Dimensity 8350 Ultimate | 8 GB |
 
-The profile is declarative only. It does not claim that either device has been benchmarked or that a runnable model artifact exists.
+The profile is declarative only. It does not claim that either device has been benchmarked or that a runnable model artifact exists. Architecture v2.0 names the reference model `rusaai-edge-1.54b`; Training Engine v1.0 uses `rusaai-edge-derived` as the pre-audit product identity. The runtime alias decision remains pending and must be approved before deployment.
 
 ## 2. Model-size alignment must be validated
 

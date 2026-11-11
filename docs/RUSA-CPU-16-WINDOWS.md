@@ -10,7 +10,7 @@ This document supersedes the Qwen3-based v1.0 deployment instructions for the v2
 
 ## 1. Model readiness gate
 
-The v2.0 target model is **RusaAi-Edge-1.54B** (`rusaai-edge-1.54b`). The architecture source explicitly records:
+The v2.0 architecture reference model is **RusaAi-Edge-1.54B** (`rusaai-edge-1.54b`). The separate Training Engine v1.0 source uses `rusaai-edge-derived` as the pre-audit product model identity. This repository records both names and leaves `runtime_model_id_decision: PENDING`; the Windows launcher blocks startup until the user-approved runtime alias is written to the manifest and matches the configured model ID. The architecture source explicitly records:
 
 - Checkpoint: `NOT_SELECTED`
 - Tokenizer: `NOT_SELECTED`

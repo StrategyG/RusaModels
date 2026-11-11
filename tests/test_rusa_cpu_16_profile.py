@@ -25,6 +25,9 @@ def test_rusa_cpu_16_profile_matches_rusaai_architecture_v2():
     assert profile["platform"]["cpu"]["sku_detection"] == "required"
 
     assert profile["model"]["id"] == "rusaai-edge-1.54b"
+    assert profile["model"]["identity_alignment"]["architecture_reference_model_id"] == "rusaai-edge-1.54b"
+    assert profile["model"]["identity_alignment"]["training_engine_pre_audit_product_model_id"] == "rusaai-edge-derived"
+    assert profile["model"]["identity_alignment"]["runtime_model_id_decision"] == "PENDING"
     assert profile["model"]["target_parameters"] == 1541277696
     assert profile["model"]["checkpoint"]["selection_requirement"] == "non_qwen_open_weight"
     assert profile["model"]["checkpoint"]["selection_status"] == "NOT_SELECTED"
@@ -161,6 +164,9 @@ def test_rusa_edge_8_profile_preserves_architecture_limits_and_device_targets():
     assert profile["model"]["target_parameter_range"]["maximum"] == 1500000000
     assert profile["model"]["architecture_reference"]["parameter_count"] == 1541277696
     assert profile["model"]["architecture_reference"]["fit_status"] == "not_validated_against_8gb_device"
+    assert profile["model"]["identity_alignment"]["architecture_reference_model_id"] == "rusaai-edge-1.54b"
+    assert profile["model"]["identity_alignment"]["training_engine_pre_audit_product_model_id"] == "rusaai-edge-derived"
+    assert profile["model"]["identity_alignment"]["runtime_model_id_decision"] == "PENDING"
     assert profile["model"]["checkpoint"]["non_qwen_lineage_status"] == "NOT_VERIFIED"
     assert profile["model"]["checkpoint"]["architecture_relation"] == "NOT_AUDITED"
     assert profile["model"]["checkpoint"]["compatibility_status"] == "NOT_VERIFIED"
