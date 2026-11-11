@@ -186,3 +186,18 @@ def test_edge_profile_does_not_start_the_quant_server():
 
     with pytest.raises(RuntimeError, match="runs only the Model Server"):
         create_service_app("quant-server", edge_settings())
+
+
+def test_edge_profile_rejects_s3_endpoints_and_credentials():
+    with pytest.raises(ValidationError, match="must not configure S3"):
+        edge_settings(s3_endpoint_url="https://s3.example")
+    with pytest.raises(ValidationError, match="must not configure S3"):
+        edge_settings(
+            s3_access_key_id="read-key",
+            s3_secret_access_key="read-secret",
+        )
+
+
+def test_edge_profile_requires_a_configured_local_runtime():
+    with pytest.raises(ValidationError, match="requires one local inference runtime"):
+        edge_settings(inference_base_url=None, inference_model_id=None)

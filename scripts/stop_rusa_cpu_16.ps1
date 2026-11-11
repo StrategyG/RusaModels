@@ -18,6 +18,9 @@ foreach ($service in @("model-server", "llama-server")) {
         $actualPath = $null
         try { $actualPath = $process.Path }
         catch { Write-Warning "Cannot verify executable path for PID $($state.pid); leaving it untouched." }
+        if (-not $actualPath) {
+            continue
+        }
         if ($actualPath) {
             $expectedPath = [System.IO.Path]::GetFullPath([string]$state.executable)
             $actualFullPath = [System.IO.Path]::GetFullPath([string]$actualPath)
