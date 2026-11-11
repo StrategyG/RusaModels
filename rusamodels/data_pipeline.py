@@ -251,7 +251,7 @@ def _prepare_record(
         record_id = f"record_{fingerprint[:24]}"
     payload = dict(content)
     payload["id"] = record_id
-    group_key = group_id or record_id
+    group_key = group_id or f"content:{fingerprint}"
     return record_id, group_key, fingerprint, _canonical_json(payload)
 
 
@@ -336,7 +336,7 @@ def _ingest_source(
                     f"{source.source_id}:{line_number}: {exc}"
                 ) from exc
             existing_fingerprint = connection.execute(
-                "SELECT record_id FROM records WHERE fingerprint = ?", (fingerprint,)
+                "SELECT record_id, group_key FROM records WHERE fingerprint = ?", (fingerprint,)
             ).fetchone()
             existing_id = connection.execute(
                 "SELECT fingerprint FROM records WHERE record_id = ?", (record_id,)
@@ -347,6 +347,11 @@ def _ingest_source(
                     "is reused for different content"
                 )
             if existing_fingerprint:
+                if existing_fingerprint[1] != group_key:
+                    raise DatasetPipelineError(
+                        f"{source.source_id}:{line_number}: exact duplicate content appears "
+                        "under different group_id values; reconcile the group metadata before release"
+                    )
                 canonical_id = existing_fingerprint[0]
             else:
                 sort_key = hashlib.sha256(
@@ -390,14 +395,26 @@ def _assign_splits(connection: sqlite3.Connection, config: DatasetReleaseConfig)
         raise DatasetPipelineError(
             "split fractions leave no training groups; provide more groups or smaller fractions"
         )
-    rows = connection.execute(
-        "SELECT group_key FROM groups ORDER BY sort_key, group_key"
-    )
-    for index, row in enumerate(rows):
-        split = "test" if index < test_count else (
-            "validation" if index < test_count + validation_count else "train"
+    connection.execute(
+        """
+        WITH ranked_groups AS (
+            SELECT group_key,
+                   ROW_NUMBER() OVER (ORDER BY sort_key, group_key) AS position
+            FROM groups
         )
-        connection.execute("UPDATE groups SET split = ? WHERE group_key = ?", (split, row[0]))
+        UPDATE groups
+        SET split = (
+            SELECT CASE
+                WHEN position <= ? THEN 'test'
+                WHEN position <= ? THEN 'validation'
+                ELSE 'train'
+            END
+            FROM ranked_groups
+            WHERE ranked_groups.group_key = groups.group_key
+        )
+        """,
+        (test_count, test_count + validation_count),
+    )
     connection.execute(
         "UPDATE records SET split = (SELECT split FROM groups WHERE groups.group_key = records.group_key)"
     )
