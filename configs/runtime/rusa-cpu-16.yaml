@@ -27,6 +27,7 @@ model:
   artifact_size_bytes: 2497280256
   artifact_sha256: 7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5
   repository_revision: a9a60d009fa7ff9606305047c2bf77ac25dbec49
+  license: Apache-2.0
   artifact_path_env: RUSAMODELS_GGUF_MODEL_PATH
   artifact_sha256_env: RUSAMODELS_GGUF_MODEL_SHA256
   revision_policy: pinned_immutable_huggingface_commit

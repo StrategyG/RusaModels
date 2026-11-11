@@ -79,7 +79,7 @@ Resource protection thresholds:
     hf download Qwen/Qwen3-4B-GGUF Qwen3-4B-Q4_K_M.gguf --revision a9a60d009fa7ff9606305047c2bf77ac25dbec49 --local-dir "C:\RusaModels\.local\artifacts\models"
     Get-FileHash "C:\RusaModels\.local\artifacts\models\Qwen3-4B-Q4_K_M.gguf" -Algorithm SHA256
 
-The pinned file is 2,497,280,256 bytes with SHA-256 7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5. The local hash must match this value; do not start the runtime with a different file or an unreviewed model revision.
+The pinned file is 2,497,280,256 bytes with SHA-256 7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5. The local hash must match this value; do not start the runtime with a different file or an unreviewed model revision. The pinned model repository declares the Apache-2.0 license; retain the model-card/license reference with the artifact and confirm the license remains applicable to the intended use.
 
 Do not assume a filename or revision. Use the exact artifact downloaded and approved. Keep model weights outside the repository; .local/ is ignored by Git.
 

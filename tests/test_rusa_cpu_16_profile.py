@@ -21,6 +21,7 @@ def test_rusa_cpu_16_profile_matches_locked_windows_baseline():
     assert profile["model"]["repository_revision"] == "a9a60d009fa7ff9606305047c2bf77ac25dbec49"
     assert profile["model"]["artifact_sha256"] == "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5"
     assert profile["model"]["artifact_size_bytes"] == 2497280256
+    assert profile["model"]["license"] == "Apache-2.0"
     assert profile["runtime"]["context_size"] == 8192
     assert profile["runtime"]["generation_threads"]["initial"] == 4
     assert profile["runtime"]["http_threads"] == 2
