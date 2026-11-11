@@ -35,11 +35,24 @@ def _fingerprint(record: dict[str, Any]) -> str:
     return hashlib.sha256(_canonical_json(content).encode("utf-8")).hexdigest()
 
 
+def _object_pairs_without_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON object key: {key}")
+        result[key] = value
+    return result
+
+
 def _load_json(raw: str, source: str) -> Any:
     try:
-        return json.loads(raw, parse_constant=lambda value: (_ for _ in ()).throw(
-            ValueError(f"non-standard JSON constant: {value}")
-        ))
+        return json.loads(
+            raw,
+            parse_constant=lambda value: (_ for _ in ()).throw(
+                ValueError(f"non-standard JSON constant: {value}")
+            ),
+            object_pairs_hook=_object_pairs_without_duplicates,
+        )
     except (json.JSONDecodeError, ValueError) as exc:
         raise DatasetVerificationError(f"{source}: invalid JSON: {exc}") from exc
 
@@ -122,6 +135,9 @@ def verify_dataset_release(release_path: str | Path) -> dict[str, Any]:
             raise DatasetVerificationError(f"source {source_id}: invalid records_read")
         sources[source_id] = source
 
+    expected_licenses = sorted({source["license_id"] for source in sources.values()})
+    if manifest.get("licenses") != expected_licenses:
+        raise DatasetVerificationError("manifest license list does not match source declarations")
     records_meta = manifest.get("records")
     if not isinstance(records_meta, dict):
         raise DatasetVerificationError("manifest records metadata is missing")
@@ -191,6 +207,8 @@ def verify_dataset_release(release_path: str | Path) -> dict[str, Any]:
                 raise DatasetVerificationError("duplicate source line in provenance")
             source_lines.add(source_line_key)
             source = sources[source_id]
+            if item.get("source_name") != source["name"]:
+                raise DatasetVerificationError("source name mismatch in provenance")
             if item.get("source_sha256") != source["sha256"]:
                 raise DatasetVerificationError("source checksum mismatch in provenance")
             if item.get("license_id") != source["license_id"]:
