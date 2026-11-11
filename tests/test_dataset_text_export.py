@@ -9,7 +9,7 @@ from rusamodels.data_pipeline import (
     DatasetSource,
     build_dataset_release,
 )
-from scripts.export_dataset_text import (
+from rusamodels.dataset_text_export import (
     DatasetTextExportError,
     export_dataset_split,
     record_to_text,
