@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main, fix/production-hardening-2026-11-11]
+    branches: [main, fix/production-hardening-2026-11-11, feat/rusa-cpu-16-windows-baseline]
     types: [opened, synchronize, reopened, ready_for_review, edited]
 permissions:
   contents: read
