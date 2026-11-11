@@ -35,6 +35,8 @@ def test_rusa_cpu_16_profile_matches_rusaai_architecture_v2():
     assert model["model_id"] == "rusaai-edge-1.54b"
     assert model["status"] == "DESIGN_ONLY"
     assert model["checkpoint"]["selection_status"] == "NOT_SELECTED"
+    assert model["checkpoint"]["non_qwen_lineage_status"] == "NOT_VERIFIED"
+    assert model["checkpoint"]["architecture_relation"] == "NOT_AUDITED"
     assert model["artifact"]["status"] == "NOT_BUILT"
     assert model["architecture"]["target_parameters"] == 1541277696
     assert model["architecture"]["layers"] == 32
@@ -82,6 +84,10 @@ def test_native_windows_launcher_fails_closed_until_model_is_ready():
     assert "RUSAMODELS_CONTEXT_SIZE=4096" in env
     assert 'selection_status -ne "SELECTED"' in start
     assert 'compatibility_status -ne "VERIFIED"' in start
+    assert 'non_qwen_lineage_status -ne "VERIFIED"' in start
+    assert 'actual_configuration_sha256 -notmatch' in start
+    assert 'architectureRelation -eq "IDENTICAL"' in start
+    assert '$os.OSArchitecture -ne "64-bit"' in start
     assert 'tokenizer.status -ne "VALIDATED"' in start
     assert 'artifact.status -ne "BUILT"' in start
     assert 'status -ne "READY_FOR_DEVICE_VALIDATION"' in start

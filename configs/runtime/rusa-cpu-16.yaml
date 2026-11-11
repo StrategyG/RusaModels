@@ -52,6 +52,10 @@ model:
     immutable_revision: null
     license: null
     compatibility_status: NOT_VERIFIED
+    non_qwen_lineage_status: NOT_VERIFIED
+    architecture_relation: NOT_AUDITED
+    actual_parameter_count: null
+    actual_configuration_sha256: null
   tokenizer:
     status: NOT_SELECTED
   training:
