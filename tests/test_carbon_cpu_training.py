@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import random
@@ -39,6 +40,30 @@ def _write_config(tmp_path: Path, *, same_eval: bool = False) -> Path:
     evaluation = train if same_eval else _write_corpus(
         tmp_path / "eval.txt", "held out validation corpus with different content. " * 80
     )
+    release_manifest_sha256 = hashlib.sha256(b"source-dataset-manifest").hexdigest()
+    for corpus, split in ((train, "train"), (evaluation, "validation")):
+        if same_eval and corpus == train and split == "validation":
+            continue
+        export_manifest = {
+            "schema_version": "1.0.0",
+            "exporter": "rusamodels.dataset_text_export",
+            "dataset_id": "carbon-test",
+            "dataset_version": "0.1.0",
+            "split": split,
+            "license_ids": ["CC0-1.0"],
+            "release_manifest_sha256": release_manifest_sha256,
+            "source_split_sha256": hashlib.sha256(split.encode()).hexdigest(),
+            "source_split_file": f"{split}.jsonl",
+            "records": 10,
+            "encoding": "utf-8",
+            "tokenizer": "byte-level-v1",
+            "output_file": corpus.name,
+            "output_sha256": hashlib.sha256(corpus.read_bytes()).hexdigest(),
+            "output_size_bytes": corpus.stat().st_size,
+        }
+        corpus.with_suffix(corpus.suffix + ".manifest.json").write_text(
+            json.dumps(export_manifest, indent=2), encoding="utf-8"
+        )
     config = {
         "project": "Carbon-CPU",
         "run_name": "carbon-test",
@@ -48,9 +73,10 @@ def _write_config(tmp_path: Path, *, same_eval: bool = False) -> Path:
             "validation_split": 0.1,
             "encoding": "utf-8",
             "tokenizer": "byte-level-v1",
+            "require_export_manifest": True,
             "dataset_id": "carbon-test",
             "dataset_version": "0.1.0",
-            "license_id": "CC0-1.0",
+            "license_ids": ["CC0-1.0"],
             "source_uri": None,
         },
         "model": {
@@ -199,7 +225,7 @@ def test_cpu_training_requires_reviewed_license_declaration(
 ) -> None:
     config_path = _write_config(tmp_path)
     config = json.loads(config_path.read_text(encoding="utf-8"))
-    config["data"]["license_id"] = "LicenseRef-REPLACE-WITH-APPROVED-LICENSE"
+    config["data"]["license_ids"] = ["LicenseRef-REPLACE-WITH-APPROVED-LICENSE"]
     config_path.write_text(json.dumps(config), encoding="utf-8")
     monkeypatch.setattr(sys, "argv", ["train_carbon_cpu.py", "--config", str(config_path)])
     with pytest.raises(ValueError, match="non-placeholder declaration"):
