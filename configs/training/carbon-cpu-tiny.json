@@ -1,0 +1,38 @@
+{
+  "project": "Carbon-CPU",
+  "run_name": "carbon-tiny-v0.1",
+  "data": {
+    "train_file": "data/carbon_cpu/corpus.txt",
+    "eval_file": null,
+    "validation_split": 0.05,
+    "encoding": "utf-8",
+    "tokenizer": "byte-level-v1"
+  },
+  "model": {
+    "vocab_size": 258,
+    "n_layers": 4,
+    "d_model": 256,
+    "n_heads": 4,
+    "n_kv_heads": 2,
+    "intermediate_size": 768,
+    "max_seq_len": 256,
+    "dropout": 0.0,
+    "rope_theta": 10000.0
+  },
+  "training": {
+    "method": "from_scratch_next_token_prediction",
+    "output_dir": "artifacts/carbon-cpu-tiny-v0.1",
+    "steps": 1000,
+    "batch_size": 2,
+    "block_size": 128,
+    "gradient_accumulation_steps": 4,
+    "learning_rate": 0.0003,
+    "weight_decay": 0.1,
+    "warmup_steps": 20,
+    "max_grad_norm": 1.0,
+    "eval_interval": 100,
+    "eval_batches": 10,
+    "threads": 4,
+    "seed": 42
+  }
+}

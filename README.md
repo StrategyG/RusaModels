@@ -28,6 +28,7 @@ RusaAi is an authenticated service consumer. It does not connect directly to the
 - Independent chat and embedding upstream configuration, allowing local LLM and embedding runtimes to use separate CPU services.
 - CPU-only Codespaces inference profile with private llama.cpp and local embedding containers, bounded CPU/RAM limits and no published runtime ports.
 - Migrated agent SFT dataset validation, QLoRA training, held-out evaluation, adapter merge, GGUF checksum verification and inference benchmark tools.
+- Experimental Carbon-Tiny from-scratch CPU trainer with random initialization, byte-level tokenization, GQA, RoPE, RMSNorm and SwiGLU.
 - Verified model-version artifact download and pinned local embedding snapshot utilities.
 - Immutable Hugging Face commit pinning, upstream license verification, and artifact manifests with SHA-256 digests.
 - Separate Quant Worker with database leases, heartbeat renewal, stale-worker fencing, bounded retries for transient failures and cooperative cancellation.
@@ -37,7 +38,7 @@ RusaAi is an authenticated service consumer. It does not connect directly to the
 
 ## Not yet implemented
 
-Dynamic model loading/deployment, multi-model routing, scheduling, automated training orchestration and dashboard. The standard Model Server profile still requires an explicitly configured upstream runtime; the optional CPU Codespaces profile supplies llama.cpp and embedding sidecars for development. The QLoRA training workflow is a separate CUDA-only candidate workflow and is not part of CPU inference. Safetensors conversion requires `pip install -e ".[quantization]"`. GGUF conversion requires a separately installed llama.cpp `convert_hf_to_gguf.py` and `llama-quantize`, configured with `LLAMA_CPP_CONVERT_SCRIPT` and `LLAMA_QUANTIZE_BIN`. The GGUF adapter allowlists Llama, Qwen2/Qwen3 and DeepSeek model types by default, with explicit configuration for extensions. Actual compatibility remains dependent on the installed upstream converter version. These features are not advertised as operational until implemented and tested.
+Dynamic model loading/deployment, multi-model routing, scheduling, automated training orchestration and dashboard. The standard Model Server profile still requires an explicitly configured upstream runtime; the optional CPU Codespaces profile supplies llama.cpp and embedding sidecars for development. The QLoRA training workflow is a separate CUDA-only candidate workflow and is not part of CPU inference. The Carbon-Tiny trainer is an experimental local pretraining path, not a 30B model or a production training platform. Safetensors conversion requires `pip install -e ".[quantization]"`. GGUF conversion requires a separately installed llama.cpp `convert_hf_to_gguf.py` and `llama-quantize`, configured with `LLAMA_CPP_CONVERT_SCRIPT` and `LLAMA_QUANTIZE_BIN`. The GGUF adapter allowlists Llama, Qwen2/Qwen3 and DeepSeek model types by default, with explicit configuration for extensions. Actual compatibility remains dependent on the installed upstream converter version. These features are not advertised as operational until implemented and tested.
 
 ## Local development
 
@@ -69,4 +70,5 @@ Never commit model weights, API tokens or credentials. Production requires Postg
 - [RusaAi integration](docs/RUSAAI-INTEGRATION.md)
 - [CPU inference](docs/CPU_INFERENCE.md)
 - [Training](docs/TRAINING.md)
+- [Carbon-CPU from-scratch training](docs/CARBON_CPU.md)
 - [Migration from RusaAi](docs/MIGRATION_FROM_RUSAAI.md)

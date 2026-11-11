@@ -17,6 +17,7 @@ weights/
 *.bin
 *.onnx
 *.engine
+data/carbon_cpu/*.txt
 .coverage
 dist/
 build/
