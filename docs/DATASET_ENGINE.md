@@ -16,6 +16,7 @@ The pipeline currently provides:
 - Per-source license declarations, file digests, and record-line provenance.
 - Immutable dataset release directories.
 - SHA-256 manifests and an independent release verifier.
+- Disk-backed SQLite verification indexes for record IDs, fingerprints, provenance, and split-group isolation.
 - SQLite-backed staging so the pipeline does not need to hold the full dataset in Python memory.
 
 The pipeline does not infer whether a license is legally compatible, identify all PII, perform semantic/near-duplicate detection, classify language, perform quality scoring, annotate examples, or tokenize/pack sequences. Those capabilities remain future work and must not be implied by a successful release build.
