@@ -135,3 +135,30 @@ def test_qwen3_v1_profile_is_preserved_as_historical_reference():
 def test_rusamodels_edge_test_configuration_uses_v2_model_identity():
     config_test = (ROOT / "tests" / "test_config.py").read_text(encoding="utf-8")
     assert '"inference_model_id": "rusaai-edge-1.54b"' in config_test
+
+
+
+def test_rusa_edge_8_profile_preserves_architecture_limits_and_device_targets():
+    profile = yaml.safe_load(
+        (ROOT / "configs" / "runtime" / "rusa-edge-8.yaml").read_text(encoding="utf-8")
+    )
+
+    assert profile["profile"]["id"] == "rusa-edge-8"
+    assert profile["profile"]["source_architecture"] == "RusaAi Architecture v2.0"
+    assert profile["profile"]["status"] == "architecture_target_not_yet_deployable"
+    assert profile["platform"]["physical_memory_gb"] == 8
+    assert profile["platform"]["physical_memory_only"] is True
+    assert profile["platform"]["virtual_or_extended_memory_counts_as_physical"] is False
+    assert profile["platform"]["reference_devices"]["windows"]["model"] == "Lenovo V14 G3 IAP"
+    assert profile["platform"]["reference_devices"]["android"]["model"] == "Infinix GT 30 Pro"
+    assert profile["model"]["target_parameter_range"]["maximum"] == 1500000000
+    assert profile["model"]["architecture_reference"]["parameter_count"] == 1541277696
+    assert profile["model"]["architecture_reference"]["fit_status"] == "not_validated_against_8gb_device"
+    assert profile["runtime"]["context_tokens"] == 4096
+    assert profile["runtime"]["sessions"] == 1
+    assert profile["runtime"]["active_generations"] == 1
+    assert profile["runtime"]["pending_work"]["bounded"] is True
+    assert profile["runtime"]["pending_work"]["capacity"] is None
+    assert profile["runtime"]["pending_work"]["owner"] == "Rusaai"
+    assert profile["runtime"]["gpu_layers"] == 0
+    assert profile["memory_policy"]["low_memory_protection"]["free_memory_below_gb"] == 2

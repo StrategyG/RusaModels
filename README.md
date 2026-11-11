@@ -9,6 +9,7 @@ Standard RusaModels deployments expose two services: the Model Server and Quant 
 - **Model Server** — model registry, lifecycle API and authenticated OpenAI-compatible inference gateway.
 - **Quant Server** — model inspection, conversion and GGUF quantization service boundary.
 - **Native Windows RUSA-CPU-16 v2.0** — architecture target for RusaAi-Edge-1.54B on Intel Core i5 / 16 GB RAM, llama.cpp and CPU-only inference. It is intentionally not deployable until a compatible non-Qwen checkpoint is selected, tokenizer/chat template are validated and a Q4_K_M GGUF artifact is built and checksummed.
+- **RUSA-EDGE-8** — declarative Windows laptop / Android ARM64 profile for 8 GB physical RAM, 4K context, one active generation and CPU-only Q4_K_M inference. It remains a design target pending checkpoint selection and device benchmarks; see `docs/RUSA-EDGE-8.md`.
 - **Codespaces CPU Runtime** — separate optional development profile with private llama.cpp and SentenceTransformers sidecars; it is not the Windows RUSA-CPU-16 baseline.
 - **Shared PostgreSQL** — registry metadata, model versions, upload sessions and audit events in standard multi-service deployments.
 - **Shared S3-compatible storage** — immutable model artifacts in standard multi-service deployments.

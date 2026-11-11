@@ -1,0 +1,78 @@
+schema_version: 2
+profile:
+  id: rusa-edge-8
+  version: 2.0.0
+  source_architecture: RusaAi Architecture v2.0
+  status: architecture_target_not_yet_deployable
+  deployment: local_cpu_edge
+platform:
+  device_classes:
+    - Windows laptop
+    - Android ARM64
+  physical_memory_gb: 8
+  physical_memory_only: true
+  virtual_or_extended_memory_counts_as_physical: false
+  reference_devices:
+    windows:
+      model: Lenovo V14 G3 IAP
+      cpu: Intel Core i5-1235U
+      physical_memory_gb: 8
+    android:
+      model: Infinix GT 30 Pro
+      cpu: MediaTek Dimensity 8350 Ultimate
+      physical_memory_gb: 8
+  accelerator: cpu_only
+model:
+  target_parameter_range:
+    minimum: 1000000000
+    maximum: 1500000000
+  architecture_reference:
+    model_id: rusaai-edge-1.54b
+    parameter_count: 1541277696
+    fit_status: not_validated_against_8gb_device
+  quantization: Q4_K_M
+  checkpoint:
+    selection_status: NOT_SELECTED
+    requirement: non_qwen_open_weight
+  tokenizer:
+    status: NOT_SELECTED
+  artifact:
+    status: NOT_BUILT
+    format: GGUF
+    quantization: Q4_K_M
+runtime:
+  backend: llama.cpp
+  build_requirement: CPU-compatible build for target operating system and architecture
+  operating_system_targets:
+    - Windows 11 64-bit
+    - Android ARM64
+  context_tokens: 4096
+  sessions: 1
+  active_generations: 1
+  pending_work:
+    bounded: true
+    capacity: null
+    capacity_status: must_be_defined_by_Rusaai
+    owner: Rusaai
+  gpu_layers: 0
+  kv_cache:
+    target_quantization: Q8_0
+    enable_only_if_supported_and_validated: true
+memory_policy:
+  close_background_apps: true
+  monitor_free_physical_memory: true
+  ignore_virtual_or_extended_memory_as_physical_capacity: true
+  low_memory_protection:
+    free_memory_below_gb: 2
+    owner: Rusaai
+acceptance:
+  physical_ram_confirmed: required
+  non_qwen_checkpoint_and_license_audited: required
+  tokenizer_and_chat_template_validated: required
+  gguf_q4_k_m_artifact_and_sha256_recorded: required
+  context_4096_test: required
+  cpu_only_execution: required
+  target_device_ram_benchmark: required
+  windows_laptop_runtime_test: required
+  android_arm64_runtime_test: required
+  one_session_and_one_active_generation: required
