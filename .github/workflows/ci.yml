@@ -213,9 +213,35 @@ jobs:
             Write-Host "PowerShell syntax OK: $script"
           }
 
-      - name: Probe Windows CPU instruction feature API
-        shell: pwsh
+      - name: Parse deployment scripts with Windows PowerShell 5.1
+        shell: powershell
         run: |
+          $scripts = @(
+            "scripts/start_rusa_cpu_16.ps1",
+            "scripts/stop_rusa_cpu_16.ps1",
+            "scripts/verify_rusa_cpu_16.ps1"
+          )
+          foreach ($script in $scripts) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $script).Path,
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error $_.Message }
+              exit 1
+            }
+            Write-Host "Windows PowerShell 5.1 syntax OK: $script"
+          }
+
+      - name: Probe Windows CPU instruction feature API and HTTP client in Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          Add-Type -AssemblyName System.Net.Http
+          $client = [System.Net.Http.HttpClient]::new()
+          $client.Dispose()
           Add-Type -TypeDefinition @'
           using System;
           using System.Runtime.InteropServices;
@@ -228,4 +254,4 @@ jobs:
           foreach ($featureId in $featureIds) {
             $null = [RusaCpuFeatureProbe]::IsProcessorFeaturePresent([uint32]$featureId)
           }
-          Write-Host "Windows CPU feature probe API is callable."
+          Write-Host "Windows CPU feature probe and HTTP client are callable in Windows PowerShell 5.1."
