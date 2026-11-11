@@ -161,4 +161,7 @@ def test_rusa_edge_8_profile_preserves_architecture_limits_and_device_targets():
     assert profile["runtime"]["pending_work"]["capacity"] is None
     assert profile["runtime"]["pending_work"]["owner"] == "Rusaai"
     assert profile["runtime"]["gpu_layers"] == 0
+    assert profile["memory_estimates"]["model_weights_q4_k_m_gb"]["minimum"] == 0.9
+    assert profile["memory_estimates"]["model_weights_q4_k_m_gb"]["maximum"] == 1.1
+    assert profile["memory_estimates"]["kv_cache_q8_0_mib"]["context_4096"] == 128
     assert profile["memory_policy"]["low_memory_protection"]["free_memory_below_gb"] == 2

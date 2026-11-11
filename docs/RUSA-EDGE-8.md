@@ -44,6 +44,9 @@ Current model readiness remains:
 
 ## 3. Runtime and resource policy
 
+Planning estimates from the architecture for the 1.54B reference are 0.9–1.1 GB for Q4_K_M weights and about 128 MiB for Q8_0 KV cache at 4K. These are estimates, not measured device residency; operating-system, runtime, tokenizer and other-process memory must be measured on each device.
+
+
 - Use a CPU-compatible llama.cpp build for the target OS and architecture.
 - Keep context at 4K; do not inherit the 16 GB profile's 8K target.
 - Keep one session and one active generation.

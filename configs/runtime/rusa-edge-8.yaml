@@ -36,10 +36,14 @@ model:
     requirement: non_qwen_open_weight
   tokenizer:
     status: NOT_SELECTED
+  training:
+    status: NOT_STARTED
   artifact:
     status: NOT_BUILT
     format: GGUF
     quantization: Q4_K_M
+  benchmark:
+    status: NOT_TESTED
 runtime:
   backend: llama.cpp
   build_requirement: CPU-compatible build for target operating system and architecture
@@ -55,9 +59,19 @@ runtime:
     capacity_status: must_be_defined_by_Rusaai
     owner: Rusaai
   gpu_layers: 0
+  memory_mapping: enabled_when_supported
+  thread_tuning: detect_and_benchmark_per_device
   kv_cache:
     target_quantization: Q8_0
     enable_only_if_supported_and_validated: true
+memory_estimates:
+  model_weights_q4_k_m_gb:
+    minimum: 0.9
+    maximum: 1.1
+  kv_cache_q8_0_mib:
+    context_4096: 128
+  other_process_memory: measure_on_target_device
+  minimum_free_memory_gb: 2
 memory_policy:
   close_background_apps: true
   monitor_free_physical_memory: true
