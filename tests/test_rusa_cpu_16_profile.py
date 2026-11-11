@@ -79,6 +79,8 @@ def test_windows_edge_example_uses_official_qwen3_q4_k_m_filename():
 
     assert "Qwen3-4B-Q4_K_M.gguf" in env
     assert "Qwen3-4B-Q4_K_M.gguf" in docs
+    assert ".local\\artifacts\\models" in env
+    assert ".local\\artifacts\\models" in docs
 
 
 

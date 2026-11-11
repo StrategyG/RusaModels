@@ -72,9 +72,10 @@ Resource protection thresholds:
     python -m pip install --upgrade pip
     python -m pip install -e ".[dev]"
 
-4. Prepare a local model directory outside Git. Download the official Qwen3-4B GGUF Q4_K_M artifact, record the upstream immutable revision and exact filename, and calculate SHA-256:
+4. Prepare the model directory inside RusaModels local artifact storage, which is excluded from Git. Download the official Qwen3-4B GGUF Q4_K_M artifact, record the upstream immutable revision and exact filename, and calculate SHA-256:
 
-    Get-FileHash "C:\RusaModels\models\Qwen3-4B-Q4_K_M.gguf" -Algorithm SHA256
+    New-Item -ItemType Directory -Path "C:\RusaModels\.local\artifacts\models" -Force
+    Get-FileHash "C:\RusaModels\.local\artifacts\models\Qwen3-4B-Q4_K_M.gguf" -Algorithm SHA256
 
 Do not assume a filename or revision. Use the exact artifact downloaded and approved. Keep model weights outside the repository; .local/ is ignored by Git.
 
