@@ -67,10 +67,49 @@ jobs:
           PY
             rm -f "$report"
           done
+      - name: Verify setuptools runtime and scoped VEX disposition
+        shell: bash
+        run: |
+          set -euo pipefail
+          for image in "rusamodels-ci:${GITHUB_SHA}" "rusamodels-worker-ci:${GITHUB_SHA}"; do
+            docker run --rm --entrypoint python "$image" -c '
+          import importlib.metadata as metadata
+          from packaging.version import Version
+
+          installed = Version(metadata.version("setuptools"))
+          assert installed >= Version("78.1.1"), installed
+          print("runtime setuptools:", installed)
+          '
+            if docker run --rm --entrypoint sh "$image" -c \
+              "find /usr/local/lib/python3.12/site-packages /usr/lib/python3/dist-packages -maxdepth 1 -type d -name 'setuptools-70.3.0*' -print -quit 2>/dev/null | grep -q ."; then
+              echo "stale setuptools 70.3.0 metadata remains in $image"
+              exit 1
+            fi
+            report="$(mktemp)"
+            trivy image --scanners vuln --vex .trivy/setuptools-vex.openvex.json \
+              --format json --output "$report" "$image"
+            python - "$report" "$image" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          report = json.loads(Path(sys.argv[1]).read_text())
+          image = sys.argv[2]
+          remaining = []
+          for result in report.get("Results", []):
+              for vulnerability in result.get("Vulnerabilities", []):
+                  if vulnerability.get("VulnerabilityID") == "CVE-2025-47273":
+                      remaining.append(vulnerability.get("PkgID"))
+          if remaining:
+              raise SystemExit(f"VEX did not filter the stale SBOM component for {image}: {remaining}")
+          print(f"VEX disposition verified for {image}")
+          PY
+            rm -f "$report"
+          done
       - name: Block on fixable CRITICAL and HIGH image vulnerabilities
         run: |
-          trivy image --scanners vuln --exit-code 1 --ignore-unfixed --severity CRITICAL,HIGH --pkg-types os,library "rusamodels-ci:${GITHUB_SHA}"
-          trivy image --scanners vuln --exit-code 1 --ignore-unfixed --severity CRITICAL,HIGH --pkg-types os,library "rusamodels-worker-ci:${GITHUB_SHA}"
+          trivy image --scanners vuln --vex .trivy/setuptools-vex.openvex.json --exit-code 1 --ignore-unfixed --severity CRITICAL,HIGH --pkg-types os,library "rusamodels-ci:${GITHUB_SHA}"
+          trivy image --scanners vuln --vex .trivy/setuptools-vex.openvex.json --exit-code 1 --ignore-unfixed --severity CRITICAL,HIGH --pkg-types os,library "rusamodels-worker-ci:${GITHUB_SHA}"
       - name: Smoke test container health endpoint
         run: |
           docker run -d --name rusamodels-smoke -p 127.0.0.1:18000:8000 \
