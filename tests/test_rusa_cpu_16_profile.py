@@ -14,9 +14,10 @@ def test_rusa_cpu_16_profile_matches_locked_windows_baseline():
     assert profile["profile"]["version"] == "1.0.0"
     assert profile["platform"]["operating_system"] == "Windows 11 64-bit"
     assert profile["platform"]["cpu"]["family"] == "Core i5"
-    assert profile["platform"]["memory_gib"] == 16
+    assert profile["platform"]["memory_gb"] == 16
     assert profile["model"]["repository"] == "Qwen/Qwen3-4B-GGUF"
     assert profile["model"]["quantization"] == "Q4_K_M"
+    assert profile["model"]["evaluation_status"] == "initial_candidate_pending_device_task_benchmark"
     assert profile["model"]["artifact_filename"] == "Qwen3-4B-Q4_K_M.gguf"
     assert profile["model"]["repository_revision"] == "a9a60d009fa7ff9606305047c2bf77ac25dbec49"
     assert profile["model"]["artifact_sha256"] == "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5"
@@ -34,7 +35,8 @@ def test_rusa_cpu_16_profile_matches_locked_windows_baseline():
     assert profile["orchestration"]["active_generation_limit"] == 1
     assert profile["orchestration"]["pending_inference_queue_limit"] == 3
     assert profile["orchestration"]["owner"] == "Rusaai"
-    assert profile["memory_budget_gib"]["reserved_free_memory"] == 2.0
+    assert profile["orchestration"]["agent_identity_policy"] == "preserve_all_registered_agents"
+    assert profile["memory_budget_gb"]["reserved_free_memory"] == 2.0
     assert profile["memory_budget_gib"]["kv_cache_q8_0"] == 0.6
     assert profile["memory_budget_gib"]["kv_cache_fallback"] == "runtime_default_requires_memory_revalidation"
     assert profile["runtime"]["kv_cache"]["fallback_policy"] == "runtime_default_requires_memory_revalidation"

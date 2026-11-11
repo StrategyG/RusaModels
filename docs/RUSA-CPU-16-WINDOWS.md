@@ -7,6 +7,8 @@
 
 This is the native local/edge deployment baseline. It is deliberately separate from the optional Docker/Codespaces CPU profile in CPU_INFERENCE.md. The Codespaces profile uses different context, quantization, resource limits and an optional embedding sidecar; do not copy those values into this baseline.
 
+Qwen3-4B is the initial candidate, not a performance certification for every Core i5 SKU. Benchmark representative RUSA tasks; if quality or performance is insufficient, evaluate alternatives without changing the Rusaai–RusaModels service contract.
+
 ## 1. Locked runtime profile
 
 | Component | Baseline |

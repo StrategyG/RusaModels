@@ -15,7 +15,7 @@ platform:
     instruction_feature_source: Windows_IsProcessorFeaturePresent
     instruction_feature_requirement: record_only_no_hardcoded_minimum
     generation: not_yet_confirmed
-  memory_gib: 16
+  memory_gb: 16
   accelerator: cpu_only
 model:
   id: rusa-cpu-4b
@@ -23,6 +23,7 @@ model:
   repository: Qwen/Qwen3-4B-GGUF
   format: GGUF
   quantization: Q4_K_M
+  evaluation_status: initial_candidate_pending_device_task_benchmark
   artifact_filename: Qwen3-4B-Q4_K_M.gguf
   artifact_size_bytes: 2497280256
   artifact_sha256: 7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5
@@ -85,6 +86,7 @@ services:
   separate_embedding_runtime: disabled
 orchestration:
   owner: Rusaai
+  agent_identity_policy: preserve_all_registered_agents
   active_generation_limit: 1
   pending_inference_queue_limit: 3
   high_reasoning_candidates: 2
@@ -125,7 +127,7 @@ reasoning_profiles:
       top_k: 20
       min_p: 0
       presence_penalty: 1.5
-memory_budget_gib:
+memory_budget_gb:
   windows_and_base_apps: 5.0
   model_weights: 2.5
   kv_cache_q8_0: 0.6
