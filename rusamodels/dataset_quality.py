@@ -266,9 +266,11 @@ def find_near_duplicates(
                             )
                             records_scanned += 1
                 connection.commit()
-                temporary_report = output.with_name(
-                    f".{output.name}.{os.getpid()}.tmp"
+                temporary_fd, temporary_name = tempfile.mkstemp(
+                    prefix=f".{output.name}.", suffix=".tmp", dir=output.parent
                 )
+                os.close(temporary_fd)
+                temporary_report = Path(temporary_name)
                 near_duplicate_pairs = 0
                 cross_split_pairs = 0
                 with temporary_report.open("w", encoding="utf-8", newline="\n") as report:
