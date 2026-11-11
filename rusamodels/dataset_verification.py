@@ -1,4 +1,4 @@
-"""Verify the integrity and internal consistency of a released JSONL dataset."""
+"""Verify dataset release integrity and provenance with disk-backed staging."""
 from __future__ import annotations
 
 import argparse
@@ -6,7 +6,9 @@ import hashlib
 import hmac
 import json
 import re
+import sqlite3
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +34,7 @@ def _canonical_json(value: Any) -> str:
 
 def _fingerprint(record: dict[str, Any]) -> str:
     content = {key: value for key, value in record.items() if key not in {"id", "group_id"}}
-    return hashlib.sha256(_canonical_json(content).encode("utf-8")).hexdigest()
+    return hashlib.sha256(_canonical_json(content).encode()).hexdigest()
 
 
 def _object_pairs_without_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -76,8 +78,41 @@ def _safe_release_file(root: Path, name: str) -> Path:
     return path
 
 
+def _initialize_verification_db(connection: sqlite3.Connection) -> None:
+    connection.executescript(
+        """
+        CREATE TABLE records (
+            record_id TEXT PRIMARY KEY,
+            split TEXT NOT NULL,
+            fingerprint TEXT NOT NULL UNIQUE
+        );
+        CREATE TABLE group_splits (
+            group_id TEXT PRIMARY KEY,
+            split TEXT NOT NULL
+        );
+        CREATE TABLE record_groups (
+            record_id TEXT PRIMARY KEY,
+            group_id TEXT NOT NULL
+        );
+        CREATE TABLE source_lines (
+            source_id TEXT NOT NULL,
+            source_line INTEGER NOT NULL,
+            PRIMARY KEY (source_id, source_line)
+        );
+        CREATE TABLE provenance_records (
+            record_id TEXT PRIMARY KEY
+        );
+        """
+    )
+
+
 def verify_dataset_release(release_path: str | Path) -> dict[str, Any]:
-    """Verify manifest, checksums, split records, provenance, and split isolation."""
+    """Verify manifest, checksums, split records, provenance, and split isolation.
+
+    Record IDs, content fingerprints, source lines, and group assignments are
+    indexed in a temporary SQLite database so verification does not require
+    keeping the complete dataset index in Python memory.
+    """
     root = Path(release_path).expanduser().resolve()
     if not root.is_dir():
         raise DatasetVerificationError(f"dataset release directory does not exist: {root}")
@@ -129,6 +164,8 @@ def verify_dataset_release(release_path: str | Path) -> dict[str, Any]:
             raise DatasetVerificationError("manifest contains an invalid or duplicate source_id")
         if not _SHA256.fullmatch(str(source.get("sha256", ""))):
             raise DatasetVerificationError(f"source {source_id}: invalid source SHA-256")
+        if not isinstance(source.get("name"), str) or not source["name"]:
+            raise DatasetVerificationError(f"source {source_id}: source name is missing")
         if not isinstance(source.get("license_id"), str) or not source["license_id"].strip():
             raise DatasetVerificationError(f"source {source_id}: license_id is missing")
         if type(source.get("records_read")) is not int or source["records_read"] < 0:
@@ -141,101 +178,187 @@ def verify_dataset_release(release_path: str | Path) -> dict[str, Any]:
     records_meta = manifest.get("records")
     if not isinstance(records_meta, dict):
         raise DatasetVerificationError("manifest records metadata is missing")
+
     split_counts = {"train": 0, "validation": 0, "test": 0}
-    record_splits: dict[str, str] = {}
-    record_fingerprints: dict[str, str] = {}
-    fingerprints_seen: set[str] = set()
-    for split in ("train", "validation", "test"):
-        path = _safe_release_file(root, f"{split}.jsonl")
-        with path.open("r", encoding="utf-8") as handle:
-            for line_number, line in enumerate(handle, start=1):
-                if not line.strip():
-                    raise DatasetVerificationError(f"{path.name}:{line_number}: blank lines are not allowed")
-                record = _load_json(line, f"{path.name}:{line_number}")
-                if not isinstance(record, dict):
-                    raise DatasetVerificationError(f"{path.name}:{line_number}: record must be an object")
-                record_id = record.get("id")
-                if not isinstance(record_id, str) or not record_id.strip():
-                    raise DatasetVerificationError(f"{path.name}:{line_number}: record id is missing")
-                if record_id in record_splits:
-                    raise DatasetVerificationError(f"record id occurs more than once: {record_id}")
-                fingerprint = _fingerprint(record)
-                if fingerprint in fingerprints_seen:
-                    raise DatasetVerificationError("duplicate content crosses or repeats dataset splits")
-                record_splits[record_id] = split
-                record_fingerprints[record_id] = fingerprint
-                fingerprints_seen.add(fingerprint)
-                split_counts[split] += 1
-        if files[f"{split}.jsonl"].get("records") != split_counts[split]:
-            raise DatasetVerificationError(f"{split}.jsonl record count does not match manifest")
-
-    provenance_path = _safe_release_file(root, "provenance.jsonl")
     provenance_count = 0
-    source_counts = {source_id: 0 for source_id in sources}
-    source_lines: set[tuple[str, int]] = set()
-    group_splits: dict[str, str] = {}
-    records_with_provenance: set[str] = set()
-    with provenance_path.open("r", encoding="utf-8") as handle:
-        for line_number, line in enumerate(handle, start=1):
-            if not line.strip():
-                raise DatasetVerificationError(
-                    f"provenance.jsonl:{line_number}: blank lines are not allowed"
-                )
-            item = _load_json(line, f"provenance.jsonl:{line_number}")
-            if not isinstance(item, dict):
-                raise DatasetVerificationError(
-                    f"provenance.jsonl:{line_number}: entry must be an object"
-                )
-            record_id = item.get("record_id")
-            source_id = item.get("source_id")
-            source_line = item.get("source_line")
-            if (
-                not isinstance(record_id, str)
-                or not isinstance(source_id, str)
-                or record_id not in record_splits
-                or source_id not in sources
-            ):
-                raise DatasetVerificationError(
-                    f"provenance.jsonl:{line_number}: unknown record or source"
-                )
-            if type(source_line) is not int or source_line < 1:
-                raise DatasetVerificationError(
-                    f"provenance.jsonl:{line_number}: source_line must be positive"
-                )
-            source_line_key = (source_id, source_line)
-            if source_line_key in source_lines:
-                raise DatasetVerificationError("duplicate source line in provenance")
-            source_lines.add(source_line_key)
-            source = sources[source_id]
-            if item.get("source_name") != source["name"]:
-                raise DatasetVerificationError("source name mismatch in provenance")
-            if item.get("source_sha256") != source["sha256"]:
-                raise DatasetVerificationError("source checksum mismatch in provenance")
-            if item.get("license_id") != source["license_id"]:
-                raise DatasetVerificationError("source license mismatch in provenance")
-            if item.get("record_fingerprint") != record_fingerprints[record_id]:
-                raise DatasetVerificationError("record fingerprint mismatch in provenance")
-            split = record_splits[record_id]
-            if item.get("split") != split:
-                raise DatasetVerificationError("provenance split does not match record split")
-            group_id = item.get("group_id")
-            if not isinstance(group_id, str) or not group_id:
-                raise DatasetVerificationError("provenance group_id is missing")
-            previous_split = group_splits.setdefault(group_id, split)
-            if previous_split != split:
-                raise DatasetVerificationError("a dataset group crosses train/validation/test splits")
-            source_counts[source_id] += 1
-            records_with_provenance.add(record_id)
-            provenance_count += 1
-
-    unique_records = len(record_splits)
     raw_records = sum(source["records_read"] for source in sources.values())
-    if source_counts != {source_id: source["records_read"] for source_id, source in sources.items()}:
-        raise DatasetVerificationError("per-source provenance counts do not match manifest")
-    if records_with_provenance != set(record_splits):
-        raise DatasetVerificationError("one or more released records have no provenance")
+    temporary_directory = tempfile.TemporaryDirectory(prefix="rusamodels-verify-")
+    try:
+        connection = sqlite3.connect(Path(temporary_directory.name) / "verify.sqlite3")
+        try:
+            _initialize_verification_db(connection)
+            for split in ("train", "validation", "test"):
+                path = _safe_release_file(root, f"{split}.jsonl")
+                with path.open("r", encoding="utf-8") as handle:
+                    for line_number, line in enumerate(handle, start=1):
+                        if not line.strip():
+                            raise DatasetVerificationError(
+                                f"{path.name}:{line_number}: blank lines are not allowed"
+                            )
+                        record = _load_json(line, f"{path.name}:{line_number}")
+                        if not isinstance(record, dict):
+                            raise DatasetVerificationError(
+                                f"{path.name}:{line_number}: record must be an object"
+                            )
+                        record_id = record.get("id")
+                        if not isinstance(record_id, str) or not record_id.strip():
+                            raise DatasetVerificationError(
+                                f"{path.name}:{line_number}: record id is missing"
+                            )
+                        try:
+                            fingerprint = _fingerprint(record)
+                        except (TypeError, ValueError) as exc:
+                            raise DatasetVerificationError(
+                                f"{path.name}:{line_number}: record cannot be fingerprinted"
+                            ) from exc
+                        try:
+                            connection.execute(
+                                "INSERT INTO records(record_id, split, fingerprint) VALUES (?, ?, ?)",
+                                (record_id, split, fingerprint),
+                            )
+                        except sqlite3.IntegrityError as exc:
+                            duplicate_id = connection.execute(
+                                "SELECT 1 FROM records WHERE record_id = ?", (record_id,)
+                            ).fetchone()
+                            if duplicate_id:
+                                raise DatasetVerificationError(
+                                    f"record id occurs more than once: {record_id}"
+                                ) from exc
+                            raise DatasetVerificationError(
+                                "duplicate content crosses or repeats dataset splits"
+                            ) from exc
+                        split_counts[split] += 1
+                if split_counts[split] == 0:
+                    raise DatasetVerificationError(f"{split} split is empty")
+                if files[f"{split}.jsonl"].get("records") != split_counts[split]:
+                    raise DatasetVerificationError(
+                        f"{split}.jsonl record count does not match manifest"
+                    )
+            connection.commit()
+
+            provenance_path = _safe_release_file(root, "provenance.jsonl")
+            with provenance_path.open("r", encoding="utf-8") as handle:
+                for line_number, line in enumerate(handle, start=1):
+                    if not line.strip():
+                        raise DatasetVerificationError(
+                            f"provenance.jsonl:{line_number}: blank lines are not allowed"
+                        )
+                    item = _load_json(line, f"provenance.jsonl:{line_number}")
+                    if not isinstance(item, dict):
+                        raise DatasetVerificationError(
+                            f"provenance.jsonl:{line_number}: entry must be an object"
+                        )
+                    record_id = item.get("record_id")
+                    source_id = item.get("source_id")
+                    source_line = item.get("source_line")
+                    if (
+                        not isinstance(record_id, str)
+                        or not isinstance(source_id, str)
+                        or record_id == ""
+                        or source_id not in sources
+                    ):
+                        raise DatasetVerificationError(
+                            f"provenance.jsonl:{line_number}: unknown record or source"
+                        )
+                    if type(source_line) is not int or source_line < 1:
+                        raise DatasetVerificationError(
+                            f"provenance.jsonl:{line_number}: source_line must be positive"
+                        )
+                    source = sources[source_id]
+                    if item.get("source_name") != source["name"]:
+                        raise DatasetVerificationError("source name mismatch in provenance")
+                    if item.get("source_sha256") != source["sha256"]:
+                        raise DatasetVerificationError("source checksum mismatch in provenance")
+                    if item.get("license_id") != source["license_id"]:
+                        raise DatasetVerificationError("source license mismatch in provenance")
+                    record = connection.execute(
+                        "SELECT split, fingerprint FROM records WHERE record_id = ?",
+                        (record_id,),
+                    ).fetchone()
+                    if record is None:
+                        raise DatasetVerificationError(
+                            f"provenance references unknown record: {record_id}"
+                        )
+                    if item.get("record_fingerprint") != record[1]:
+                        raise DatasetVerificationError("record fingerprint mismatch in provenance")
+                    if item.get("split") != record[0]:
+                        raise DatasetVerificationError("provenance split does not match record split")
+                    group_id = item.get("group_id")
+                    if not isinstance(group_id, str) or not group_id:
+                        raise DatasetVerificationError("provenance group_id is missing")
+                    existing_group = connection.execute(
+                        "SELECT split FROM group_splits WHERE group_id = ?", (group_id,)
+                    ).fetchone()
+                    if existing_group and existing_group[0] != record[0]:
+                        raise DatasetVerificationError(
+                            "a dataset group crosses train/validation/test splits"
+                        )
+                    connection.execute(
+                        "INSERT OR IGNORE INTO group_splits(group_id, split) VALUES (?, ?)",
+                        (group_id, record[0]),
+                    )
+                    existing_record_group = connection.execute(
+                        "SELECT group_id FROM record_groups WHERE record_id = ?",
+                        (record_id,),
+                    ).fetchone()
+                    if existing_record_group and existing_record_group[0] != group_id:
+                        raise DatasetVerificationError(
+                            "one deduplicated record has conflicting group provenance"
+                        )
+                    connection.execute(
+                        "INSERT OR IGNORE INTO record_groups(record_id, group_id) VALUES (?, ?)",
+                        (record_id, group_id),
+                    )
+                    try:
+                        connection.execute(
+                            "INSERT INTO source_lines(source_id, source_line) VALUES (?, ?)",
+                            (source_id, source_line),
+                        )
+                    except sqlite3.IntegrityError as exc:
+                        raise DatasetVerificationError(
+                            "duplicate source line in provenance"
+                        ) from exc
+                    connection.execute(
+                        "INSERT OR IGNORE INTO provenance_records(record_id) VALUES (?)",
+                        (record_id,),
+                    )
+                    provenance_count += 1
+            connection.commit()
+
+            unique_records = connection.execute(
+                "SELECT COUNT(*) FROM records"
+            ).fetchone()[0]
+            records_with_provenance = connection.execute(
+                "SELECT COUNT(*) FROM provenance_records"
+            ).fetchone()[0]
+            if records_with_provenance != unique_records:
+                raise DatasetVerificationError(
+                    "one or more released records have no provenance"
+                )
+            if connection.execute(
+                "SELECT COUNT(*) FROM record_groups"
+            ).fetchone()[0] != unique_records:
+                raise DatasetVerificationError(
+                    "one or more released records have inconsistent group provenance"
+                )
+            source_line_counts = dict(connection.execute(
+                "SELECT source_id, COUNT(*) FROM source_lines GROUP BY source_id"
+            ).fetchall())
+            for source_id, source in sources.items():
+                if source_line_counts.get(source_id, 0) != source["records_read"]:
+                    raise DatasetVerificationError(
+                        f"source {source_id}: provenance count does not match records_read"
+                    )
+        finally:
+            connection.close()
+    except sqlite3.Error as exc:
+        raise DatasetVerificationError(f"dataset verification database error: {exc}") from exc
+    finally:
+        temporary_directory.cleanup()
+
     if provenance_count != raw_records:
         raise DatasetVerificationError("provenance count does not match raw record count")
+    unique_records = sum(split_counts.values())
     if records_meta.get("raw_records") != raw_records:
         raise DatasetVerificationError("raw record count does not match source metadata")
     if records_meta.get("unique_records") != unique_records:
@@ -265,7 +388,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         result = verify_dataset_release(args.release)
-    except (DatasetVerificationError, OSError, UnicodeError) as exc:
+    except (DatasetVerificationError, OSError, UnicodeError, sqlite3.Error) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
     print(json.dumps(result, ensure_ascii=False, indent=2))
