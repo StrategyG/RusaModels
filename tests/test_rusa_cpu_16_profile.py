@@ -160,6 +160,8 @@ def test_rusa_edge_8_profile_preserves_architecture_limits_and_device_targets():
     assert profile["model"]["target_parameter_range"]["maximum"] == 1500000000
     assert profile["model"]["architecture_reference"]["parameter_count"] == 1541277696
     assert profile["model"]["architecture_reference"]["fit_status"] == "not_validated_against_8gb_device"
+    assert profile["model"]["checkpoint"]["non_qwen_lineage_status"] == "NOT_VERIFIED"
+    assert profile["model"]["checkpoint"]["architecture_relation"] == "NOT_AUDITED"
     assert profile["runtime"]["context_tokens"] == 4096
     assert profile["runtime"]["sessions"] == 1
     assert profile["runtime"]["active_generations"] == 1

@@ -130,7 +130,25 @@ try {
         $modelManifest.checkpoint.repository -match '(?i)^Qwen/') {
         throw "Deployment requires an approved non-Qwen checkpoint repository."
     }
-    if ($modelManifest.checkpoint.immutable_revision -notmatch '^[0-9a-fA-F]{40}
+    if ($modelManifest.checkpoint.immutable_revision -notmatch '^[0-9a-fA-F]{40}\z' -or
+        [string]::IsNullOrWhiteSpace([string]$modelManifest.checkpoint.license) -or
+        $modelManifest.checkpoint.compatibility_status -ne "VERIFIED") {
+        throw "An immutable checkpoint revision, license and compatibility evidence are required."
+    }
+    if ($modelManifest.checkpoint.non_qwen_lineage_status -ne "VERIFIED") {
+        throw "Checkpoint provenance must verify that the selected foundation lineage is non-Qwen."
+    }
+    $architectureRelation = $modelManifest.checkpoint.architecture_relation
+    $actualParameterCount = [int64]$modelManifest.checkpoint.actual_parameter_count
+    if ($architectureRelation -notin @("IDENTICAL", "DERIVATIVE_ADAPTATION") -or
+        $actualParameterCount -le 0 -or
+        $modelManifest.checkpoint.actual_configuration_sha256 -notmatch '^[0-9a-fA-F]{64}\z') {
+        throw "Record the audited checkpoint architecture relation, actual parameter count and configuration SHA-256."
+    }
+    if ($architectureRelation -eq "IDENTICAL" -and
+        $actualParameterCount -ne [int64]$modelManifest.architecture.target_parameters) {
+        throw "An IDENTICAL checkpoint must match the RusaAi-Edge reference parameter count."
+    }
     if ($modelManifest.tokenizer.status -ne "VALIDATED" -or
         $modelManifest.tokenizer.chat_template_status -ne "VALIDATED" -or
         [string]::IsNullOrWhiteSpace([string]$modelManifest.tokenizer.repository) -or

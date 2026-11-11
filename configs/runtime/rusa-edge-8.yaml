@@ -34,6 +34,10 @@ model:
   checkpoint:
     selection_status: NOT_SELECTED
     requirement: non_qwen_open_weight
+    non_qwen_lineage_status: NOT_VERIFIED
+    architecture_relation: NOT_AUDITED
+    actual_parameter_count: null
+    actual_configuration_sha256: null
   tokenizer:
     status: NOT_SELECTED
   training:
