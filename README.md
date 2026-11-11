@@ -10,8 +10,9 @@ Standard RusaModels deployments use two independent services backed by one share
 - **Quant Server** — model inspection, conversion and GGUF quantization service boundary.
 - **Native Windows RUSA-CPU-16** — locked local-edge baseline for Intel Core i5 / 16 GB RAM using Qwen3-4B GGUF Q4_K_M, llama.cpp, 8K context and one active generation.
 - **Codespaces CPU Runtime** — separate optional development profile with private llama.cpp and SentenceTransformers sidecars; it is not the Windows RUSA-CPU-16 baseline.
-- **Shared PostgreSQL** — registry metadata, model versions, upload sessions and audit events.
-- **Shared S3-compatible storage** — immutable model artifacts.
+- **Shared PostgreSQL** — registry metadata, model versions, upload sessions and audit events in standard multi-service deployments.
+- **Shared S3-compatible storage** — immutable model artifacts in standard multi-service deployments.
+- **RUSA-CPU-16 edge storage** — local SQLite and local artifact files; no PostgreSQL or S3 dependency.
 
 RusaAi is an authenticated service consumer. It does not connect directly to the RusaModels database or object storage.
 
@@ -20,7 +21,7 @@ RusaAi is an authenticated service consumer. It does not connect directly to the
 - Separate FastAPI Model Server and Quant Server entry points plus an independent Quant Worker.
 - Optional OpenAI-compatible chat, completion, embedding and model-list proxy endpoints on Model Server, with streaming support and a separately configured upstream runtime.
 - PostgreSQL/SQLite adapters and Alembic migrations.
-- S3-compatible and development-only local artifact storage.
+- S3-compatible storage for standard deployments and local artifact storage for development/edge deployments.
 - Viewer, inference-only, Manager and Administrator roles, hashed bearer tokens and separate service-token authentication.
 - Model catalog CRUD, version registration and administrator-only archival.
 - Resumable multipart uploads, per-part checksums, object-level SHA-256 verification and streamed artifact downloads.
@@ -38,7 +39,7 @@ RusaAi is an authenticated service consumer. It does not connect directly to the
 
 ## Not yet implemented
 
-Dynamic model loading/deployment, multi-model routing, scheduling, automated training orchestration and dashboard. The standard Model Server profile still requires an explicitly configured upstream runtime; the optional CPU Codespaces profile supplies llama.cpp and embedding sidecars for development. The QLoRA training workflow is a separate CUDA-only candidate workflow and is not part of CPU inference. Safetensors conversion requires `pip install -e ".[quantization]"`. GGUF conversion requires a separately installed llama.cpp `convert_hf_to_gguf.py` and `llama-quantize`, configured with `LLAMA_CPP_CONVERT_SCRIPT` and `LLAMA_QUANTIZE_BIN`. The GGUF adapter allowlists Llama, Qwen2/Qwen3 and DeepSeek model types by default, with explicit configuration for extensions. Actual compatibility remains dependent on the installed upstream converter version. These features are not advertised as operational until implemented and tested.
+Dynamic model loading/deployment, multi-model routing, scheduling, automated training orchestration and dashboard. The standard Model Server profile still requires an explicitly configured upstream runtime; the native RUSA-CPU-16 edge profile supplies one fixed local llama.cpp upstream, while the optional CPU Codespaces profile supplies llama.cpp and embedding sidecars for development. The edge profile is not a dynamic model loader or multi-model router. The QLoRA training workflow is a separate CUDA-only candidate workflow and is not part of CPU inference. Safetensors conversion requires `pip install -e ".[quantization]"`. GGUF conversion requires a separately installed llama.cpp `convert_hf_to_gguf.py` and `llama-quantize`, configured with `LLAMA_CPP_CONVERT_SCRIPT` and `LLAMA_QUANTIZE_BIN`. The GGUF adapter allowlists Llama, Qwen2/Qwen3 and DeepSeek model types by default, with explicit configuration for extensions. Actual compatibility remains dependent on the installed upstream converter version. These features are not advertised as operational until implemented and tested.
 
 ## Local development
 
