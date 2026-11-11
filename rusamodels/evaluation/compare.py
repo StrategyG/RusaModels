@@ -38,12 +38,20 @@ def _validate_report(report: dict[str, Any], label: str) -> tuple[dict, dict[str
     results = report.get("results")
     if not all(isinstance(item, dict) for item in (benchmark, model, summary)):
         raise BenchmarkComparisonError(f"{label} report is missing benchmark/model/summary metadata")
-    for key in ("suite_id", "suite_version", "file_sha256"):
+    for key in ("suite_id", "suite_version", "file_sha256", "manifest_sha256"):
         if not isinstance(benchmark.get(key), str) or not benchmark[key]:
             raise BenchmarkComparisonError(f"{label} report is missing benchmark.{key}")
-    suite_digest = benchmark["file_sha256"]
-    if len(suite_digest) != 64 or any(char not in "0123456789abcdef" for char in suite_digest):
-        raise BenchmarkComparisonError(f"{label} report has an invalid benchmark digest")
+    for digest_key in ("file_sha256", "manifest_sha256"):
+        suite_digest = benchmark[digest_key]
+        if len(suite_digest) != 64 or any(char not in "0123456789abcdef" for char in suite_digest):
+            raise BenchmarkComparisonError(f"{label} report has an invalid benchmark {digest_key}")
+    artifact_digest = model.get("artifact_sha256")
+    if (
+        not isinstance(artifact_digest, str)
+        or len(artifact_digest) != 64
+        or any(char not in "0123456789abcdef" for char in artifact_digest)
+    ):
+        raise BenchmarkComparisonError(f"{label} report must identify the exact model artifact SHA-256")
     if not isinstance(model.get("id"), str) or not model["id"]:
         raise BenchmarkComparisonError(f"{label} report is missing model.id")
     if not isinstance(results, list) or not results:
