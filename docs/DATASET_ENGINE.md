@@ -91,6 +91,21 @@ The splitter requires at least three distinct groups so all three splits can be 
 python -m rusamodels.dataset_verification --release artifacts/datasets/rusaai-agent-sft-curated/0.1.0
 ~~~
 
+## Near-duplicate and split-leakage analysis
+
+Run the SimHash quality check after building and verifying a dataset release:
+
+~~~bash
+python -m rusamodels.dataset_quality \
+  --release artifacts/datasets/rusaai-agent-sft-curated/0.1.0 \
+  --output artifacts/reports/rusaai-agent-sft-curated-0.1.0.near-duplicates.jsonl
+~~~
+
+The analyzer uses 64-bit word-trigram SimHash and eight 8-bit LSH bands. It verifies each candidate using exact Hamming distance (default maximum seven bits), excludes records from the same pseudonymized group, and writes a report outside the immutable release directory. The CLI exits with code 1 when a near-duplicate pair crosses train/validation/test splits, making it usable as a release gate. Same-split pairs are also reported for review but do not by themselves trigger the cross-split failure exit code.
+
+This is a lexical similarity heuristic, not semantic equivalence detection. It can miss paraphrases and can flag legitimate short/template-like examples. Review the report, calibrate the threshold on representative corpora, and run capacity tests before applying it to very large datasets. The LSH candidate guarantee is bounded to the configured 0-7 Hamming-distance range; thresholds above seven are rejected.
+
+
 The verifier checks:
 
 - Manifest digest and directory identity.
@@ -120,11 +135,11 @@ The dataset release pipeline preserves the existing SFT record shape (including 
 
 The following roadmap items are not implemented by this initial release builder:
 
-- Scalable near-duplicate detection.
+- Capacity-tested near-duplicate detection at representative dataset scale (the initial SimHash/LSH checker is implemented; threshold calibration and large-corpus benchmarks remain).
 - Language identification and language-aware quality metrics.
 - Configurable quality classifiers and filtering reports.
 - Human annotation/review workflow and reviewer provenance.
-- Evaluation contamination checks against frozen benchmark sets.
+- Evaluation contamination checks against frozen benchmark sets (the near-duplicate checker currently checks only within one released dataset, not against external frozen benchmark corpora).
 - Tokenizer-aware preprocessing and sequence packing.
 - Dataset registry integration and registry-level promotion/retention.
 - External object-storage upload/download for dataset releases.
