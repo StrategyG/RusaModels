@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rusa-models.local/schemas/model-manifest-v1.schema.json",
+  "title": "RusaModels Model Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "model_id",
+    "model_version",
+    "model_type",
+    "architecture",
+    "tokenizer",
+    "source",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "model_id": { "type": "string", "minLength": 1, "maxLength": 255 },
+    "model_version": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "model_type": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "architecture": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "architecture_config": { "type": "object" },
+    "tokenizer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "version": { "type": "string", "minLength": 1, "maxLength": 255 }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "revision", "license"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "revision": { "type": "string", "pattern": "^[a-fA-F0-9]{7,64}$" },
+        "license": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "usage_restrictions": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "type": "string", "minLength": 1, "maxLength": 512 }
+        }
+      }
+    },
+    "training": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["dataset_release", "config_digest", "code_revision"],
+      "properties": {
+        "dataset_release": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "config_digest": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "code_revision": { "type": "string", "pattern": "^[a-fA-F0-9]{7,64}$" }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "format", "size_bytes", "sha256"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$" },
+          "format": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "quantization": { "type": ["string", "null"], "maxLength": 64 },
+          "size_bytes": { "type": "integer", "minimum": 1 },
+          "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" }
+        }
+      }
+    },
+    "evaluation": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["report_id"],
+      "properties": {
+        "report_id": { "type": "string", "minLength": 1, "maxLength": 255 }
+      }
+    }
+  }
+}

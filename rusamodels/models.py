@@ -13,6 +13,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -40,7 +41,16 @@ class ModelCatalog(Base):
 
 class ModelVersion(Base):
     __tablename__ = "model_versions"
-    __table_args__ = (UniqueConstraint("model_id", "version", name="uq_model_version"),)
+    __table_args__ = (
+        UniqueConstraint("model_id", "version", name="uq_model_version"),
+        Index(
+            "uq_model_versions_single_approved",
+            "model_id",
+            unique=True,
+            sqlite_where=text("lifecycle_status = 'approved'"),
+            postgresql_where=text("lifecycle_status = 'approved'"),
+        ),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     model_id: Mapped[str] = mapped_column(String(36), ForeignKey("model_catalog.id", ondelete="RESTRICT"), nullable=False)
     version: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -48,6 +58,14 @@ class ModelVersion(Base):
     precision: Mapped[str | None] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="registered")
     manifest_sha256: Mapped[str | None] = mapped_column(String(64))
+    artifact_index_sha256: Mapped[str | None] = mapped_column(String(64))
+    manifest_json: Mapped[dict | None] = mapped_column(JSON)
+    lifecycle_status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    approved_by: Mapped[str | None] = mapped_column(String(255))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    supersedes_version_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("model_versions.id", ondelete="RESTRICT")
+    )
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -62,6 +80,16 @@ class Artifact(Base):
     media_type: Mapped[str | None] = mapped_column(String(255))
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by: Mapped[str | None] = mapped_column(String(255))
+    source_job_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("model_jobs.id", ondelete="RESTRICT")
+    )
+    provenance: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=dict)
+    retention_class: Mapped[str] = mapped_column(String(32), nullable=False, default="standard")
+    retention_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    legal_hold: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     immutable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

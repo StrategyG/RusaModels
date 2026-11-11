@@ -1,5 +1,6 @@
 """Shared API factory for Model Server and Quant Server."""
 import hashlib
+import hmac
 import re
 import time
 import uuid
@@ -31,7 +32,14 @@ from rusamodels.schemas import (
     UploadCreate,
     UploadOut,
     VersionCreate,
+    VersionLifecycleUpdate,
+    ArtifactRetentionUpdate,
     VersionOut,
+)
+from rusamodels.manifests import (
+    ModelManifest,
+    canonical_manifest_sha256,
+    manifest_artifacts_match,
 )
 from rusamodels.hub import search_models
 from rusamodels.inference import check_runtime_readiness, openai_model_list, proxy_openai_request
@@ -381,6 +389,243 @@ def create_service_app(
         audit(db, request, principal, "versions.create", f"model-version:{item.id}")
         return item
 
+
+    @app.put(
+        "/v1/models/{model_id}/versions/{version_id}/manifest",
+        tags=["versions"],
+    )
+    def put_model_manifest(
+        model_id: str,
+        version_id: str,
+        payload: ModelManifest,
+        request: Request,
+        principal: Principal = Depends(roles("manager", "administrator")),
+        db: Session = Depends(get_db),
+    ):
+        if service_name != "quant-server":
+            raise HTTPException(404, "Model manifest writes are available only on Quant Server")
+        version = db.scalar(
+            select(ModelVersion)
+            .where(ModelVersion.id == version_id, ModelVersion.model_id == model_id)
+            .with_for_update()
+        )
+        if version is None:
+            raise HTTPException(404, "Model version not found")
+        if version.lifecycle_status != "draft" or version.manifest_json is not None:
+            raise HTTPException(409, "A model manifest can be attached only once to a draft version")
+        if version.status in {"queued", "failed", "cancelled"}:
+            raise HTTPException(409, "A model manifest cannot be attached while the model job is incomplete or failed")
+        if payload.model_id != model_id or payload.model_version != version.version:
+            raise HTTPException(422, "Manifest model identity does not match the registry version")
+        model = db.get(ModelCatalog, model_id)
+        if version.source_revision and payload.source.revision != version.source_revision:
+            raise HTTPException(422, "Manifest source revision does not match the registered version")
+        if model.architecture and payload.architecture != model.architecture:
+            raise HTTPException(422, "Manifest architecture does not match the model registry")
+        if model.license_id and payload.source.license.lower() != model.license_id.lower():
+            raise HTTPException(422, "Manifest license does not match the model registry")
+        pending_upload = db.scalar(
+            select(UploadSession.id)
+            .where(UploadSession.version_id == version_id, UploadSession.status == "open")
+            .limit(1)
+        )
+        if pending_upload is not None:
+            raise HTTPException(409, "Complete or abort all uploads before attaching the manifest")
+        registered_artifacts = db.scalars(
+            select(Artifact).where(Artifact.version_id == version_id)
+        ).all()
+        if not manifest_artifacts_match(payload, registered_artifacts):
+            raise HTTPException(409, "Manifest must exactly match all registered live artifacts")
+        digest = canonical_manifest_sha256(payload)
+        if version.manifest_sha256 and not hmac.compare_digest(
+            version.manifest_sha256.lower(), digest
+        ):
+            raise HTTPException(422, "Manifest SHA-256 does not match the registered digest")
+        version.manifest_json = payload.model_dump(mode="json")
+        version.manifest_sha256 = digest
+        db.commit()
+        audit(
+            db, request, principal, "versions.manifest.attached",
+            f"model-version:{version_id}",
+            {"manifest_sha256": digest, "artifact_count": len(payload.artifacts)},
+        )
+        return {
+            "model_id": model_id,
+            "model_version": version.version,
+            "manifest": version.manifest_json,
+            "sha256": digest,
+            "lifecycle_status": version.lifecycle_status,
+        }
+
+    @app.get(
+        "/v1/models/{model_id}/versions/{version_id}/manifest",
+        tags=["versions"],
+    )
+    def get_model_manifest(
+        model_id: str,
+        version_id: str,
+        request: Request,
+        principal: Principal = Depends(roles("viewer", "manager", "administrator")),
+        db: Session = Depends(get_db),
+    ):
+        version = db.get(ModelVersion, version_id)
+        if version is None or version.model_id != model_id:
+            raise HTTPException(404, "Model version not found")
+        if version.manifest_json is None or not version.manifest_sha256:
+            raise HTTPException(404, "Model manifest not found")
+        try:
+            manifest = ModelManifest.model_validate(version.manifest_json)
+        except Exception as exc:
+            raise HTTPException(500, "Stored model manifest is invalid") from exc
+        digest = canonical_manifest_sha256(manifest)
+        if not hmac.compare_digest(digest, version.manifest_sha256.lower()):
+            raise HTTPException(500, "Stored model manifest failed SHA-256 verification")
+        audit(
+            db, request, principal, "versions.manifest.read",
+            f"model-version:{version_id}", {"manifest_sha256": digest},
+        )
+        return {
+            "model_id": model_id,
+            "model_version": version.version,
+            "manifest": version.manifest_json,
+            "sha256": digest,
+            "lifecycle_status": version.lifecycle_status,
+        }
+
+    @app.post(
+        "/v1/models/{model_id}/versions/{version_id}/lifecycle",
+        response_model=VersionOut,
+        tags=["versions"],
+    )
+    def transition_version_lifecycle(
+        model_id: str,
+        version_id: str,
+        payload: VersionLifecycleUpdate,
+        request: Request,
+        principal: Principal = Depends(roles("manager", "administrator")),
+        db: Session = Depends(get_db),
+    ):
+        if service_name != "quant-server":
+            raise HTTPException(404, "Model lifecycle writes are available only on Quant Server")
+        version = db.scalar(
+            select(ModelVersion)
+            .where(ModelVersion.id == version_id, ModelVersion.model_id == model_id)
+            .with_for_update()
+        )
+        if version is None:
+            raise HTTPException(404, "Model version not found")
+        current = version.lifecycle_status or "draft"
+        target = payload.status
+        allowed = {
+            "draft": {"candidate", "archived"},
+            "candidate": {"evaluated", "archived"},
+            "evaluated": {"approved", "archived"},
+            "approved": {"deprecated"},
+            "deprecated": {"approved", "archived"},
+            "archived": set(),
+        }
+        if target not in allowed.get(current, set()):
+            raise HTTPException(409, f"Invalid model lifecycle transition: {current} -> {target}")
+        if target in {"candidate", "evaluated", "approved"} and version.status in {
+            "queued", "failed", "cancelled"
+        }:
+            raise HTTPException(409, "Only completed model versions can enter the release lifecycle")
+        if target in {"approved", "deprecated", "archived"} and principal.role != "administrator":
+            raise HTTPException(403, "Administrator approval is required for this lifecycle transition")
+
+        manifest = None
+        artifacts = []
+        if target in {"candidate", "evaluated", "approved"}:
+            if version.manifest_json is None or not version.manifest_sha256:
+                raise HTTPException(409, "A verified model manifest is required")
+            try:
+                manifest = ModelManifest.model_validate(version.manifest_json)
+            except Exception as exc:
+                raise HTTPException(409, "Stored model manifest is invalid") from exc
+            digest = canonical_manifest_sha256(manifest)
+            if not hmac.compare_digest(digest, version.manifest_sha256.lower()):
+                raise HTTPException(409, "Model manifest SHA-256 verification failed")
+            artifacts = db.scalars(
+                select(Artifact).where(Artifact.version_id == version_id)
+            ).all()
+            if not manifest_artifacts_match(manifest, artifacts):
+                raise HTTPException(409, "Manifest does not exactly match the registered live artifacts")
+
+        if target in {"evaluated", "approved"} and (
+            manifest is None or manifest.evaluation is None
+        ):
+            raise HTTPException(409, "An evaluation report ID is required before evaluation or approval")
+
+        now = datetime.now(UTC)
+        if target == "approved":
+            # Serialize promotion decisions per model; the partial unique index is
+            # the database-level backstop for concurrent approvals.
+            db.scalar(
+                select(ModelCatalog)
+                .where(ModelCatalog.id == model_id)
+                .with_for_update()
+            )
+            for artifact in artifacts:
+                digest = hashlib.sha256()
+                total_size = 0
+                try:
+                    for chunk in artifact_storage.read_stream(artifact.storage_key):
+                        digest.update(chunk)
+                        total_size += len(chunk)
+                except Exception as exc:
+                    raise HTTPException(502, "Artifact could not be read for approval verification") from exc
+                if (
+                    total_size != artifact.size_bytes
+                    or not hmac.compare_digest(digest.hexdigest(), artifact.sha256.lower())
+                ):
+                    raise HTTPException(409, "Artifact failed approval integrity verification")
+                artifact.verified_at = now
+
+            previous = db.scalar(
+                select(ModelVersion)
+                .where(
+                    ModelVersion.model_id == model_id,
+                    ModelVersion.lifecycle_status == "approved",
+                    ModelVersion.id != version_id,
+                )
+                .order_by(ModelVersion.approved_at.desc())
+                .with_for_update()
+            )
+            if previous is not None:
+                previous.lifecycle_status = "deprecated"
+                # Remove the prior row from the partial unique index before
+                # promoting the new row in the same transaction.
+                db.flush()
+                version.supersedes_version_id = previous.id
+            version.approved_by = principal.subject
+            version.approved_at = now
+
+        version.lifecycle_status = target
+        try:
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            if target != "approved":
+                raise
+            audit(
+                db, request, principal, "versions.lifecycle.transition",
+                f"model-version:{version_id}",
+                {"from": current, "to": target, "reason": "concurrent_approval"},
+                "failed",
+            )
+            raise HTTPException(409, "Another model version was approved concurrently") from exc
+        audit(
+            db, request, principal, "versions.lifecycle.transition",
+            f"model-version:{version_id}",
+            {
+                "from": current,
+                "to": target,
+                "supersedes_version_id": version.supersedes_version_id,
+            },
+        )
+        db.refresh(version)
+        return version
+
     @app.post("/v1/models/{model_id}/versions/{version_id}/uploads", response_model=UploadOut, status_code=201, tags=["artifacts"])
     def create_upload(
         model_id: str,
@@ -395,9 +640,17 @@ def create_service_app(
             raise HTTPException(404, "Artifact writes are available only on Quant Server")
         if payload.expected_size > runtime.max_upload_bytes:
             raise HTTPException(413, "Upload exceeds configured MAX_UPLOAD_BYTES")
-        version = db.get(ModelVersion, version_id)
-        if version is None or version.model_id != model_id:
+        version = db.scalar(
+            select(ModelVersion)
+            .where(ModelVersion.id == version_id, ModelVersion.model_id == model_id)
+            .with_for_update()
+        )
+        if version is None:
             raise HTTPException(404, "Model version not found")
+        if version.lifecycle_status != "draft" or version.manifest_json is not None:
+            raise HTTPException(409, "Artifacts can be added only before a manifest is attached")
+        if version.status in {"queued", "failed", "cancelled"}:
+            raise HTTPException(409, "Artifacts cannot be added while the model job is incomplete or failed")
         filename = payload.filename.replace("\\", "/").split("/")[-1]
         filename = _SAFE_FILENAME.sub("_", filename).strip("._")[:255]
         if not filename:
@@ -514,6 +767,26 @@ def create_service_app(
         upload = get_upload(db, upload_id)
         if upload.status != "open":
             raise HTTPException(409, "Upload session is not open")
+        version = db.scalar(
+            select(ModelVersion)
+            .where(ModelVersion.id == upload.version_id)
+            .with_for_update()
+        )
+        if (
+            version is None
+            or version.lifecycle_status != "draft"
+            or version.manifest_json is not None
+            or version.status in {"queued", "failed", "cancelled"}
+        ):
+            artifact_storage.abort_multipart(upload.storage_key, upload.storage_upload_id)
+            upload.status = "aborted"
+            db.commit()
+            audit(
+                db, request, principal, "artifacts.upload_aborted",
+                f"upload:{upload_id}", {"reason": "version_no_longer_accepts_artifacts"},
+                "failed",
+            )
+            raise HTTPException(409, "Model version no longer accepts artifact uploads")
         parts = db.scalars(
             select(UploadPart).where(UploadPart.upload_id == upload_id)
             .order_by(UploadPart.part_number.asc())
@@ -552,6 +825,14 @@ def create_service_app(
             version_id=upload.version_id, storage_key=upload.storage_key,
             original_filename=upload.original_filename, media_type=upload.media_type,
             size_bytes=total_size, sha256=actual_sha256, immutable=True,
+            created_by=principal.subject,
+            provenance={
+                "origin": "direct_upload",
+                "actor_subject": principal.subject,
+                "request_id": request.state.request_id,
+            },
+            retention_class="standard",
+            verified_at=datetime.now(UTC),
         )
         upload.status = "completed"
         db.add(artifact)
@@ -593,10 +874,37 @@ def create_service_app(
         db: Session = Depends(get_db),
     ):
         artifact = db.get(Artifact, artifact_id)
-        if artifact is None or not artifact.immutable:
+        if artifact is None or not artifact.immutable or artifact.deleted_at is not None:
             raise HTTPException(404, "Artifact not found")
-        audit(db, request, principal, "artifacts.download", f"artifact:{artifact_id}",
-              {"size_bytes": artifact.size_bytes, "sha256": artifact.sha256})
+        digest = hashlib.sha256()
+        total_size = 0
+        try:
+            for chunk in artifact_storage.read_stream(artifact.storage_key):
+                digest.update(chunk)
+                total_size += len(chunk)
+        except Exception as exc:
+            audit(
+                db, request, principal, "artifacts.download",
+                f"artifact:{artifact_id}", {"error_type": type(exc).__name__}, "failed",
+            )
+            raise HTTPException(502, "Artifact could not be read from storage") from exc
+        if (
+            total_size != artifact.size_bytes
+            or not hmac.compare_digest(digest.hexdigest(), artifact.sha256.lower())
+        ):
+            audit(
+                db, request, principal, "artifacts.integrity.failed",
+                f"artifact:{artifact_id}",
+                {"actual_size": total_size, "actual_sha256": digest.hexdigest()},
+                "failed",
+            )
+            raise HTTPException(502, "Artifact failed SHA-256 integrity verification")
+        artifact.verified_at = datetime.now(UTC)
+        db.commit()
+        audit(
+            db, request, principal, "artifacts.integrity.verified",
+            f"artifact:{artifact_id}", {"size_bytes": total_size, "sha256": digest.hexdigest()},
+        )
         filename = quote(artifact.original_filename or "artifact.bin")
         headers = {
             "Content-Disposition": f"attachment; filename*=UTF-8''{filename}",
@@ -608,6 +916,96 @@ def create_service_app(
             media_type=artifact.media_type or "application/octet-stream",
             headers=headers,
         )
+
+
+    @app.patch(
+        "/v1/artifacts/{artifact_id}/retention",
+        response_model=ArtifactOut,
+        tags=["artifacts"],
+    )
+    def update_artifact_retention(
+        artifact_id: str,
+        payload: ArtifactRetentionUpdate,
+        request: Request,
+        principal: Principal = Depends(roles("administrator")),
+        db: Session = Depends(get_db),
+    ):
+        if service_name != "quant-server":
+            raise HTTPException(404, "Artifact retention writes are available only on Quant Server")
+        artifact = db.get(Artifact, artifact_id)
+        if artifact is None or artifact.deleted_at is not None:
+            raise HTTPException(404, "Artifact not found")
+        changes = payload.model_dump(exclude_unset=True)
+        if not changes:
+            raise HTTPException(422, "At least one retention field must be supplied")
+        effective_class = changes.get("retention_class", artifact.retention_class)
+        effective_expiry = changes.get("retention_until", artifact.retention_until)
+        if effective_class == "temporary" and effective_expiry is None:
+            raise HTTPException(422, "Temporary artifacts require an explicit retention_until")
+        for key, value in changes.items():
+            setattr(artifact, key, value)
+        db.commit()
+        db.refresh(artifact)
+        audit(
+            db, request, principal, "artifacts.retention.updated",
+            f"artifact:{artifact_id}",
+            {
+                "retention_class": artifact.retention_class,
+                "retention_until": artifact.retention_until.isoformat()
+                if artifact.retention_until else None,
+                "legal_hold": artifact.legal_hold,
+            },
+        )
+        return artifact
+
+    @app.delete("/v1/artifacts/{artifact_id}", status_code=204, tags=["artifacts"])
+    def purge_artifact(
+        artifact_id: str,
+        request: Request,
+        principal: Principal = Depends(roles("administrator")),
+        db: Session = Depends(get_db),
+    ):
+        if service_name != "quant-server":
+            raise HTTPException(404, "Artifact retention writes are available only on Quant Server")
+        artifact = db.get(Artifact, artifact_id)
+        if artifact is None or artifact.deleted_at is not None:
+            raise HTTPException(404, "Artifact not found")
+        if artifact.legal_hold:
+            raise HTTPException(409, "Artifact is protected by legal hold")
+        now = datetime.now(UTC)
+        if artifact.retention_until is None:
+            raise HTTPException(409, "Artifact has no expiry date and is retained by policy")
+        expiry = artifact.retention_until
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=UTC)
+        if expiry > now:
+            raise HTTPException(409, "Artifact retention period has not expired")
+        version = db.get(ModelVersion, artifact.version_id)
+        if version is None:
+            raise HTTPException(409, "Artifact version metadata is unavailable")
+        if version.lifecycle_status not in {"draft", "archived"}:
+            raise HTTPException(409, "Only draft or archived model artifacts may be purged")
+        if version.manifest_json is not None and version.lifecycle_status != "archived":
+            raise HTTPException(409, "A manifested model version must be archived before purge")
+        # Commit the tombstone first so a storage failure can never leave a
+        # missing object advertised as a live, downloadable artifact.
+        artifact.deleted_at = now
+        db.commit()
+        try:
+            artifact_storage.delete(artifact.storage_key)
+        except Exception as exc:
+            audit(
+                db, request, principal, "artifacts.purge_failed",
+                f"artifact:{artifact_id}", {"error_type": type(exc).__name__}, "failed",
+            )
+            raise HTTPException(
+                502, "Artifact was tombstoned but object-store cleanup failed"
+            ) from exc
+        audit(
+            db, request, principal, "artifacts.purged", f"artifact:{artifact_id}",
+            {"sha256": artifact.sha256, "size_bytes": artifact.size_bytes},
+        )
+        return None
 
     @app.delete("/v1/uploads/{upload_id}", status_code=204, tags=["artifacts"])
     def abort_upload(
