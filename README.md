@@ -28,7 +28,7 @@ RusaAi is an authenticated service consumer. It does not connect directly to the
 - Independent chat and embedding upstream configuration, allowing local LLM and embedding runtimes to use separate CPU services.
 - CPU-only Codespaces inference profile with private llama.cpp and local embedding containers, bounded CPU/RAM limits and no published runtime ports.
 - Migrated agent SFT dataset validation, QLoRA training, held-out evaluation, adapter merge, GGUF checksum verification and inference benchmark tools.
-- Frozen, versioned OpenAI-compatible benchmark runner with per-category scoring, latency/token reports, and minimum-accuracy release gates.
+- Frozen, versioned OpenAI-compatible benchmark runner with per-category scoring, latency/token reports, and minimum-accuracy release gates. Includes full-precision versus quantized regression comparison.
 - Verified model-version artifact download and pinned local embedding snapshot utilities.
 - Immutable Hugging Face commit pinning, upstream license verification, and artifact manifests with SHA-256 digests.
 - Separate Quant Worker with database leases, heartbeat renewal, stale-worker fencing, bounded retries for transient failures and cooperative cancellation.
