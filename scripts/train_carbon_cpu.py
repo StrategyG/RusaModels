@@ -22,8 +22,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from rusamodels.carbon_cpu.model import CarbonConfig, CarbonTiny, count_parameters  # noqa: E402
-from rusamodels.carbon_cpu.model import EOS_TOKEN_ID
+from rusamodels.carbon_cpu.model import (  # noqa: E402
+    CarbonConfig,
+    CarbonTiny,
+    EOS_TOKEN_ID,
+    count_parameters,
+)
 
 
 def resolve_path(value: str | Path, root: Path = ROOT) -> Path:
