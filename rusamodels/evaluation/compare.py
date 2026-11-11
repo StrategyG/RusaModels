@@ -15,6 +15,15 @@ class BenchmarkComparisonError(ValueError):
     """Raised when benchmark reports cannot be compared safely."""
 
 
+def _unique_object_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
 def _load_report(path: str | Path) -> dict[str, Any]:
     raw_source = Path(path).expanduser()
     if raw_source.is_symlink():
@@ -23,8 +32,14 @@ def _load_report(path: str | Path) -> dict[str, Any]:
     if not source.is_file():
         raise BenchmarkComparisonError(f"benchmark report does not exist or is unsafe: {source}")
     try:
-        report = json.loads(source.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeError) as exc:
+        report = json.loads(
+            source.read_text(encoding="utf-8"),
+            parse_constant=lambda value: (_ for _ in ()).throw(
+                ValueError(f"non-standard JSON constant: {value}")
+            ),
+            object_pairs_hook=_unique_object_pairs,
+        )
+    except (json.JSONDecodeError, UnicodeError, ValueError) as exc:
         raise BenchmarkComparisonError(f"invalid benchmark report: {source}") from exc
     if not isinstance(report, dict) or report.get("schema_version") != "1.0.0":
         raise BenchmarkComparisonError(f"unsupported benchmark report schema: {source}")
