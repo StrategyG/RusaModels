@@ -97,8 +97,10 @@ Do not perform these steps with the current design-only manifest. They become va
 3. Record whether the checkpoint matches the reference architecture or creates a derivative/adaptation.
 4. Build or obtain a legally usable GGUF artifact and quantize to Q4_K_M.
 5. Record the exact filename and SHA-256 in the model manifest.
-6. Update the manifest statuses to `SELECTED`, `VERIFIED`, `VALIDATED`, and `BUILT` only when each step has evidence.
-7. Populate `.env` from `.env.rusa-cpu-16.example`, including the local artifact path and the same SHA-256 as the manifest.
+6. Record tokenizer repository/revision and chat-template validation; record artifact filename and SHA-256.
+7. Set the manifest statuses to `SELECTED`, `VERIFIED`, `VALIDATED`, and `BUILT` only when each step has evidence, then set the top-level status to `READY_FOR_DEVICE_VALIDATION`.
+8. Set `benchmark.context_8192_status: PASS` only after the target device passes the 8K RAM acceptance.
+9. Populate `.env` from `.env.rusa-cpu-16.example`, including the local artifact path and the same SHA-256 as the manifest.
 
 The manifest gate in `scripts/start_rusa_cpu_16.ps1` checks the non-Qwen repository, immutable revision, license, checkpoint compatibility, tokenizer/chat-template validation, GGUF Q4_K_M status and SHA-256 agreement. It refuses to start while any required evidence is missing.
 

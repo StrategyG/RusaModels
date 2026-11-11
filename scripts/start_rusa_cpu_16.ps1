@@ -120,6 +120,9 @@ try {
     if ($modelManifest.model_id -ne $modelId) {
         throw "The model manifest ID does not match RUSAMODELS_INFERENCE_MODEL_ID."
     }
+    if ($modelManifest.status -ne "READY_FOR_DEVICE_VALIDATION") {
+        throw "The model manifest must be READY_FOR_DEVICE_VALIDATION before runtime startup."
+    }
     if ($modelManifest.checkpoint.selection_status -ne "SELECTED") {
         throw "Deployment blocked: Architecture v2.0 requires a selected non-Qwen checkpoint; current status is $($modelManifest.checkpoint.selection_status)."
     }
@@ -133,14 +136,17 @@ try {
         throw "An immutable checkpoint revision, license and compatibility evidence are required."
     }
     if ($modelManifest.tokenizer.status -ne "VALIDATED" -or
-        $modelManifest.tokenizer.chat_template_status -ne "VALIDATED") {
-        throw "Tokenizer and chat template must be validated before deployment."
+        $modelManifest.tokenizer.chat_template_status -ne "VALIDATED" -or
+        [string]::IsNullOrWhiteSpace([string]$modelManifest.tokenizer.repository) -or
+        $modelManifest.tokenizer.revision -notmatch '^[0-9a-fA-F]{40}$') {
+        throw "Tokenizer/chat template validation, repository and immutable revision are required."
     }
     if ($modelManifest.artifact.status -ne "BUILT" -or
         $modelManifest.artifact.format -ne "GGUF" -or
         $modelManifest.artifact.quantization -ne "Q4_K_M" -or
+        [string]::IsNullOrWhiteSpace([string]$modelManifest.artifact.filename) -or
         $modelManifest.artifact.sha256 -notmatch '^[0-9a-fA-F]{64}$') {
-        throw "A built GGUF Q4_K_M artifact with a recorded SHA-256 is required."
+        throw "A named, built GGUF Q4_K_M artifact with a recorded SHA-256 is required."
     }
     if ($env:RUSAMODELS_GGUF_MODEL_SHA256 -ine $modelManifest.artifact.sha256) {
         throw "The configured artifact SHA-256 does not match the approved model manifest."
@@ -180,6 +186,9 @@ try {
         throw "RUSAMODELS_GGUF_MODEL_SHA256 must be a 64-character SHA-256 digest."
     }
     $modelPath = (Resolve-Path -LiteralPath $env:RUSAMODELS_GGUF_MODEL_PATH).Path
+    if ([System.IO.Path]::GetFileName($modelPath) -ine $modelManifest.artifact.filename) {
+        throw "The local GGUF filename does not match the approved model manifest."
+    }
 
     $pythonCommand = Get-Command python.exe -ErrorAction Stop
     $pythonExe = $pythonCommand.Source

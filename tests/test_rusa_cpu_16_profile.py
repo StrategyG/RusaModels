@@ -79,6 +79,9 @@ def test_native_windows_launcher_fails_closed_until_model_is_ready():
     assert 'compatibility_status -ne "VERIFIED"' in start
     assert 'tokenizer.status -ne "VALIDATED"' in start
     assert 'artifact.status -ne "BUILT"' in start
+    assert 'status -ne "READY_FOR_DEVICE_VALIDATION"' in start
+    assert "tokenizer.revision" in start
+    assert "artifact.filename" in start
     assert "Qwen/" in start
     assert '"--alias", $modelId' in start
     assert '"--ctx-size", "$contextSize"' in start
