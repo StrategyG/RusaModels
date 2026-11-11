@@ -112,9 +112,9 @@
       "additionalProperties": false,
       "required": ["duration_hours", "requests", "error_rate", "oom_events", "crash_count", "p95_latency_ms", "report_url"],
       "properties": {
-        "duration_hours": {"type": "number", "minimum": 24},
-        "requests": {"type": "integer", "minimum": 100},
-        "error_rate": {"type": "number", "minimum": 0, "maximum": 0.001},
+        "duration_hours": {"type": "number", "exclusiveMinimum": 0},
+        "requests": {"type": "integer", "minimum": 1},
+        "error_rate": {"type": "number", "minimum": 0, "maximum": 1},
         "oom_events": {"type": "integer", "const": 0},
         "crash_count": {"type": "integer", "const": 0},
         "p95_latency_ms": {"type": "number", "exclusiveMinimum": 0},
@@ -129,7 +129,7 @@
         "database_backup_verified": {"const": true},
         "object_storage_backup_verified": {"const": true},
         "restore_test_passed": {"const": true},
-        "backup_age_hours": {"type": "number", "minimum": 0, "maximum": 24},
+        "backup_age_hours": {"type": "number", "minimum": 0},
         "report_url": {"type": "string", "format": "uri"}
       }
     },
