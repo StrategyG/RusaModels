@@ -40,6 +40,10 @@ training = [
   "bitsandbytes>=0.46,<1",
   "PyYAML>=6,<7",
 ]
+carbon-cpu = [
+  "numpy>=1.26,<3",
+  "torch>=2.4,<3",
+]
 embeddings = [
   "sentence-transformers>=3,<6",
   "torch>=2.4,<3",
