@@ -185,3 +185,17 @@ def test_rusa_edge_8_profile_preserves_architecture_limits_and_device_targets():
     assert profile["memory_estimates"]["model_weights_q4_k_m_gb"]["maximum"] == 1.1
     assert profile["memory_estimates"]["kv_cache_q8_0_mib"]["context_4096"] == 128
     assert profile["memory_policy"]["low_memory_protection"]["free_memory_below_gb"] == 2
+
+
+
+def test_foundation_checkpoint_adr_keeps_selection_and_runtime_identity_pending():
+    adr = (
+        ROOT / "documentation" / "adr" / "ADR-TRAIN-001-foundation-checkpoint.md"
+    ).read_text(encoding="utf-8")
+
+    assert "Status:** DRAFT" in adr
+    assert "rusaai-edge-1.54b" in adr
+    assert "rusaai-edge-derived" in adr
+    assert "BhinekaIntiLabs/bhineka-gpt" in adr
+    assert "PENDING_AUDIT / PILOT_CANDIDATE_ONLY" in adr
+    assert "No checkpoint is approved by this draft ADR." in adr

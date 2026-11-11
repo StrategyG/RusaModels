@@ -22,6 +22,8 @@ A compatible **non-Qwen open-weight checkpoint** must be selected, its license a
 
 The machine-readable target is:
 
+- `documentation/adr/ADR-TRAIN-001-foundation-checkpoint.md` — pending checkpoint selection, provenance/license audit and runtime identity decision.
+
 - `configs/runtime/rusa-cpu-16.yaml` — device/deployment profile.
 - `models/rusaai-edge/manifests/0.1.0-design.json` — model design manifest.
 
