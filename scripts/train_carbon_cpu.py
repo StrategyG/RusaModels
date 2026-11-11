@@ -428,7 +428,7 @@ def main() -> int:
 
     metrics_path = output_dir / "metrics.jsonl"
     if start_step == 0:
-        metrics_path.write_text("", encoding="utf-8")
+        atomic_write_text(metrics_path, "")
     started_at = datetime.now(UTC).isoformat()
     run_started = time.monotonic()
 
@@ -520,21 +520,39 @@ def main() -> int:
             "torch": torch.__version__,
             "numpy": np.__version__,
         },
-        "dataset": {
-            "train_path": str(data_path),
-            "train_sha256": source_hash,
-            "train_bytes": data_path.stat().st_size,
-            "eval_path": str(eval_path) if eval_path and eval_path.is_file() else None,
-            "eval_sha256": eval_hash,
+        "dataset": dataset_metadata,
+        "dataset_fingerprint": dataset_fingerprint,
+        "training_contract_digest": training_contract_digest,
+        "training": {
+            "total_steps": steps,
+            "effective_settings": effective_training,
+        },
+        "artifacts": {
+            "final_checkpoint": {
+                "file": final_path.name,
+                "sha256": sha256_file(final_path),
+                "size_bytes": final_path.stat().st_size,
+            },
+            "resumable_checkpoint": {
+                "file": (output_dir / "checkpoint.pt").name,
+                "sha256": sha256_file(output_dir / "checkpoint.pt"),
+                "size_bytes": (output_dir / "checkpoint.pt").stat().st_size,
+            },
         },
         "smoke_test_only": bool(args.smoke_test),
-        "weights_status": "experimental_randomly_initialized_cpu_trained_checkpoint",
+        "weights_status": (
+            "smoke_test_only"
+            if args.smoke_test
+            else "experimental_randomly_initialized_cpu_trained_checkpoint"
+        ),
     }
-    (output_dir / "run_metadata.json").write_text(
-        json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    atomic_write_text(
+        output_dir / "run_metadata.json",
+        json.dumps(metadata, ensure_ascii=False, indent=2) + "\n",
     )
-    (output_dir / "model_config.json").write_text(
-        json.dumps(model_config.to_dict(), indent=2) + "\n", encoding="utf-8"
+    atomic_write_text(
+        output_dir / "model_config.json",
+        json.dumps(model_config.to_dict(), indent=2) + "\n",
     )
     print(f"Training complete. Final checkpoint: {final_path}", flush=True)
     if args.smoke_test:
