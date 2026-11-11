@@ -100,7 +100,7 @@ Do not perform these steps with the current design-only manifest. They become va
 5. Record the exact filename and SHA-256 in the model manifest.
 6. Record tokenizer repository/revision and chat-template validation; record artifact filename and SHA-256.
 7. Set the manifest statuses to `SELECTED`, `VERIFIED`, `VALIDATED`, and `BUILT` only when each step has evidence, then set the top-level status to `READY_FOR_DEVICE_VALIDATION`.
-8. Set `benchmark.context_8192_status: PASS` only after the target device passes the 8K RAM acceptance.
+8. For an 8K test, set `benchmark.context_8192_status: TESTING`, `RUSAMODELS_CONTEXT_SIZE=8192` and `RUSAMODELS_CONTEXT_8K_TEST_MODE=true`; run `scripts/verify_rusa_cpu_16_context.ps1`. Change the manifest status to `PASS` only after reviewing its report and confirming at least 2 GB free RAM.
 9. Populate `.env` from `.env.rusa-cpu-16.example`, including the local artifact path and the same SHA-256 as the manifest.
 
 The manifest gate in `scripts/start_rusa_cpu_16.ps1` checks the non-Qwen repository, immutable revision, license, checkpoint compatibility, tokenizer/chat-template validation, GGUF Q4_K_M status and SHA-256 agreement. It refuses to start while any required evidence is missing.
@@ -139,10 +139,12 @@ After the model manifest and local artifact are complete:
 ```powershell
 .\scripts\start_rusa_cpu_16.ps1
 .\scripts\verify_rusa_cpu_16.ps1 -SequentialRequests 20
+# For 8K acceptance only, after setting manifest status TESTING and the two 8K environment variables:
+.\scripts\verify_rusa_cpu_16_context.ps1
 .\scripts\stop_rusa_cpu_16.ps1
 ```
 
-The launcher detects Windows/CPU/RAM, records Windows-reported instruction features, records the llama.cpp version, verifies the manifest and GGUF SHA-256, applies migrations, and starts the runtime with GPU offload disabled. It starts with 4K context unless `RUSAMODELS_CONTEXT_SIZE=8192` is explicitly configured; 8K is refused unless the model manifest records `benchmark.context_8192_status: PASS`.
+The launcher detects Windows/CPU/RAM, records Windows-reported instruction features, records the llama.cpp version, verifies the manifest and GGUF SHA-256, applies migrations, and starts the runtime with GPU offload disabled. It defaults to 4K. For 8K, the manifest must record `PASS`, or be explicitly set to `TESTING` while `RUSAMODELS_CONTEXT_8K_TEST_MODE=true`; the latter is acceptance-only and must not be treated as production approval.
 
 The sequential acceptance script checks the authenticated model ID and performs 20 streaming requests. It records TTFT, end-to-end latency, generation tokens/second and sampled CPU/free RAM. The separate 8K context script tokenizes a long probe, sends a 7,400–7,600-token prompt, checks returned usage against the 8,192-token limit and records free RAM before/after. Those two memory samples are not continuous peak-RAM telemetry. Neither script replaces the architecture's full device acceptance.
 

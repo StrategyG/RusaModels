@@ -1,6 +1,6 @@
 # RusaModels
 
-Independent model infrastructure platform for the RUSA-AI ecosystem.
+Independent model infrastructure platform for the RusaAi ecosystem.
 
 ## Architecture
 
