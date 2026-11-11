@@ -146,7 +146,7 @@ After the model manifest and local artifact are complete:
 
 The launcher detects Windows/CPU/RAM, records Windows-reported instruction features, records the llama.cpp version, verifies the manifest and GGUF SHA-256, applies migrations, and starts the runtime with GPU offload disabled. It defaults to 4K. For 8K, the manifest must record `PASS`, or be explicitly set to `TESTING` while `RUSAMODELS_CONTEXT_8K_TEST_MODE=true`; the latter is acceptance-only and must not be treated as production approval.
 
-The sequential acceptance script checks the authenticated model ID and performs 20 streaming requests. It records TTFT, end-to-end latency, generation tokens/second and sampled CPU/free RAM. The separate 8K context script tokenizes a long probe, sends a 7,400–7,600-token prompt, checks returned usage against the 8,192-token limit and samples system free RAM every 500 ms while the request and response body are pending. This is sampled system free RAM, not process-specific peak-RAM telemetry. Neither script replaces the architecture's full device acceptance.
+The sequential acceptance script checks the authenticated model ID and performs 20 streaming requests distributed across prompt-body targets of 128, 1,024 and 4,096 tokens. It records TTFT, end-to-end latency and generation tokens/second per prompt size, plus sampled CPU/free RAM. The separate 8K context script tokenizes a long probe, sends a 7,400–7,600-token prompt, checks returned usage against the 8,192-token limit and samples system free RAM every 500 ms while the request and response body are pending. This is sampled system free RAM, not process-specific peak-RAM telemetry. Neither script replaces the architecture's full device acceptance.
 
 Before calling the device production-ready, record evidence for:
 
@@ -159,7 +159,7 @@ Before calling the device production-ready, record evidence for:
 - Minimum 2 GB free RAM, CPU utilization and thermal telemetry where available.
 - One active generation and at most three pending requests in Rusaai.
 - Restart recovery and structured inference/API behavior.
-- TTFT, tokens/second, latency, peak RAM, minimum free RAM and queue wait/depth (queue telemetry from Rusaai).
+- TTFT and tokens/second for 128/1K/4K prompt bodies, latency, maximum observed system memory use, minimum sampled free RAM and queue wait/depth (queue telemetry from Rusaai).
 - ORM, PRM-Lite, independent verification, Tool Gateway and Policy Engine evidence from Rusaai.
 
 CI validates code, configuration, container builds, and PowerShell syntax. It does not select a checkpoint, build the RusaAi-Edge model, or prove target-device performance.

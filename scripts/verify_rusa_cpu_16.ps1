@@ -1,5 +1,6 @@
 [CmdletBinding()]
 param(
+    [string]$RepoRoot = (Split-Path -Parent $PSScriptRoot),
     [string]$ApiBaseUrl = "http://127.0.0.1:8090",
     [ValidateRange(20, 20)]
     [int]$SequentialRequests = 20
@@ -50,6 +51,46 @@ function Add-RusaResourceSample {
     }
 }
 
+function Get-LlamaTokenCount {
+    param([string]$Content)
+    $body = @{ content = $Content } | ConvertTo-Json -Compress -Depth 3
+    $result = Invoke-RestMethod -Uri "http://127.0.0.1:8081/tokenize" -Method Post -ContentType "application/json" -Body $body -TimeoutSec 120
+    if ($null -eq $result.tokens) {
+        throw "llama.cpp /tokenize did not return a token array."
+    }
+    return @($result.tokens).Count
+}
+
+function New-RusaPromptContent {
+    param([int]$TargetContentTokens)
+
+    $seed = "RusaAi CPU acceptance prompt sequence 0123456789. "
+    $low = 1
+    $high = $TargetContentTokens * 4
+    $bestContent = ""
+    $bestTokens = 0
+    while ($low -le $high) {
+        $middle = [int][math]::Floor(($low + $high) / 2)
+        $candidate = $seed * $middle
+        $candidateTokens = Get-LlamaTokenCount -Content $candidate
+        if ($candidateTokens -le $TargetContentTokens) {
+            $bestContent = $candidate
+            $bestTokens = $candidateTokens
+            $low = $middle + 1
+        }
+        else {
+            $high = $middle - 1
+        }
+    }
+    if ($bestTokens -lt [math]::Floor($TargetContentTokens * 0.95)) {
+        throw "Could not construct the requested prompt size; target=$TargetContentTokens actual=$bestTokens."
+    }
+    return [pscustomobject]@{
+        Content = $bestContent
+        Tokens = $bestTokens
+    }
+}
+
 function Get-LlamaMetricSnapshot {
     $response = Invoke-WebRequest -Uri "http://127.0.0.1:8081/metrics" -Method Get -TimeoutSec 10 -UseBasicParsing
     $metrics = @{}
@@ -70,49 +111,79 @@ if ([string]::IsNullOrWhiteSpace($env:RUSAMODELS_API_TOKEN)) {
     throw "Set RUSAMODELS_API_TOKEN to the dedicated role=inference bearer token."
 }
 
-$initialSample = Get-RusaResourceSample
-if ($initialSample.FreeMemoryGiB -lt 2) {
-    throw "Only $($initialSample.FreeMemoryGiB) GiB RAM is free before acceptance testing; minimum is 2 GiB."
-}
-$script:minimumFreeMemoryGiB = $initialSample.FreeMemoryGiB
-$script:cpuSamples = @()
-if ($null -ne $initialSample.CpuLoadPercent) {
-    $script:cpuSamples += $initialSample.CpuLoadPercent
-}
-$totalMemoryGiB = [math]::Round(((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB), 2)
-
-$null = Invoke-RestMethod -Uri "http://127.0.0.1:8081/health" -Method Get -TimeoutSec 10
-$null = Invoke-RestMethod -Uri "$ApiBaseUrl/health/ready" -Method Get -TimeoutSec 10
-$models = Invoke-RestMethod -Uri "$ApiBaseUrl/openai/v1/models" -Headers @{ Authorization = "Bearer $env:RUSAMODELS_API_TOKEN" } -Method Get -TimeoutSec 10
-if (@($models.data | Where-Object { $_.id -eq "rusaai-edge-1.54b" }).Count -ne 1) {
-    throw "The model ID rusaai-edge-1.54b is not exposed to the inference principal."
-}
-
-Add-Type -AssemblyName System.Net.Http
-$client = [System.Net.Http.HttpClient]::new()
-$client.Timeout = [TimeSpan]::FromMinutes(6)
-
-$latencies = @()
-$ttfts = @()
-$tokensPerSecond = @()
-
+$RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
+Push-Location $RepoRoot
+$client = $null
 try {
+    $initialSample = Get-RusaResourceSample
+    if ($initialSample.FreeMemoryGiB -lt 2) {
+        throw "Only $($initialSample.FreeMemoryGiB) GiB RAM is free before acceptance testing; minimum is 2 GiB."
+    }
+    $script:minimumFreeMemoryGiB = $initialSample.FreeMemoryGiB
+    $script:cpuSamples = @()
+    if ($null -ne $initialSample.CpuLoadPercent) {
+        $script:cpuSamples += $initialSample.CpuLoadPercent
+    }
+    $totalMemoryGiB = [math]::Round(((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB), 2)
+
+    $null = Invoke-RestMethod -Uri "http://127.0.0.1:8081/health" -Method Get -TimeoutSec 10
+    $null = Invoke-RestMethod -Uri "$ApiBaseUrl/health/ready" -Method Get -TimeoutSec 10
+    $models = Invoke-RestMethod -Uri "$ApiBaseUrl/openai/v1/models" -Headers @{ Authorization = "Bearer $env:RUSAMODELS_API_TOKEN" } -Method Get -TimeoutSec 10
+    if (@($models.data | Where-Object { $_.id -eq "rusaai-edge-1.54b" }).Count -ne 1) {
+        throw "The model ID rusaai-edge-1.54b is not exposed to the inference principal."
+    }
+
+    $promptTargets = [ordered]@{
+        "128" = 120
+        "1024" = 1008
+        "4096" = 4032
+    }
+    $promptProfiles = @{}
+    foreach ($target in $promptTargets.Keys) {
+        $promptProfiles[$target] = New-RusaPromptContent -TargetContentTokens $promptTargets[$target]
+    }
+
+    Add-Type -AssemblyName System.Net.Http
+    $client = [System.Net.Http.HttpClient]::new()
+    $client.Timeout = [TimeSpan]::FromMinutes(6)
+
+    $profileNames = @("128", "1024", "4096")
+    $latencies = @()
+    $ttfts = @()
+    $tokensPerSecond = @()
+    $latencyByPrompt = @{ "128" = @(); "1024" = @(); "4096" = @() }
+    $ttftByPrompt = @{ "128" = @(); "1024" = @(); "4096" = @() }
+    $tpsByPrompt = @{ "128" = @(); "1024" = @(); "4096" = @() }
+
     for ($index = 1; $index -le $SequentialRequests; $index++) {
+        $profileName = $profileNames[($index - 1) % $profileNames.Count]
+        $promptProfile = $promptProfiles[$profileName]
         $beforeMetrics = Get-LlamaMetricSnapshot
         if ($beforeMetrics["requests_processing"] -ne 0 -or $beforeMetrics["requests_deferred"] -ne 0) {
             throw "llama.cpp must be idle before acceptance request $index; stop other inference clients."
         }
+
         $payload = @{
             model = "rusaai-edge-1.54b"
-            messages = @(@{ role = "user"; content = "Reply with exactly OK." })
+            messages = @(@{ role = "user"; content = $promptProfile.Content })
             temperature = 0
             max_tokens = 16
             stream = $true
         } | ConvertTo-Json -Depth 8
 
-        $request = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Post, "$ApiBaseUrl/openai/v1/chat/completions")
-        $request.Headers.Authorization = [System.Net.Http.Headers.AuthenticationHeaderValue]::new("Bearer", $env:RUSAMODELS_API_TOKEN)
-        $request.Content = [System.Net.Http.StringContent]::new($payload, [System.Text.Encoding]::UTF8, "application/json")
+        $request = [System.Net.Http.HttpRequestMessage]::new(
+            [System.Net.Http.HttpMethod]::Post,
+            "$ApiBaseUrl/openai/v1/chat/completions"
+        )
+        $request.Headers.Authorization = [System.Net.Http.Headers.AuthenticationHeaderValue]::new(
+            "Bearer",
+            $env:RUSAMODELS_API_TOKEN
+        )
+        $request.Content = [System.Net.Http.StringContent]::new(
+            $payload,
+            [System.Text.Encoding]::UTF8,
+            "application/json"
+        )
 
         $timer = [System.Diagnostics.Stopwatch]::StartNew()
         $response = $null
@@ -202,60 +273,90 @@ try {
         }
 
         $requestTps = [math]::Round(($tokenDelta / $generationSecondsDelta), 2)
-        $latencies += [math]::Round($timer.Elapsed.TotalSeconds, 3)
-        $ttfts += [math]::Round($firstTokenSeconds, 3)
+        $requestLatency = [math]::Round($timer.Elapsed.TotalSeconds, 3)
+        $requestTtft = [math]::Round($firstTokenSeconds, 3)
+        $latencies += $requestLatency
+        $ttfts += $requestTtft
         $tokensPerSecond += $requestTps
-        Write-Host ("Inference request {0}/{1} passed | TTFT {2}s | total {3}s | {4} tokens/s" -f $index, $SequentialRequests, $ttfts[-1], $latencies[-1], $requestTps)
+        $latencyByPrompt[$profileName] += $requestLatency
+        $ttftByPrompt[$profileName] += $requestTtft
+        $tpsByPrompt[$profileName] += $requestTps
+        Write-Host ("Inference request {0}/{1} | target prompt {2} | content tokens {3} | TTFT {4}s | total {5}s | {6} tokens/s" -f $index, $SequentialRequests, $profileName, $promptProfile.Tokens, $requestTtft, $requestLatency, $requestTps)
     }
+
+    Add-RusaResourceSample
+    $finalSample = Get-RusaResourceSample
+    if ($finalSample.FreeMemoryGiB -lt 2) {
+        throw "Free RAM fell to $($finalSample.FreeMemoryGiB) GiB after inference; minimum is 2 GiB."
+    }
+    if ($finalSample.FreeMemoryGiB -lt $script:minimumFreeMemoryGiB) {
+        $script:minimumFreeMemoryGiB = $finalSample.FreeMemoryGiB
+    }
+    if ($null -ne $finalSample.CpuLoadPercent) {
+        $script:cpuSamples += $finalSample.CpuLoadPercent
+    }
+
+    $sortedLatency = @($latencies | Sort-Object)
+    $sortedTtft = @($ttfts | Sort-Object)
+    $sortedTps = @($tokensPerSecond | Sort-Object)
+    $cpuAverage = $null
+    $cpuMaximum = $null
+    if ($script:cpuSamples.Count -gt 0) {
+        $cpuAverage = [math]::Round((($script:cpuSamples | Measure-Object -Average).Average), 1)
+        $cpuMaximum = ($script:cpuSamples | Measure-Object -Maximum).Maximum
+    }
+
+    $promptReports = [ordered]@{}
+    foreach ($profileName in $profileNames) {
+        $profileLatency = @($latencyByPrompt[$profileName] | Sort-Object)
+        $profileTtft = @($ttftByPrompt[$profileName] | Sort-Object)
+        $profileTps = @($tpsByPrompt[$profileName] | Sort-Object)
+        $promptReports[$profileName] = [pscustomobject]@{
+            TargetPromptTokens = [int]$profileName
+            ContentTokens = $promptProfiles[$profileName].Tokens
+            RequestCount = $latencyByPrompt[$profileName].Count
+            AverageLatencySeconds = [math]::Round((($latencyByPrompt[$profileName] | Measure-Object -Average).Average), 3)
+            P50LatencySeconds = $profileLatency[[int][math]::Floor(($profileLatency.Count - 1) * 0.5)]
+            AverageTTFTSeconds = [math]::Round((($ttftByPrompt[$profileName] | Measure-Object -Average).Average), 3)
+            P50TTFTSeconds = $profileTtft[[int][math]::Floor(($profileTtft.Count - 1) * 0.5)]
+            AverageGenerationTokensPerSecond = [math]::Round((($tpsByPrompt[$profileName] | Measure-Object -Average).Average), 2)
+            P50GenerationTokensPerSecond = $profileTps[[int][math]::Floor(($profileTps.Count - 1) * 0.5)]
+        }
+    }
+
+    $report = [pscustomobject]@{
+        Status = "PASS"
+        Profile = "RUSA-CPU-16-v2.0"
+        ModelId = "rusaai-edge-1.54b"
+        SequentialRequests = $SequentialRequests
+        PromptTargetsTokens = @(128, 1024, 4096)
+        PromptBenchmarks = $promptReports
+        AverageLatencySeconds = [math]::Round((($latencies | Measure-Object -Average).Average), 3)
+        P50LatencySeconds = $sortedLatency[[int][math]::Floor(($sortedLatency.Count - 1) * 0.5)]
+        MaximumLatencySeconds = ($latencies | Measure-Object -Maximum).Maximum
+        AverageTTFTSeconds = [math]::Round((($ttfts | Measure-Object -Average).Average), 3)
+        P50TTFTSeconds = $sortedTtft[[int][math]::Floor(($sortedTtft.Count - 1) * 0.5)]
+        AverageGenerationTokensPerSecond = [math]::Round((($tokensPerSecond | Measure-Object -Average).Average), 2)
+        P50GenerationTokensPerSecond = $sortedTps[[int][math]::Floor(($sortedTps.Count - 1) * 0.5)]
+        MinimumSampledFreeMemoryGiB = $script:minimumFreeMemoryGiB
+        MaximumObservedSystemMemoryUsedGiB = [math]::Round(($totalMemoryGiB - $script:minimumFreeMemoryGiB), 2)
+        AverageSampledCpuLoadPercent = $cpuAverage
+        MaximumSampledCpuLoadPercent = $cpuMaximum
+        CpuSampleSource = "Win32_Processor.LoadPercentage"
+        MemorySampleIntervalMilliseconds = 500
+        QueueWaitTime = "Collect separately from Rusaai scheduler telemetry"
+    }
+
+    $reportDir = Join-Path $RepoRoot (Join-Path ".local" "logs")
+    New-Item -ItemType Directory -Path $reportDir -Force | Out-Null
+    $reportPath = Join-Path $reportDir ("rusa-cpu-16-acceptance-{0}.json" -f [datetime]::UtcNow.ToString("yyyyMMdd-HHmmss"))
+    $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $reportPath
+    $report | Format-List
+    Write-Host "Acceptance report: $reportPath"
 }
 finally {
-    $client.Dispose()
+    if ($client) {
+        $client.Dispose()
+    }
+    Pop-Location
 }
-
-$finalSample = Get-RusaResourceSample
-if ($finalSample.FreeMemoryGiB -lt 2) {
-    throw "Free RAM fell to $($finalSample.FreeMemoryGiB) GiB after inference; minimum is 2 GiB."
-}
-if ($finalSample.FreeMemoryGiB -lt $script:minimumFreeMemoryGiB) {
-    $script:minimumFreeMemoryGiB = $finalSample.FreeMemoryGiB
-}
-if ($null -ne $finalSample.CpuLoadPercent) {
-    $script:cpuSamples += $finalSample.CpuLoadPercent
-}
-
-$sortedLatency = @($latencies | Sort-Object)
-$sortedTtft = @($ttfts | Sort-Object)
-$sortedTps = @($tokensPerSecond | Sort-Object)
-$cpuAverage = $null
-$cpuMaximum = $null
-if ($script:cpuSamples.Count -gt 0) {
-    $cpuAverage = [math]::Round((($script:cpuSamples | Measure-Object -Average).Average), 1)
-    $cpuMaximum = ($script:cpuSamples | Measure-Object -Maximum).Maximum
-}
-$report = [pscustomobject]@{
-    Status = "PASS"
-    Profile = "RUSA-CPU-16-v2.0"
-    ModelId = "rusaai-edge-1.54b"
-    SequentialRequests = $SequentialRequests
-    AverageLatencySeconds = [math]::Round((($latencies | Measure-Object -Average).Average), 3)
-    P50LatencySeconds = $sortedLatency[[int][math]::Floor(($sortedLatency.Count - 1) * 0.5)]
-    MaximumLatencySeconds = ($latencies | Measure-Object -Maximum).Maximum
-    AverageTTFTSeconds = [math]::Round((($ttfts | Measure-Object -Average).Average), 3)
-    P50TTFTSeconds = $sortedTtft[[int][math]::Floor(($sortedTtft.Count - 1) * 0.5)]
-    AverageGenerationTokensPerSecond = [math]::Round((($tokensPerSecond | Measure-Object -Average).Average), 2)
-    P50GenerationTokensPerSecond = $sortedTps[[int][math]::Floor(($sortedTps.Count - 1) * 0.5)]
-    MinimumSampledFreeMemoryGiB = $script:minimumFreeMemoryGiB
-    EstimatedPeakSystemMemoryUsedGiB = [math]::Round(($totalMemoryGiB - $script:minimumFreeMemoryGiB), 2)
-    AverageSampledCpuLoadPercent = $cpuAverage
-    MaximumSampledCpuLoadPercent = $cpuMaximum
-    CpuSampleSource = "Win32_Processor.LoadPercentage"
-    MemorySampleIntervalMilliseconds = 500
-    QueueWaitTime = "Collect separately from Rusaai scheduler telemetry"
-}
-
-$reportDir = Join-Path (Get-Location).Path ".local\logs"
-New-Item -ItemType Directory -Path $reportDir -Force | Out-Null
-$reportPath = Join-Path $reportDir ("rusa-cpu-16-acceptance-{0}.json" -f [datetime]::UtcNow.ToString("yyyyMMdd-HHmmss"))
-$report | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $reportPath
-$report | Format-List
-Write-Host "Acceptance report: $reportPath"

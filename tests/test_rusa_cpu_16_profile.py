@@ -96,6 +96,9 @@ def test_native_windows_launcher_fails_closed_until_model_is_ready():
     assert '"--reasoning-budget"' not in start
     assert "rusaai-edge-1.54b" in verify
     assert "tokens_predicted_seconds_total" in verify
+    assert "PromptTargetsTokens = @(128, 1024, 4096)" in verify
+    assert "Get-LlamaTokenCount" in verify
+    assert "PromptBenchmarks = $promptReports" in verify
     assert "requests_processing" in verify
     assert "requests_deferred" in verify
     assert "minimumFreeMemoryGiB" in verify
