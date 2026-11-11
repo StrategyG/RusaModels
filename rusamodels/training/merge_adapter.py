@@ -57,7 +57,10 @@ def main() -> int:
         safe_serialization=True,
         max_shard_size="4GB",
     )
-    tokenizer = AutoTokenizer.from_pretrained(str(adapter_dir), trust_remote_code=False)
+    # The adapter directory is a local, provenance-checked artifact, never a Hub identifier.
+    tokenizer = AutoTokenizer.from_pretrained(  # nosec B615
+        str(adapter_dir), trust_remote_code=False, local_files_only=True
+    )
     tokenizer.save_pretrained(output_dir)
     shutil.copy2(provenance_path, output_dir / provenance_path.name)
     print(f"Merged model saved to: {output_dir}")
