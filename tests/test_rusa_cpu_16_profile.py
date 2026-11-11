@@ -54,3 +54,11 @@ def test_native_windows_scripts_bind_only_loopback_and_use_expected_ports():
 def test_codespaces_profile_is_documented_as_separate_from_native_windows():
     docs = (ROOT / "docs" / "CPU_INFERENCE.md").read_text(encoding="utf-8")
     assert "not the locked native Windows baseline" in docs
+
+
+def test_windows_edge_example_uses_official_qwen3_q4_k_m_filename():
+    env = (ROOT / ".env.rusa-cpu-16.example").read_text(encoding="utf-8")
+    docs = (ROOT / "docs" / "RUSA-CPU-16-WINDOWS.md").read_text(encoding="utf-8")
+
+    assert "Qwen3-4B-Q4_K_M.gguf" in env
+    assert "Qwen3-4B-Q4_K_M.gguf" in docs

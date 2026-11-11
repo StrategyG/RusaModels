@@ -4,7 +4,7 @@ Independent model infrastructure platform for the RUSA-AI ecosystem.
 
 ## Architecture
 
-RusaModels is deployed as two independent services backed by one shared control plane:
+Standard RusaModels deployments use two independent services backed by one shared control plane. The native RUSA-CPU-16 Windows edge profile runs only the Model Server with local SQLite and local artifact storage:
 
 - **Model Server** — model registry, lifecycle API and authenticated OpenAI-compatible inference gateway.
 - **Quant Server** — model inspection, conversion and GGUF quantization service boundary.

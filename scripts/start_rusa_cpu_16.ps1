@@ -64,6 +64,19 @@ function Assert-PortAvailable {
     }
 }
 
+if (-not ("RusaCpuFeatureProbe" -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+public static class RusaCpuFeatureProbe
+{
+    [DllImport("kernel32.dll", ExactSpelling = true)]
+    public static extern bool IsProcessorFeaturePresent(uint processorFeature);
+}
+'@
+}
+
 $RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
 Push-Location $RepoRoot
 $llamaProcess = $null
@@ -139,10 +152,46 @@ try {
     }
     if ($physicalCores -lt 1) { throw "Could not detect physical CPU cores." }
     $threads = [math]::Min(4, $physicalCores)
+$featureMap = [ordered]@{
+    SSE = 6
+    SSE2 = 10
+    SSE3 = 13
+    SSSE3 = 36
+    SSE4_1 = 37
+    SSE4_2 = 38
+    AVX = 39
+    AVX2 = 40
+    AVX512F = 41
+    BMI2 = 60
+}
+$availableCpuFeatures = @()
+foreach ($featureName in $featureMap.Keys) {
+    if ([RusaCpuFeatureProbe]::IsProcessorFeaturePresent([uint32]$featureMap[$featureName])) {
+        $availableCpuFeatures += $featureName
+    }
+}
+if ($availableCpuFeatures.Count -eq 0) {
+    $availableCpuFeatures = @("not_reported_by_windows")
+}
+
 
     $logDir = Join-Path $RepoRoot ".local\logs"
     New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
     New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+$hardwareProfile = [ordered]@{
+    captured_utc = [datetime]::UtcNow.ToString("o")
+    operating_system = $os.Caption
+    os_version = $os.Version
+    os_build = $os.BuildNumber
+    cpu_names = $cpuNames
+    physical_cores = $physicalCores
+    logical_processors = $logicalProcessors
+    instruction_features_reported_by_windows = $availableCpuFeatures
+    total_memory_gib = $memoryGiB
+    free_memory_at_start_gib = $freeMemoryGiB
+}
+$hardwareProfile | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stateDir "hardware-profile.json")
+
     foreach ($service in @("llama-server", "model-server")) {
         if (Test-Path -LiteralPath (Join-Path $stateDir "$service.json")) {
             throw "A $service process record exists. Run scripts/stop_rusa_cpu_16.ps1 first."
@@ -219,6 +268,7 @@ try {
     Write-Host "OpenAI API:   http://127.0.0.1:8090/openai/v1"
     Write-Host "llama.cpp:    http://127.0.0.1:8081 (loopback only)"
     Write-Host "Physical cores: $physicalCores | Logical processors: $logicalProcessors | Generation threads: $threads"
+Write-Host "Windows-reported CPU features: $($availableCpuFeatures -join \", \")"
     Write-Host "Total RAM: $memoryGiB GiB | Free RAM at startup: $freeMemoryGiB GiB"
     Write-Host "Logs: $logDir"
 }

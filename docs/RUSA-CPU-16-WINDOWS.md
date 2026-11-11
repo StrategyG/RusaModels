@@ -72,7 +72,7 @@ Resource protection thresholds:
 
 4. Prepare a local model directory outside Git. Download the official Qwen3-4B GGUF Q4_K_M artifact, record the upstream immutable revision and exact filename, and calculate SHA-256:
 
-    Get-FileHash "C:\RusaModels\models\qwen3-4b-q4_k_m.gguf" -Algorithm SHA256
+    Get-FileHash "C:\RusaModels\models\Qwen3-4B-Q4_K_M.gguf" -Algorithm SHA256
 
 Do not assume a filename or revision. Use the exact artifact downloaded and approved. Keep model weights outside the repository; .local/ is ignored by Git.
 
@@ -180,3 +180,9 @@ The initial memory design is SQLite + FTS5 in Rusaai. Do not load a separate emb
 - [ ] TTFT, tokens/second, total latency, peak RAM, minimum free RAM, CPU use and queue wait time recorded.
 
 Do not set a tokens/second target until the exact CPU SKU and runtime build have been benchmarked. CI validates code, configuration and PowerShell syntax; it does not run the model on the target Windows machine. Production certification still requires the device acceptance evidence above.
+
+## References
+
+- [Qwen3-4B-GGUF official repository](https://huggingface.co/Qwen/Qwen3-4B-GGUF) — confirm the exact Q4_K_M filename and record the immutable revision before provisioning.
+- [llama.cpp server parameters and metrics](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md) — validate supported runtime flags and Prometheus counters against the pinned llama.cpp build.
+- [Windows IsProcessorFeaturePresent API](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-isprocessorfeaturepresent) — source of OS-reported CPU instruction-feature flags.

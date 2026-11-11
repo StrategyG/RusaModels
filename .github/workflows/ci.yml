@@ -210,3 +210,20 @@ jobs:
             }
             Write-Host "PowerShell syntax OK: $script"
           }
+
+      - name: Probe Windows CPU instruction feature API
+        shell: pwsh
+        run: |
+          Add-Type -TypeDefinition @'
+          using System;
+          using System.Runtime.InteropServices;
+          public static class RusaCpuFeatureProbe {
+              [DllImport("kernel32.dll", ExactSpelling = true)]
+              public static extern bool IsProcessorFeaturePresent(uint processorFeature);
+          }
+          '@
+          $featureIds = @(6, 10, 13, 36, 37, 38, 39, 40, 41, 60)
+          foreach ($featureId in $featureIds) {
+            $null = [RusaCpuFeatureProbe]::IsProcessorFeaturePresent([uint32]$featureId)
+          }
+          Write-Host "Windows CPU feature probe API is callable."

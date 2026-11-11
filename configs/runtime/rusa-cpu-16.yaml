@@ -10,6 +10,10 @@ platform:
     vendor: Intel
     family: Core i5
     physical_core_detection: required
+    logical_processor_detection: required
+    instruction_features_to_record: [SSE, SSE2, SSE3, SSSE3, SSE4_1, SSE4_2, AVX, AVX2, AVX512F, BMI2]
+    instruction_feature_source: Windows_IsProcessorFeaturePresent
+    instruction_feature_requirement: record_only_no_hardcoded_minimum
     generation: not_yet_confirmed
   memory_gib: 16
   accelerator: cpu_only
