@@ -34,7 +34,7 @@ class CarbonConfig:
             raise ValueError("n_layers must be positive and max_seq_len must be at least 2")
 
     @classmethod
-    def from_dict(cls, values: dict) -> "CarbonConfig":
+    def from_dict(cls, values: dict) -> CarbonConfig:
         allowed = cls.__dataclass_fields__.keys()
         return cls(**{key: value for key, value in values.items() if key in allowed})
 
