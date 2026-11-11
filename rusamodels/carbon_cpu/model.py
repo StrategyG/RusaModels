@@ -10,7 +10,7 @@ from torch import nn
 from torch.nn import functional as F
 
 
-from .constants import BOS_TOKEN_ID, BYTE_VOCAB_SIZE, EOS_TOKEN_ID
+from .constants import BYTE_VOCAB_SIZE, EOS_TOKEN_ID
 
 
 @dataclass
