@@ -298,32 +298,81 @@ def main() -> int:
         torch.set_num_interop_threads(1)
     except RuntimeError:
         pass
-    random.seed(int(training["seed"]))
-    np_rng = np.random.default_rng(int(training["seed"]))
-    eval_rng = np.random.default_rng(int(training["seed"]) + 1)
-    torch.manual_seed(int(training["seed"]))
+    if data_config.get("encoding", "utf-8").lower() != "utf-8":
+        raise ValueError("Carbon byte-level training requires UTF-8 source data")
+    if not args.smoke_test and eval_path is not None:
+        if not eval_path.is_file():
+            raise FileNotFoundError(f"Evaluation corpus not found: {eval_path}")
+        if eval_path.resolve() == data_path.resolve():
+            raise ValueError("training and evaluation paths must be different files")
+        eval_license_id = data_config.get("eval_license_id", license_id)
+        if not isinstance(eval_license_id, str) or not eval_license_id.strip() or "REPLACE" in eval_license_id.upper():
+            raise ValueError("data.eval_license_id must be reviewed when a separate evaluation file is used")
+    else:
+        eval_license_id = license_id
+
+    random.seed(seed)
+    np_rng = np.random.default_rng(seed)
+    eval_rng = np.random.default_rng(seed + 1)
+    torch.manual_seed(seed)
     device = torch.device("cpu")
 
+    source_hash_before = sha256_file(data_path)
     train_cache = output_dir / "train_tokens.u16"
     train_count = build_token_cache(data_path, train_cache)
     train_memmap = np.memmap(train_cache, dtype=np.uint16, mode="r", shape=(train_count,))
     source_hash = sha256_file(data_path)
+    if source_hash != source_hash_before:
+        raise ValueError("training corpus changed while its token cache was being built")
 
-    if eval_path is not None and not eval_path.is_file() and not args.smoke_test:
-        raise FileNotFoundError(f"Evaluation corpus not found: {eval_path}")
-
-    if eval_path is not None and eval_path.is_file() and not args.smoke_test:
+    validation_split = None
+    if eval_path is not None and not args.smoke_test:
+        eval_hash_before = sha256_file(eval_path)
         eval_cache = output_dir / "eval_tokens.u16"
         eval_count = build_token_cache(eval_path, eval_cache)
         eval_memmap = np.memmap(eval_cache, dtype=np.uint16, mode="r", shape=(eval_count,))
         eval_hash = sha256_file(eval_path)
+        if eval_hash != eval_hash_before:
+            raise ValueError("evaluation corpus changed while its token cache was being built")
+        if eval_hash == source_hash:
+            raise ValueError("training and evaluation corpora have identical SHA-256; held-out evaluation is invalid")
     else:
-        split = int(train_count * (1.0 - float(data_config.get("validation_split", 0.05))))
+        validation_split = float(data_config.get("validation_split", 0.05))
+        if not math.isfinite(validation_split) or not 0.0 < validation_split < 0.5:
+            raise ValueError("validation_split must be finite and between 0 and 0.5")
+        split = int(train_count * (1.0 - validation_split))
         if split <= block_size + 1 or train_count - split <= block_size + 1:
             raise ValueError("Corpus is too small for the configured block_size and validation split")
         eval_memmap = train_memmap[split:]
         train_memmap = train_memmap[:split]
         eval_hash = None
+
+    dataset_metadata = {
+        "dataset_id": dataset_id,
+        "dataset_version": dataset_version,
+        "license_id": license_id,
+        "eval_license_id": eval_license_id,
+        "source_uri": source_uri,
+        "train_file_name": data_path.name,
+        "train_sha256": source_hash,
+        "eval_file_name": eval_path.name if eval_path and eval_path.is_file() else None,
+        "eval_sha256": eval_hash,
+        "validation_split": validation_split,
+        "tokenizer": data_config.get("tokenizer", "byte-level-v1"),
+    }
+    dataset_fingerprint = canonical_digest(dataset_metadata)
+    effective_training = {
+        "batch_size": batch_size,
+        "block_size": block_size,
+        "threads": threads,
+        "gradient_accumulation_steps": grad_accum,
+        "eval_interval": eval_interval,
+        "eval_batches": eval_batches,
+        "seed": seed,
+    }
+    training_contract_digest = canonical_digest(
+        training_contract(training, effective_training)
+    )
 
     if len(train_memmap) <= block_size + 1 or len(eval_memmap) <= block_size + 1:
         raise ValueError("Training and evaluation splits must each contain more than block_size+1 tokens")
