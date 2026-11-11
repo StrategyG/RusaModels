@@ -1,0 +1,143 @@
+schema_version: 1
+profile:
+  id: rusa-cpu-16
+  version: 1.0.0
+  status: locked_baseline
+  deployment: native_local_edge
+platform:
+  operating_system: Windows 11 64-bit
+  cpu:
+    vendor: Intel
+    family: Core i5
+    physical_core_detection: required
+    generation: not_yet_confirmed
+  memory_gib: 16
+  accelerator: cpu_only
+model:
+  id: rusa-cpu-4b
+  family: Qwen3-4B Instruct
+  repository: Qwen/Qwen3-4B-GGUF
+  format: GGUF
+  quantization: Q4_K_M
+  artifact_path_env: RUSAMODELS_GGUF_MODEL_PATH
+  artifact_sha256_env: RUSAMODELS_GGUF_MODEL_SHA256
+  revision_policy: record_immutable_upstream_revision_at_provisioning
+  load_policy: one_resident_model
+runtime:
+  backend: llama.cpp
+  executable_env: LLAMA_SERVER_EXE
+  host: 127.0.0.1
+  port: 8081
+  context_size: 8192
+  generation_threads:
+    initial: 4
+    adjustment: min_4_or_detected_physical_core_count
+  batch_threads:
+    initial: 4
+    adjustment: min_4_or_detected_physical_core_count
+  http_threads: 2
+  parallel_slots: 1
+  batch_size: 512
+  micro_batch_size: 128
+  kv_cache:
+    key: q8_0
+    value: q8_0
+    required_if_supported: true
+  gpu_layers: 0
+  flash_attention: auto
+  jinja_chat_template: true
+  web_ui: disabled
+  metrics: enabled
+  maximum_reasoning_budget: 1536
+services:
+  rusamodels_api:
+    host: 127.0.0.1
+    port: 8090
+    base_path: /openai/v1
+    environment: edge
+    database: sqlite
+    artifact_storage: local
+    upstream_url: http://127.0.0.1:8081
+    model_id: rusa-cpu-4b
+  llama_cpp:
+    host: 127.0.0.1
+    port: 8081
+  external_inference_fallback: false
+  separate_embedding_runtime: disabled
+orchestration:
+  owner: Rusaai
+  active_generation_limit: 1
+  pending_inference_queue_limit: 3
+  high_reasoning_candidates: 2
+  high_reasoning_execution: sequential
+  tool_execution_owner: Rusaai_Tool_Gateway
+  policy_enforcement_owner: Rusaai_Policy_Engine
+  workflow_decision_owner: Rusaai_Supreme_Orchestrator
+reasoning_profiles:
+  low:
+    mode: no_think_or_light_reasoning
+    max_output_tokens: 384
+    candidates: 1
+    sampling:
+      temperature: 0.7
+      top_p: 0.8
+  medium:
+    mode: think
+    max_output_tokens: 768
+    candidates: 1
+    sampling:
+      temperature: 0.6
+      top_p: 0.95
+      top_k: 20
+      min_p: 0
+      presence_penalty: 1.5
+  high:
+    mode: think_and_limited_search
+    max_output_tokens: 1536
+    candidates: 2
+    execution: sequential
+    sampling:
+      temperature: 0.6
+      top_p: 0.95
+      top_k: 20
+      min_p: 0
+      presence_penalty: 1.5
+memory_budget_gib:
+  windows_and_base_apps: 5.0
+  model_weights: 2.5
+  kv_cache: 0.6
+  inference_buffers: 1.2
+  rusai_services: 1.2
+  rusamodels_api_database_telemetry: 0.5
+  reserved_free_memory: 2.0
+  planned_total: 13.0
+  flexible_headroom: 3.0
+resource_protection:
+  minimum_free_memory_gib: 2.0
+  cpu_percent:
+    normal_below: 70
+    background_throttle_from: 70
+    defer_nonpriority_above: 85
+  ram_percent:
+    limit_new_model_loads_above: 75
+    reduce_context_and_tasks_above: 85
+  thermal_throttling_telemetry: when_available
+storage_and_memory:
+  rusai_memory_database: SQLite
+  rusai_text_search: FTS5
+  vector_search: optional_after_quality_validation
+  model_artifacts: local_verified_files
+  checkpointing: enabled
+acceptance:
+  sequential_requests: 20
+  minimum_free_memory_gib_during_inference: 2.0
+  context_tokens: 8192
+  active_generations: 1
+  pending_requests: 3
+  reasoning_profiles: [LOW, MEDIUM, HIGH]
+  orm: required
+  prm_lite: required
+  tool_calls_only_through_rusai_gateway: true
+  model_and_artifact_sha256: required
+  localhost_binding_only: true
+  restart_recovery: required

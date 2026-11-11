@@ -8,7 +8,8 @@ RusaModels is deployed as two independent services backed by one shared control 
 
 - **Model Server** — model registry, lifecycle API and authenticated OpenAI-compatible inference gateway.
 - **Quant Server** — model inspection, conversion and GGUF quantization service boundary.
-- **Local CPU Runtime** — optional private llama.cpp GGUF chat runtime plus a separate CPU SentenceTransformers embedding runtime.
+- **Native Windows RUSA-CPU-16** — locked local-edge baseline for Intel Core i5 / 16 GB RAM using Qwen3-4B GGUF Q4_K_M, llama.cpp, 8K context and one active generation.
+- **Codespaces CPU Runtime** — separate optional development profile with private llama.cpp and SentenceTransformers sidecars; it is not the Windows RUSA-CPU-16 baseline.
 - **Shared PostgreSQL** — registry metadata, model versions, upload sessions and audit events.
 - **Shared S3-compatible storage** — immutable model artifacts.
 
@@ -68,6 +69,7 @@ Never commit model weights, API tokens or credentials. Production requires Postg
 - [Operations runbook](docs/OPERATIONS.md)
 - [Production deployment](docs/PRODUCTION_DEPLOYMENT.md)
 - [RusaAi integration](docs/RUSAAI-INTEGRATION.md)
-- [CPU inference](docs/CPU_INFERENCE.md)
+- [RUSA-CPU-16 native Windows deployment](docs/RUSA-CPU-16-WINDOWS.md)
+- [Codespaces CPU inference](docs/CPU_INFERENCE.md)
 - [Training](docs/TRAINING.md)
 - [Migration from RusaAi](docs/MIGRATION_FROM_RUSAAI.md)

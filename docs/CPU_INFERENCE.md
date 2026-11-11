@@ -1,5 +1,7 @@
 # RusaModels CPU Inference on GitHub Codespaces
 
+> **Profile boundary:** This document describes the optional 4-vCPU / 16-GB Codespaces development profile. It is not the locked native Windows baseline. For RUSA-CPU-16, use [RUSA-CPU-16 Windows](RUSA-CPU-16-WINDOWS.md).
+
 ## Scope
 
 This profile runs one local GGUF chat model and one local embedding model in a 4-vCPU / 16-GB Codespace. The Model Server API proxies requests to those private containers. No GPU and no external AI inference API are used.

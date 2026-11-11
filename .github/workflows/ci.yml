@@ -181,3 +181,32 @@ jobs:
           RUSAMODELS_INFERENCE_API_KEY: ci-inference-upstream-key
           RUSAMODELS_WORKSPACE_ROOT: /tmp/rusamodels-workspace
         run: docker compose -f docker-compose.production.yml config --quiet
+
+
+  windows-cpu-profile:
+    name: Windows RUSA-CPU-16 script validation
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, immutable commit
+      - name: Parse native Windows deployment scripts
+        shell: pwsh
+        run: |
+          $scripts = @(
+            "scripts/start_rusa_cpu_16.ps1",
+            "scripts/stop_rusa_cpu_16.ps1",
+            "scripts/verify_rusa_cpu_16.ps1"
+          )
+          foreach ($script in $scripts) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $script).Path,
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error $_.Message }
+              exit 1
+            }
+            Write-Host "PowerShell syntax OK: $script"
+          }
