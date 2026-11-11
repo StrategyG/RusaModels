@@ -55,6 +55,10 @@ def _is_finite_number(value: Any) -> bool:
     )
 
 
+def _is_https_url(value: Any) -> bool:
+    return isinstance(value, str) and value.startswith("https://") and len(value) <= 2048
+
+
 def _gate(name: str, checks: list[tuple[bool, str]]) -> dict[str, Any]:
     failed = [description for passed, description in checks if not passed]
     return {"name": name, "passed": not failed, "failures": failed}
@@ -103,6 +107,30 @@ def check_production_evidence(
         or max_backup_age_hours <= 0
     ):
         raise ProductionEvidenceError("production readiness thresholds are invalid")
+    allowed_top_level = {
+        "schema_version", "release", "ci", "security", "model", "evaluation",
+        "runtime", "soak", "backup_restore", "rollback", "deployment",
+    }
+    if set(evidence) - allowed_top_level:
+        raise ProductionEvidenceError("production evidence contains unknown top-level fields")
+    allowed_sections = {
+        "release": {"release_id", "git_commit_sha", "container_image_digest", "deployment_config_sha256", "model_id", "model_version", "model_artifact_sha256"},
+        "ci": {"commit_sha", "conclusion", "required_checks_passed", "run_url"},
+        "security": {"status", "critical_findings", "high_findings", "secret_findings", "report_url"},
+        "model": {"model_id", "model_version", "artifact_sha256", "manifest_sha256", "lifecycle_status"},
+        "evaluation": {"model_id", "model_version", "artifact_sha256", "benchmark_gate_passed", "safety_gate_passed", "regression_gate_passed", "report_sha256"},
+        "runtime": {"model_artifact_sha256", "health_check_passed", "cpu_only", "oom_events", "hardware_profile", "peak_ram_mb", "free_ram_reserve_mb", "ttft_ms", "tokens_per_second", "benchmark_report_url"},
+        "soak": {"duration_hours", "requests", "error_rate", "oom_events", "crash_count", "p95_latency_ms", "report_url"},
+        "backup_restore": {"database_backup_verified", "object_storage_backup_verified", "restore_test_passed", "backup_age_hours", "report_url"},
+        "rollback": {"software_rollback_test_passed", "model_rollback_test_passed", "report_url"},
+        "deployment": {"https_enforced", "postgres_sslmode", "secrets_from_secret_manager", "object_storage_external", "persistent_storage", "monitoring_enabled", "alerting_enabled", "deployment_profile"},
+    }
+    for section_name, allowed_fields in allowed_sections.items():
+        section_value = evidence.get(section_name)
+        if isinstance(section_value, dict) and set(section_value) - allowed_fields:
+            raise ProductionEvidenceError(
+                f"production evidence section {section_name!r} contains unknown fields"
+            )
     release = evidence.get("release") if isinstance(evidence.get("release"), dict) else {}
     ci = evidence.get("ci") if isinstance(evidence.get("ci"), dict) else {}
     security = evidence.get("security") if isinstance(evidence.get("security"), dict) else {}
@@ -146,7 +174,7 @@ def check_production_evidence(
                 (ci.get("conclusion") == "success", "required CI conclusion must be success"),
                 (ci.get("required_checks_passed") is True, "all required CI checks must pass"),
                 (ci.get("commit_sha") == release_commit, "CI commit must equal release commit"),
-                (_is_nonempty(ci.get("run_url")), "CI run URL is required for audit"),
+                (_is_https_url(ci.get("run_url")), "CI run URL must be an HTTPS reference"),
             ],
         ),
         _gate(
@@ -156,7 +184,7 @@ def check_production_evidence(
                 (type(security.get("critical_findings")) is int and security["critical_findings"] == 0, "critical security findings must be zero"),
                 (type(security.get("high_findings")) is int and security["high_findings"] == 0, "high security findings must be zero"),
                 (type(security.get("secret_findings")) is int and security["secret_findings"] == 0, "secret findings must be zero"),
-                (_is_nonempty(security.get("report_url")), "security report reference is required"),
+                (_is_https_url(security.get("report_url")), "security report reference must be HTTPS"),
             ],
         ),
         _gate(
@@ -193,7 +221,7 @@ def check_production_evidence(
                 (_is_finite_number(runtime.get("free_ram_reserve_mb")) and runtime["free_ram_reserve_mb"] > 0, "runtime free-RAM reserve measurement is required"),
                 (_is_finite_number(runtime.get("ttft_ms")) and runtime["ttft_ms"] >= 0, "runtime TTFT measurement is required"),
                 (_is_finite_number(runtime.get("tokens_per_second")) and runtime["tokens_per_second"] > 0, "runtime tokens/second measurement is required"),
-                (_is_nonempty(runtime.get("benchmark_report_url")), "runtime benchmark report reference is required"),
+                (_is_https_url(runtime.get("benchmark_report_url")), "runtime benchmark report reference must be HTTPS"),
             ],
         ),
         _gate(
@@ -205,7 +233,7 @@ def check_production_evidence(
                 (type(soak.get("oom_events")) is int and soak["oom_events"] == 0, "soak OOM event count must be zero"),
                 (type(soak.get("crash_count")) is int and soak["crash_count"] == 0, "soak crash count must be zero"),
                 (_is_finite_number(soak.get("p95_latency_ms")) and soak["p95_latency_ms"] > 0, "soak p95 latency measurement is required"),
-                (_is_nonempty(soak.get("report_url")), "soak-test report reference is required"),
+                (_is_https_url(soak.get("report_url")), "soak-test report reference must be HTTPS"),
             ],
         ),
         _gate(
@@ -215,7 +243,7 @@ def check_production_evidence(
                 (backup.get("object_storage_backup_verified") is True, "object-storage backup verification must pass"),
                 (backup.get("restore_test_passed") is True, "database and artifact restore test must pass"),
                 (_is_finite_number(backup.get("backup_age_hours")) and 0 <= backup["backup_age_hours"] <= max_backup_age_hours, f"latest verified backup must be no older than {max_backup_age_hours} hours"),
-                (_is_nonempty(backup.get("report_url")), "backup/restore report reference is required"),
+                (_is_https_url(backup.get("report_url")), "backup/restore report reference must be HTTPS"),
             ],
         ),
         _gate(
@@ -223,7 +251,7 @@ def check_production_evidence(
             [
                 (rollback.get("software_rollback_test_passed") is True, "software rollback test must pass"),
                 (rollback.get("model_rollback_test_passed") is True, "model rollback test must pass"),
-                (_is_nonempty(rollback.get("report_url")), "rollback report reference is required"),
+                (_is_https_url(rollback.get("report_url")), "rollback report reference must be HTTPS"),
             ],
         ),
         _gate(
