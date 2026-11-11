@@ -82,6 +82,11 @@ function Assert-RusaSoakProcess {
     if ($actualFullPath -ine $expectedPath) {
         throw "$ServiceName PID $($state.pid) no longer matches its recorded executable."
     }
+    $recordedStart = ([datetime]$state.started_utc).ToUniversalTime()
+    $actualStart = $process.StartTime.ToUniversalTime()
+    if ([math]::Abs(($actualStart - $recordedStart).TotalSeconds) -gt 30) {
+        throw "$ServiceName PID $($state.pid) start time does not match its recorded process identity."
+    }
     return [int]$state.pid
 }
 

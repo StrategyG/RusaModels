@@ -199,3 +199,15 @@ def test_foundation_checkpoint_adr_keeps_selection_and_runtime_identity_pending(
     assert "BhinekaIntiLabs/bhineka-gpt" in adr
     assert "PENDING_AUDIT / PILOT_CANDIDATE_ONLY" in adr
     assert "No checkpoint is approved by this draft ADR." in adr
+
+
+
+def test_rusa_cpu_16_soak_checks_process_identity_and_resource_floor():
+    soak_test = (ROOT / "scripts" / "verify_rusa_cpu_16_soak.ps1").read_text(encoding="utf-8")
+    assert "StableSessionMinutes = $DurationMinutes" in soak_test
+    assert "RequestIntervalSeconds" in soak_test
+    assert "MinimumSampledFreeMemoryGiB" in soak_test
+    assert "RestartDetected = $false" in soak_test
+    assert "SwapTelemetry" in soak_test
+    assert "state.started_utc" in soak_test
+    assert "process.StartTime" in soak_test
