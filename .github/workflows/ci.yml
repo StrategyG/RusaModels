@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, fix/production-hardening-2026-11-11]
     types: [opened, synchronize, reopened, ready_for_review, edited]
 permissions:
   contents: read
