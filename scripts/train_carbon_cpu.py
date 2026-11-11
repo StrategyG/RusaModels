@@ -277,8 +277,12 @@ def main() -> int:
     if type(seed) is not int:
         raise ValueError("training.seed must be an integer")
     warmup_steps = training.get("warmup_steps", 20)
-    if type(warmup_steps) is not int or not 0 <= warmup_steps < steps:
-        raise ValueError("warmup_steps must be non-negative and less than total steps")
+    if type(warmup_steps) is not int or warmup_steps < 0:
+        raise ValueError("warmup_steps must be a non-negative integer")
+    if args.smoke_test and warmup_steps >= steps:
+        warmup_steps = max(0, steps // 3)
+    elif warmup_steps >= steps:
+        raise ValueError("warmup_steps must be less than total steps")
     learning_rate_value = float(training["learning_rate"])
     weight_decay_value = float(training["weight_decay"])
     max_grad_norm = float(training["max_grad_norm"])
