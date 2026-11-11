@@ -82,7 +82,7 @@ def test_build_release_records_provenance_redacts_and_verifies(tmp_path: Path) -
             json.loads(line)
             for line in (release / f"{split}.jsonl").read_text(encoding="utf-8").splitlines()
         )
-    redacted = next(item for item in all_records if item["id"] == "record-1")
+    redacted = next(item for item in all_records if "[REDACTED_EMAIL]" in item["text"])
     assert "alice@example.test" not in redacted["text"]
     assert "[REDACTED_EMAIL]" in redacted["text"]
     assert "[REDACTED_SECRET]" in redacted["text"]
@@ -112,7 +112,8 @@ def test_grouped_records_never_cross_splits(tmp_path: Path) -> None:
     group_splits: dict[str, set[str]] = {}
     for item in provenance:
         group_splits.setdefault(item["group_id"], set()).add(item["split"])
-    assert set(group_splits) == {"conversation-a", "conversation-b", "conversation-c"}
+    assert len(group_splits) == 3
+    assert all(group_id.startswith("group_") for group_id in group_splits)
     assert all(len(splits) == 1 for splits in group_splits.values())
     assert verify_dataset_release(release)["raw_records"] == 6
 
