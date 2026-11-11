@@ -291,13 +291,44 @@ def main() -> int:
     if not args.smoke_test:
         dataset_id = data_config.get("dataset_id")
         dataset_version = data_config.get("dataset_version")
-        license_id = data_config.get("license_id")
+        raw_license_ids = data_config.get("license_ids", data_config.get("license_id"))
+        if isinstance(raw_license_ids, str):
+            license_ids = [raw_license_ids]
+        elif isinstance(raw_license_ids, list):
+            license_ids = raw_license_ids
+        else:
+            license_ids = []
         if not isinstance(dataset_id, str) or not dataset_id.strip():
             raise ValueError("data.dataset_id is required for non-smoke training")
         if not isinstance(dataset_version, str) or not dataset_version.strip():
             raise ValueError("data.dataset_version is required for non-smoke training")
-        if not isinstance(license_id, str) or not license_id.strip() or "REPLACE" in license_id.upper():
-            raise ValueError("data.license_id must contain a reviewed, non-placeholder declaration")
+        if (
+            not license_ids
+            or any(
+                not isinstance(item, str) or not item.strip() or "REPLACE" in item.upper()
+                for item in license_ids
+            )
+        ):
+            raise ValueError("data.license_ids must contain reviewed, non-placeholder declarations")
+        license_ids = sorted(set(license_ids))
+        raw_eval_license_ids = data_config.get(
+            "eval_license_ids", data_config.get("eval_license_id", license_ids)
+        )
+        if isinstance(raw_eval_license_ids, str):
+            eval_license_ids = [raw_eval_license_ids]
+        elif isinstance(raw_eval_license_ids, list):
+            eval_license_ids = raw_eval_license_ids
+        else:
+            eval_license_ids = []
+        if (
+            not eval_license_ids
+            or any(
+                not isinstance(item, str) or not item.strip() or "REPLACE" in item.upper()
+                for item in eval_license_ids
+            )
+        ):
+            raise ValueError("data.eval_license_ids must contain reviewed declarations")
+        eval_license_ids = sorted(set(eval_license_ids))
         source_uri = data_config.get("source_uri")
         if source_uri is not None:
             if not isinstance(source_uri, str) or len(source_uri) > 2048:
@@ -311,7 +342,8 @@ def main() -> int:
     else:
         dataset_id = "carbon-smoke-test"
         dataset_version = "synthetic"
-        license_id = "LicenseRef-Synthetic-Smoke-Test"
+        license_ids = ["LicenseRef-Synthetic-Smoke-Test"]
+        eval_license_ids = license_ids
         source_uri = None
 
     if args.smoke_test:
@@ -374,11 +406,10 @@ def main() -> int:
             raise FileNotFoundError(f"Evaluation corpus not found: {eval_path}")
         if eval_path.resolve() == data_path.resolve():
             raise ValueError("training and evaluation paths must be different files")
-        eval_license_id = data_config.get("eval_license_id", license_id)
-        if not isinstance(eval_license_id, str) or not eval_license_id.strip() or "REPLACE" in eval_license_id.upper():
-            raise ValueError("data.eval_license_id must be reviewed when a separate evaluation file is used")
+        if not eval_license_ids:
+            raise ValueError("a reviewed evaluation license declaration is required")
     else:
-        eval_license_id = license_id
+        eval_license_ids = license_ids
 
     random.seed(seed)
     np_rng = np.random.default_rng(seed)
