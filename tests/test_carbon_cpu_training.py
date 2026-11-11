@@ -5,10 +5,10 @@ import random
 import sys
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 
+np = pytest.importorskip("numpy")
 torch = pytest.importorskip("torch")
 
 from scripts.train_carbon_cpu import (  # noqa: E402
