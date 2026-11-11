@@ -202,9 +202,10 @@ repository administrator must apply and verify these settings.
   with package, CVE, exposure analysis, owner, and review date. Do not suppress
   findings solely to obtain a green workflow.
 - Publish an SBOM and build provenance for each image and verify the signature
-  before deployment. The tag-triggered workflow
-  `.github/workflows/publish-images.yml` builds both images, publishes SBOM
-  and provenance attestations, and signs their immutable digests.
+  before deployment. The stable-semver-tag workflow
+  `.github/workflows/publish-images.yml` accepts only a release commit
+  reachable from `main`, builds both images, publishes SBOM and provenance
+  attestations, and signs their immutable digests.
 - Pin Python dependencies to security-supported versions and run
   `pip check` in the final image.
 - Keep training adapters experimental until the full held-out evaluation,

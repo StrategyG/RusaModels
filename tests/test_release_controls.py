@@ -15,9 +15,12 @@ def test_production_image_workflow_is_tagged_signed_and_attested():
     workflow = _workflow(".github/workflows/publish-images.yml")
     triggers = workflow.get("on", workflow.get(True, {}))
     assert triggers["push"]["tags"] == ["v*.*.*"]
-    assert workflow["permissions"]["packages"] == "write"
-    assert workflow["permissions"]["id-token"] == "write"
-    assert workflow["permissions"]["attestations"] == "write"
+    assert workflow["permissions"] == {"contents": "read"}
+    assert workflow["jobs"]["verify-release"]["permissions"] == {"contents": "read"}
+    publish_permissions = workflow["jobs"]["publish"]["permissions"]
+    assert publish_permissions["packages"] == "write"
+    assert publish_permissions["id-token"] == "write"
+    assert publish_permissions["attestations"] == "write"
 
     steps = workflow["jobs"]["publish"]["steps"]
     action_steps = [step for step in steps if step.get("uses")]
