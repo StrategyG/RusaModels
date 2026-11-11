@@ -507,7 +507,9 @@ def build_dataset_release(config: DatasetReleaseConfig) -> Path:
         split_counts = _assign_splits(connection, config)
         connection.commit()
         files = {
-            split: _write_split(connection, staging_dir / f"{split}.jsonl", split)
+            f"{split}.jsonl": _write_split(
+                connection, staging_dir / f"{split}.jsonl", split
+            )
             for split in ("train", "validation", "test")
         }
         files["provenance.jsonl"] = _write_provenance(
