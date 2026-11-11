@@ -12,7 +12,9 @@ from pathlib import Path
 import platform
 import random
 import sys
+import tempfile
 import time
+from urllib.parse import urlsplit
 
 import numpy as np
 
@@ -21,8 +23,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from rusamodels.carbon_cpu.model import CarbonConfig, CarbonTiny, count_parameters  # noqa: E402
-
-EOS_TOKEN_ID = 256
+from rusamodels.carbon_cpu.model import EOS_TOKEN_ID
 
 
 def resolve_path(value: str | Path, root: Path = ROOT) -> Path:
@@ -38,6 +39,59 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+
+
+def canonical_digest(value: dict) -> str:
+    encoded = json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def training_contract(training: dict, effective: dict) -> dict:
+    immutable = {
+        key: value
+        for key, value in training.items()
+        if key not in {"steps", "output_dir"}
+    }
+    return {"training": immutable, "effective": effective}
+
+
+def capture_rng_state(np_rng, eval_rng, torch) -> dict:
+    return {
+        "python": random.getstate(),
+        "numpy": np_rng.bit_generator.state,
+        "eval_numpy": eval_rng.bit_generator.state,
+        "torch": torch.get_rng_state(),
+    }
+
+
+def restore_rng_state(state: dict, np_rng, eval_rng, torch) -> None:
+    required = {"python", "numpy", "eval_numpy", "torch"}
+    if not isinstance(state, dict) or set(state) != required:
+        raise ValueError("Checkpoint is missing complete RNG state; deterministic resume is unavailable")
+    random.setstate(state["python"])
+    np_rng.bit_generator.state = state["numpy"]
+    eval_rng.bit_generator.state = state["eval_numpy"]
+    torch.set_rng_state(state["torch"])
+
+
+def atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    file_descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    os.close(file_descriptor)
+    temporary = Path(temporary_name)
+    try:
+        temporary.write_text(content, encoding=encoding)
+        with temporary.open("rb") as handle:
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def build_token_cache(source: Path, destination: Path) -> int:
     """Map UTF-8 bytes to token IDs 0..255 and append EOS=256, without loading all data."""
     if not source.is_file():
@@ -47,19 +101,30 @@ def build_token_cache(source: Path, destination: Path) -> int:
         raise ValueError(f"Corpus is empty: {source}")
     token_count = byte_count + 1
     destination.parent.mkdir(parents=True, exist_ok=True)
-    mapped = np.memmap(destination, dtype=np.uint16, mode="w+", shape=(token_count,))
-    offset = 0
-    with source.open("rb") as handle:
-        while True:
-            chunk = handle.read(1024 * 1024)
-            if not chunk:
-                break
-            values = np.frombuffer(chunk, dtype=np.uint8).astype(np.uint16)
-            mapped[offset : offset + len(values)] = values
-            offset += len(values)
-    mapped[offset] = EOS_TOKEN_ID
-    mapped.flush()
-    del mapped
+    file_descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent
+    )
+    os.close(file_descriptor)
+    temporary = Path(temporary_name)
+    try:
+        mapped = np.memmap(temporary, dtype=np.uint16, mode="w+", shape=(token_count,))
+        offset = 0
+        with source.open("rb") as handle:
+            while True:
+                chunk = handle.read(1024 * 1024)
+                if not chunk:
+                    break
+                values = np.frombuffer(chunk, dtype=np.uint8).astype(np.uint16)
+                mapped[offset : offset + len(values)] = values
+                offset += len(values)
+        mapped[offset] = EOS_TOKEN_ID
+        mapped.flush()
+        del mapped
+        with temporary.open("rb") as handle:
+            os.fsync(handle.fileno())
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
     return token_count
 
 
@@ -87,20 +152,34 @@ def sample_batch(
 
 
 def evaluate(model, tokens, batch_size, block_size, batches, rng, torch) -> float:
+    was_training = model.training
     model.eval()
     losses = []
-    with torch.no_grad():
-        for _ in range(batches):
-            inputs, targets = sample_batch(tokens, batch_size, block_size, rng, torch)
-            _, loss = model(inputs, targets)
-            losses.append(float(loss.item()))
+    try:
+        with torch.no_grad():
+            for _ in range(batches):
+                inputs, targets = sample_batch(tokens, batch_size, block_size, rng, torch)
+                _, loss = model(inputs, targets)
+                losses.append(float(loss.item()))
+    finally:
+        model.train(was_training)
     return sum(losses) / max(len(losses), 1)
 
 
 def save_checkpoint(path: Path, payload: dict, torch) -> None:
-    temporary = path.with_name(path.name + ".tmp")
-    torch.save(payload, temporary)
-    os.replace(temporary, path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    file_descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    os.close(file_descriptor)
+    temporary = Path(temporary_name)
+    try:
+        torch.save(payload, temporary)
+        with temporary.open("rb") as handle:
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def main() -> int:
