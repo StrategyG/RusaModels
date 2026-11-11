@@ -2,15 +2,18 @@
   "project": "Carbon-CPU",
   "run_name": "carbon-tiny-v0.1",
   "data": {
-    "train_file": "data/carbon_cpu/corpus.txt",
-    "eval_file": null,
+    "train_file": "artifacts/corpora/rusaai-agent-sft-curated-0.1.0-train.txt",
+    "eval_file": "artifacts/corpora/rusaai-agent-sft-curated-0.1.0-validation.txt",
     "validation_split": 0.05,
     "encoding": "utf-8",
     "tokenizer": "byte-level-v1",
     "dataset_id": "carbon-cpu-training-corpus",
     "dataset_version": "0.1.0",
-    "license_id": "LicenseRef-REPLACE-WITH-APPROVED-LICENSE",
-    "source_uri": null
+    "source_uri": null,
+    "require_export_manifest": true,
+    "license_ids": [
+      "LicenseRef-REPLACE-WITH-APPROVED-LICENSE"
+    ]
   },
   "model": {
     "vocab_size": 258,
