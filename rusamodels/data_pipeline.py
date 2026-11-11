@@ -224,17 +224,25 @@ def _validate_config(config: DatasetReleaseConfig) -> None:
                 raise DatasetPipelineError(f"source_uri for {source.source_id} must not contain credentials, query, or fragment")
 
 
+def _pseudonymize_identifier(dataset_id: str, namespace: str, value: str) -> str:
+    digest = hashlib.sha256(
+        f"{dataset_id}\0{namespace}\0{value}".encode()
+    ).hexdigest()[:24]
+    return f"{namespace}_{digest}"
+
+
 def _prepare_record(
     raw: Any,
     policy: RedactionPolicy,
     redaction_counts: Counter[str],
+    dataset_id: str,
 ) -> tuple[str, str, str, str]:
     if not isinstance(raw, dict):
         raise DatasetPipelineError("each JSONL record must be a JSON object")
     record = _normalize(raw)
-    record_id = record.get("id")
-    if record_id is not None and (
-        not isinstance(record_id, str) or not record_id.strip() or len(record_id) > 256
+    raw_record_id = record.get("id")
+    if raw_record_id is not None and (
+        not isinstance(raw_record_id, str) or not raw_record_id.strip() or len(raw_record_id) > 256
     ):
         raise DatasetPipelineError("record id must be a non-empty string of at most 256 characters")
     group_id = record.get("group_id")
@@ -248,11 +256,18 @@ def _prepare_record(
         raise DatasetPipelineError("record must contain at least one non-empty text value")
     content = _redact(content, policy, redaction_counts)
     fingerprint = hashlib.sha256(_canonical_json(content).encode("utf-8")).hexdigest()
-    if record_id is None:
-        record_id = f"record_{fingerprint[:24]}"
+    record_id = (
+        f"record_{fingerprint[:24]}"
+        if raw_record_id is None
+        else _pseudonymize_identifier(dataset_id, "record", raw_record_id)
+    )
     payload = dict(content)
     payload["id"] = record_id
-    group_key = group_id or f"content:{fingerprint}"
+    group_key = (
+        _pseudonymize_identifier(dataset_id, "group", group_id)
+        if group_id is not None
+        else f"content:{fingerprint}"
+    )
     return record_id, group_key, fingerprint, _canonical_json(payload)
 
 
@@ -330,7 +345,7 @@ def _ingest_source(
                     object_pairs_hook=_object_pairs_without_duplicates,
                 )
                 record_id, group_key, fingerprint, payload = _prepare_record(
-                    raw_record, config.redaction, redaction_counts
+                    raw_record, config.redaction, redaction_counts, config.dataset_id
                 )
             except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
                 raise DatasetPipelineError(
@@ -566,6 +581,10 @@ def build_dataset_release(config: DatasetReleaseConfig) -> Path:
                 "seed": config.seed,
                 "validation_fraction": config.validation_fraction,
                 "test_fraction": config.test_fraction,
+            },
+            "identifier_policy": {
+                "record_ids": "sha256_pseudonymized_or_content_derived",
+                "group_ids": "sha256_pseudonymized_or_content_derived",
             },
             "normalization": {
                 "unicode": "NFC",
