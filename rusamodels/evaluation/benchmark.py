@@ -35,6 +35,15 @@ def _sha256_file(path: Path) -> tuple[str, int]:
     return digest.hexdigest(), size
 
 
+def _object_pairs_without_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
 def _canonical_digest(value: Any) -> str:
     encoded = json.dumps(
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
@@ -104,9 +113,12 @@ def _validate_record(record: Any, line_number: int) -> dict[str, Any]:
 
 
 def load_benchmark_suite(suite_path: str | Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    path = Path(suite_path).expanduser().resolve()
+    raw_path = Path(suite_path).expanduser()
+    if raw_path.is_symlink():
+        raise BenchmarkError("benchmark suite must not be a symlink")
+    path = raw_path.resolve()
     sidecar = path.with_suffix(path.suffix + ".manifest.json")
-    if path.is_symlink() or sidecar.is_symlink() or not path.is_file() or not sidecar.is_file():
+    if sidecar.is_symlink() or not path.is_file() or not sidecar.is_file():
         raise BenchmarkError("benchmark suite and its frozen manifest must both exist as regular files")
     try:
         manifest = json.loads(sidecar.read_text(encoding="utf-8"))
@@ -143,8 +155,14 @@ def load_benchmark_suite(suite_path: str | Path) -> tuple[dict[str, Any], list[d
             if not line.strip():
                 raise BenchmarkError(f"benchmark.jsonl:{line_number}: blank lines are not allowed")
             try:
-                raw = json.loads(line)
-            except json.JSONDecodeError as exc:
+                raw = json.loads(
+                    line,
+                    parse_constant=lambda value: (_ for _ in ()).throw(
+                        ValueError(f"non-standard JSON constant: {value}")
+                    ),
+                    object_pairs_hook=_object_pairs_without_duplicates,
+                )
+            except (json.JSONDecodeError, ValueError) as exc:
                 raise BenchmarkError(f"benchmark.jsonl:{line_number}: invalid JSON") from exc
             record = _validate_record(raw, line_number)
             if record["id"] in seen_ids:
@@ -301,12 +319,25 @@ def run_benchmark(
         raise BenchmarkError("base_url must not contain credentials, query, or fragment")
     if not isinstance(completion_path, str) or not completion_path.strip():
         raise BenchmarkError("completion_path must be a non-empty relative path")
+    parsed_completion_path = urlsplit(completion_path)
+    if (
+        parsed_completion_path.scheme
+        or parsed_completion_path.netloc
+        or parsed_completion_path.query
+        or parsed_completion_path.fragment
+        or ".." in Path(completion_path).parts
+    ):
+        raise BenchmarkError("completion_path must be a safe relative endpoint path")
     if type(max_tokens) is not int or max_tokens < 1:
         raise BenchmarkError("max_tokens must be a positive integer")
     if type(max_retries) is not int or not 0 <= max_retries <= 5:
         raise BenchmarkError("max_retries must be between 0 and 5")
-    if not isinstance(timeout, (int, float)) or timeout <= 0:
-        raise BenchmarkError("timeout must be positive")
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not 0 < timeout < float("inf")
+    ):
+        raise BenchmarkError("timeout must be finite and positive")
     if min_accuracy is not None and (
         isinstance(min_accuracy, bool) or not isinstance(min_accuracy, (int, float))
         or not 0 <= min_accuracy <= 1
@@ -317,9 +348,15 @@ def run_benchmark(
 
     suite_metadata, records = load_benchmark_suite(suite_path)
     suite_file = Path(suite_path).expanduser().resolve()
-    output = Path(output_path).expanduser().resolve()
-    if output == suite_file or suite_file.parent == output.parent and output.name.endswith(".manifest.json"):
-        raise BenchmarkError("benchmark report must not overwrite the suite or its manifest")
+    output = Path(output_path).expanduser()
+    if output.is_symlink():
+        raise BenchmarkError("benchmark report path must not be a symlink")
+    output = output.resolve()
+    suite_manifest_file = suite_file.with_suffix(suite_file.suffix + ".manifest.json")
+    if suite_file.parent in output.parents or output in {suite_file, suite_manifest_file}:
+        raise BenchmarkError("benchmark report must be outside the immutable suite directory")
+    if output.exists():
+        raise BenchmarkError("benchmark report already exists; choose a new output path")
     output.parent.mkdir(parents=True, exist_ok=True)
 
     url = base_url.rstrip("/") + "/" + completion_path.lstrip("/")
@@ -354,8 +391,14 @@ def run_benchmark(
                 latency_ms = (time.perf_counter() - started) * 1000
                 latencies.append(latency_ms)
                 score = _score(prediction, record["scorer"], record.get("expected"))
-                prompt_tokens = int(usage.get("prompt_tokens", 0) or 0)
-                completion_tokens = int(usage.get("completion_tokens", 0) or 0)
+                try:
+                    prompt_tokens = max(0, int(usage.get("prompt_tokens", 0) or 0))
+                except (TypeError, ValueError):
+                    prompt_tokens = 0
+                try:
+                    completion_tokens = max(0, int(usage.get("completion_tokens", 0) or 0))
+                except (TypeError, ValueError):
+                    completion_tokens = 0
                 total_prompt_tokens += max(prompt_tokens, 0)
                 total_completion_tokens += max(completion_tokens, 0)
                 result = {
@@ -388,7 +431,11 @@ def run_benchmark(
                     "score": None,
                     "latency_ms": round(latency_ms, 3),
                     "finish_reason": None,
-                    "http_status": None,
+                    "http_status": (
+                        int(str(exc).rsplit("_", 1)[-1])
+                        if str(exc).startswith("http_status_")
+                        else None
+                    ),
                     "prompt_tokens": 0,
                     "completion_tokens": 0,
                     "error": str(exc),
@@ -401,6 +448,11 @@ def run_benchmark(
     scored = [item for item in results if item["score"] is not None]
     passed = sum(item["score"] is True for item in scored)
     accuracy = passed / len(scored) if scored else None
+    min_accuracy_passed = (
+        accuracy >= min_accuracy
+        if accuracy is not None and min_accuracy is not None
+        else False if min_accuracy is not None else None
+    )
     report = {
         "schema_version": "1.0.0",
         "benchmark": suite_metadata,
@@ -421,10 +473,7 @@ def run_benchmark(
             "failed_requests": failed_requests,
             "accuracy": round(accuracy, 4) if accuracy is not None else None,
             "min_accuracy_gate": min_accuracy,
-            "min_accuracy_passed": (
-                accuracy >= min_accuracy if accuracy is not None and min_accuracy is not None
-                else None
-            ),
+            "min_accuracy_passed": min_accuracy_passed,
         },
         "latency_ms": {
             "mean": round(sum(latencies) / len(latencies), 3) if latencies else None,
