@@ -32,6 +32,19 @@ Supported scorers:
 - `json_valid`: prediction must parse as JSON.
 - `manual`: stores a prediction for human review and does not contribute to automatic accuracy.
 
+Freeze a suite once it has been reviewed and deduplicated:
+
+~~~bash
+python -m rusamodels.evaluation.freeze_suite \\
+  --suite data/benchmarks/rusaai-v1.0.0.jsonl \\
+  --suite-id rusaai-core \\
+  --suite-version 1.0.0 \\
+  --license-id CC0-1.0 \\
+  --source-uri https://example.org/approved-benchmark-source
+~~~
+
+The command validates every record, rejects duplicate IDs/prompts, computes the file digest, and creates the frozen sidecar. It refuses to replace an existing version; make a new suite file/version for changes.
+
 The frozen manifest must contain:
 
 - `schema_version: 1.0.0`
