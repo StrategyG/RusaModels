@@ -176,6 +176,8 @@ def _validate_config(config: DatasetReleaseConfig) -> None:
         raise DatasetPipelineError("version must be a safe 1-64 character identifier")
     if not config.sources:
         raise DatasetPipelineError("at least one dataset source is required")
+    if not isinstance(config.output_root, (str, Path)):
+        raise DatasetPipelineError("output_root must be a string or Path")
     if type(config.seed) is not int:
         raise DatasetPipelineError("seed must be an integer")
     if type(config.validation_fraction) not in {int, float} or type(config.test_fraction) not in {int, float}:
@@ -211,7 +213,12 @@ def _validate_config(config: DatasetReleaseConfig) -> None:
             if not isinstance(source.source_uri, str) or len(source.source_uri) > 2048:
                 raise DatasetPipelineError(f"source_uri for {source.source_id} is invalid or too long")
             from urllib.parse import urlsplit
-            parsed = urlsplit(source.source_uri)
+            try:
+                parsed = urlsplit(source.source_uri)
+            except ValueError as exc:
+                raise DatasetPipelineError(
+                    f"source_uri for {source.source_id} is malformed"
+                ) from exc
             if parsed.username or parsed.password or parsed.query or parsed.fragment:
                 raise DatasetPipelineError(f"source_uri for {source.source_id} must not contain credentials, query, or fragment")
 
@@ -658,7 +665,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         release_path = build_dataset_release(load_release_config(args.config))
-    except DatasetPipelineError as exc:
+    except (ValueError, OSError, TypeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
     manifest = json.loads((release_path / "manifest.json").read_text(encoding="utf-8"))
