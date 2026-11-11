@@ -56,9 +56,33 @@ def _validate_report(report: dict[str, Any], label: str) -> tuple[dict, dict[str
         indexed[record_id] = result
     if int(summary.get("failed_requests", 0)) != 0:
         raise BenchmarkComparisonError(f"{label} report has failed inference requests")
+    scored_results = [item for item in indexed.values() if item["score"] is not None]
+    passed_count = sum(item["score"] is True for item in scored_results)
+    failed_count = sum(item["score"] is False for item in scored_results)
+    request_failures = sum(bool(item.get("error")) for item in indexed.values())
+    manual_count = sum(
+        item["score"] is None and not item.get("error") for item in indexed.values()
+    )
+    if summary.get("total") != len(indexed):
+        raise BenchmarkComparisonError(f"{label} report total does not match its result rows")
+    if summary.get("scored") != len(scored_results):
+        raise BenchmarkComparisonError(f"{label} report scored count does not match its result rows")
+    if summary.get("passed") != passed_count or summary.get("failed") != failed_count:
+        raise BenchmarkComparisonError(f"{label} report pass/fail counts do not match its result rows")
+    if summary.get("failed_requests") != request_failures:
+        raise BenchmarkComparisonError(f"{label} report request-failure count does not match its result rows")
+    if summary.get("manual_review") != manual_count:
+        raise BenchmarkComparisonError(f"{label} report manual-review count does not match its result rows")
     accuracy = summary.get("accuracy")
-    if not isinstance(accuracy, (int, float)) or isinstance(accuracy, bool) or not math.isfinite(accuracy):
-        raise BenchmarkComparisonError(f"{label} report has no valid automatic accuracy")
+    expected_accuracy = passed_count / len(scored_results) if scored_results else None
+    if (
+        not isinstance(accuracy, (int, float))
+        or isinstance(accuracy, bool)
+        or not math.isfinite(accuracy)
+        or expected_accuracy is None
+        or not math.isclose(float(accuracy), expected_accuracy, abs_tol=0.0001)
+    ):
+        raise BenchmarkComparisonError(f"{label} report accuracy does not match its result rows")
     latency = report.get("latency_ms", {}).get("mean")
     if latency is not None and (
         not isinstance(latency, (int, float)) or isinstance(latency, bool)
