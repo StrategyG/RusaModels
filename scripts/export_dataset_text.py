@@ -146,7 +146,10 @@ def export_dataset_split(
     current_manifest_sha256, _ = _sha256_file(root / "manifest.json")
     if current_manifest_sha256 != verification["manifest_sha256"]:
         raise DatasetTextExportError("release manifest changed after verification")
-    release_manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    try:
+        release_manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise DatasetTextExportError("release manifest changed or became invalid") from exc
     source_metadata = release_manifest["files"][source.name]
     source_sha256_before, source_size_before = _sha256_file(source)
     if (
