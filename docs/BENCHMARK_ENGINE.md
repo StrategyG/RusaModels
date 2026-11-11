@@ -101,6 +101,22 @@ Each report records:
 
 Raw prompts are not copied into the report. Predictions and expected answers are included for review; protect evaluation reports as potentially sensitive artifacts.
 
+## Compare full-precision and quantized benchmark reports
+
+Run the same frozen suite against the baseline and candidate artifacts, then compare the reports:
+
+~~~bash
+python -m rusamodels.evaluation.compare \\
+  --baseline artifacts/evaluations/model-fp16.json \\
+  --candidate artifacts/evaluations/model-q4_k_m.json \\
+  --output artifacts/evaluations/model-q4_k_m-comparison.json \\
+  --max-accuracy-drop 0.02 \\
+  --max-category-drop 0.05 \\
+  --max-latency-ratio 2.0
+~~~
+
+The comparison requires identical frozen suite identity/digest and exact record IDs/scoring contracts. It recomputes report aggregates from per-record results, measures overall and per-category accuracy changes, identifies regressions/improvements, and fails on protected-category regressions (default: safety, security, policy). It can also enforce a maximum latency ratio. This is a useful quantization regression gate, but it does not replace human review or domain-specific safety evaluation.
+
 ## Limitations and release policy
 
 This engine provides deterministic request settings and simple objective scorers. It does not provide semantic judging, factuality verification, safety certification, benchmark contamination detection, or human evaluation. Regex/contains scores are not a substitute for expert review.
