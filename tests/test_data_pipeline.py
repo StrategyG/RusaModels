@@ -7,7 +7,6 @@ from rusamodels.data_pipeline import (
     DatasetPipelineError,
     DatasetReleaseConfig,
     DatasetSource,
-    RedactionPolicy,
     build_dataset_release,
 )
 from rusamodels.dataset_verification import (
