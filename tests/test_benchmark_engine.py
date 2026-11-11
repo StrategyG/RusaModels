@@ -9,6 +9,7 @@ import pytest
 
 from rusamodels.evaluation.benchmark import (
     BenchmarkError,
+    freeze_benchmark_suite,
     load_benchmark_suite,
     run_benchmark,
 )
@@ -171,4 +172,53 @@ def test_benchmark_report_cannot_overwrite_suite_or_manifest(tmp_path: Path) -> 
             "carbon-tiny",
             suite,
             client=httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200))),
+        )
+
+
+def test_freeze_benchmark_suite_validates_and_creates_immutable_manifest(
+    tmp_path: Path,
+) -> None:
+    suite = tmp_path / "raw-suite.jsonl"
+    suite.write_text(
+        "".join(json.dumps(record) + "\n" for record in _records()),
+        encoding="utf-8",
+    )
+    manifest = freeze_benchmark_suite(
+        suite,
+        "rusaai-frozen",
+        "1.2.0",
+        ["CC0-1.0"],
+        source_uri="https://example.org/benchmark-source",
+    )
+    loaded, records = load_benchmark_suite(suite)
+    assert manifest["frozen"] is True
+    assert manifest["record_count"] == 2
+    assert loaded["suite_id"] == "rusaai-frozen"
+    assert loaded["suite_version"] == "1.2.0"
+    assert len(records) == 2
+
+
+def test_freeze_refuses_to_replace_an_existing_suite_version(tmp_path: Path) -> None:
+    suite = _write_suite(tmp_path, _records())
+    with pytest.raises(BenchmarkError, match="already exists"):
+        freeze_benchmark_suite(suite, "rusaai", "1.0.0", ["CC0-1.0"])
+
+
+def test_freeze_rejects_duplicate_prompts_and_unsafe_source_uri(tmp_path: Path) -> None:
+    suite = tmp_path / "duplicate.jsonl"
+    records = _records()
+    records[1]["messages"] = records[0]["messages"]
+    suite.write_text(
+        "".join(json.dumps(record) + "\n" for record in records),
+        encoding="utf-8",
+    )
+    with pytest.raises(BenchmarkError, match="duplicate prompts"):
+        freeze_benchmark_suite(suite, "rusaai", "1.0.0", ["CC0-1.0"])
+    with pytest.raises(BenchmarkError, match="credentials"):
+        freeze_benchmark_suite(
+            _write_suite(tmp_path / "other", _records()),
+            "rusaai",
+            "1.0.0",
+            ["CC0-1.0"],
+            source_uri="https://user:secret@example.org/benchmark",
         )
