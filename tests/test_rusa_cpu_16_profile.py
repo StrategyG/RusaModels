@@ -163,6 +163,11 @@ def test_rusa_edge_8_profile_preserves_architecture_limits_and_device_targets():
     assert profile["model"]["architecture_reference"]["fit_status"] == "not_validated_against_8gb_device"
     assert profile["model"]["checkpoint"]["non_qwen_lineage_status"] == "NOT_VERIFIED"
     assert profile["model"]["checkpoint"]["architecture_relation"] == "NOT_AUDITED"
+    assert profile["model"]["checkpoint"]["compatibility_status"] == "NOT_VERIFIED"
+    assert profile["model"]["tokenizer"]["chat_template_status"] == "NOT_VALIDATED"
+    assert profile["model"]["artifact"]["status"] == "NOT_BUILT"
+    assert profile["model"]["training"]["status"] == "NOT_STARTED"
+    assert profile["model"]["benchmark"]["status"] == "NOT_TESTED"
     assert profile["runtime"]["context_tokens"] == 4096
     assert profile["runtime"]["sessions"] == 1
     assert profile["runtime"]["active_generations"] == 1

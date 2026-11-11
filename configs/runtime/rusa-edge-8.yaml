@@ -34,18 +34,31 @@ model:
   checkpoint:
     selection_status: NOT_SELECTED
     requirement: non_qwen_open_weight
+    repository: null
+    immutable_revision: null
+    license: null
+    compatibility_status: NOT_VERIFIED
     non_qwen_lineage_status: NOT_VERIFIED
     architecture_relation: NOT_AUDITED
     actual_parameter_count: null
     actual_configuration_sha256: null
   tokenizer:
     status: NOT_SELECTED
+    repository: null
+    revision: null
+    chat_template_status: NOT_VALIDATED
   training:
     status: NOT_STARTED
   artifact:
     status: NOT_BUILT
     format: GGUF
     quantization: Q4_K_M
+    filename: null
+    sha256: null
+  training:
+    status: NOT_STARTED
+  benchmark:
+    status: NOT_TESTED
   benchmark:
     status: NOT_TESTED
 runtime:
