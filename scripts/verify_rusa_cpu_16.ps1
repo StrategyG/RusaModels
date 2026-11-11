@@ -236,16 +236,26 @@ try {
                 catch {
                     continue
                 }
-                if (-not $chunk.choices -or $null -eq $chunk.choices[0].delta) { continue }
+                $choicesProperty = $chunk.PSObject.Properties["choices"]
+                if ($null -eq $choicesProperty -or @($choicesProperty.Value).Count -lt 1) { continue }
+                $deltaProperty = $choicesProperty.Value[0].PSObject.Properties["delta"]
+                if ($null -eq $deltaProperty -or $null -eq $deltaProperty.Value) { continue }
 
-                $delta = $chunk.choices[0].delta
-                if ($null -ne $delta.content -and [string]$delta.content -ne "") {
-                    [void]$assistantContent.Append([string]$delta.content)
+                $delta = $deltaProperty.Value
+                $contentProperty = $delta.PSObject.Properties["content"]
+                $reasoningProperty = $delta.PSObject.Properties["reasoning_content"]
+                $deltaContent = $null
+                $reasoningContent = $null
+                if ($null -ne $contentProperty) { $deltaContent = $contentProperty.Value }
+                if ($null -ne $reasoningProperty) { $reasoningContent = $reasoningProperty.Value }
+
+                if ($null -ne $deltaContent -and [string]$deltaContent -ne "") {
+                    [void]$assistantContent.Append([string]$deltaContent)
                     if ($null -eq $firstTokenSeconds) {
                         $firstTokenSeconds = $timer.Elapsed.TotalSeconds
                     }
                 }
-                if ($null -ne $delta.reasoning_content -and [string]$delta.reasoning_content -ne "" -and $null -eq $firstTokenSeconds) {
+                if ($null -ne $reasoningContent -and [string]$reasoningContent -ne "" -and $null -eq $firstTokenSeconds) {
                     $firstTokenSeconds = $timer.Elapsed.TotalSeconds
                 }
             }
@@ -312,7 +322,7 @@ try {
         $profileTtft = @($ttftByPrompt[$profileName] | Sort-Object)
         $profileTps = @($tpsByPrompt[$profileName] | Sort-Object)
         $promptReports[$profileName] = [pscustomobject]@{
-            TargetPromptTokens = [int]$profileName
+            PromptSizeClassTokens = [int]$profileName
             ContentTokens = $promptProfiles[$profileName].Tokens
             RequestCount = $latencyByPrompt[$profileName].Count
             AverageLatencySeconds = [math]::Round((($latencyByPrompt[$profileName] | Measure-Object -Average).Average), 3)
@@ -329,7 +339,7 @@ try {
         Profile = "RUSA-CPU-16-v2.0"
         ModelId = "rusaai-edge-1.54b"
         SequentialRequests = $SequentialRequests
-        PromptTargetsTokens = @(128, 1024, 4096)
+        PromptSizeClassesTokens = @(128, 1024, 4096)
         PromptBenchmarks = $promptReports
         AverageLatencySeconds = [math]::Round((($latencies | Measure-Object -Average).Average), 3)
         P50LatencySeconds = $sortedLatency[[int][math]::Floor(($sortedLatency.Count - 1) * 0.5)]
