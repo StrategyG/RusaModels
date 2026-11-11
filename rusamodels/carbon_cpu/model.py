@@ -3,15 +3,21 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import math
+from typing import Any
 
 import torch
 from torch import nn
 from torch.nn import functional as F
 
 
+EOS_TOKEN_ID = 256
+BOS_TOKEN_ID = 257
+BYTE_VOCAB_SIZE = 258
+
+
 @dataclass
 class CarbonConfig:
-    vocab_size: int = 258
+    vocab_size: int = BYTE_VOCAB_SIZE
     n_layers: int = 4
     d_model: int = 256
     n_heads: int = 4
@@ -22,23 +28,54 @@ class CarbonConfig:
     rope_theta: float = 10000.0
 
     def __post_init__(self) -> None:
+        integer_fields = {
+            "vocab_size": self.vocab_size,
+            "n_layers": self.n_layers,
+            "d_model": self.d_model,
+            "n_heads": self.n_heads,
+            "n_kv_heads": self.n_kv_heads,
+            "intermediate_size": self.intermediate_size,
+            "max_seq_len": self.max_seq_len,
+        }
+        for name, value in integer_fields.items():
+            if type(value) is not int:
+                raise ValueError(f"{name} must be an integer")
+        if self.vocab_size < BYTE_VOCAB_SIZE:
+            raise ValueError("vocab_size must include 256 byte IDs and two special IDs")
+        if self.n_layers < 1:
+            raise ValueError("n_layers must be positive")
+        if self.d_model < 1 or self.intermediate_size < 1:
+            raise ValueError("d_model and intermediate_size must be positive")
+        if self.n_heads < 1 or self.n_kv_heads < 1:
+            raise ValueError("n_heads and n_kv_heads must be positive")
+        if self.max_seq_len < 2:
+            raise ValueError("max_seq_len must be at least 2")
         if self.d_model % self.n_heads != 0:
             raise ValueError("d_model must be divisible by n_heads")
         if self.n_heads % self.n_kv_heads != 0:
             raise ValueError("n_heads must be divisible by n_kv_heads")
         if (self.d_model // self.n_heads) % 2 != 0:
             raise ValueError("head dimension must be even for RoPE")
-        if self.vocab_size < 258:
-            raise ValueError("vocab_size must include 256 byte IDs and two special IDs")
-        if self.n_layers < 1 or self.max_seq_len < 2:
-            raise ValueError("n_layers must be positive and max_seq_len must be at least 2")
+        if isinstance(self.dropout, bool) or not isinstance(self.dropout, (int, float)):
+            raise ValueError("dropout must be a number")
+        if not math.isfinite(float(self.dropout)) or not 0.0 <= self.dropout < 1.0:
+            raise ValueError("dropout must be finite and in the range [0, 1)")
+        if isinstance(self.rope_theta, bool) or not isinstance(self.rope_theta, (int, float)):
+            raise ValueError("rope_theta must be a number")
+        if not math.isfinite(float(self.rope_theta)) or self.rope_theta <= 0:
+            raise ValueError("rope_theta must be finite and positive")
 
     @classmethod
-    def from_dict(cls, values: dict) -> CarbonConfig:
-        allowed = cls.__dataclass_fields__.keys()
-        return cls(**{key: value for key, value in values.items() if key in allowed})
+    def from_dict(cls, values: dict[str, Any]) -> CarbonConfig:
+        if not isinstance(values, dict):
+            raise ValueError("model configuration must be an object")
+        allowed = set(cls.__dataclass_fields__)
+        unknown = set(values) - allowed
+        if unknown:
+            raise ValueError(f"unknown CarbonConfig fields: {sorted(unknown)}")
+        return cls(**values)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -65,7 +102,7 @@ class CausalSelfAttention(nn.Module):
         self.n_kv_heads = config.n_kv_heads
         self.head_dim = config.d_model // config.n_heads
         self.groups = self.n_heads // self.n_kv_heads
-        self.dropout = config.dropout
+        self.dropout = float(config.dropout)
 
         self.q_proj = nn.Linear(config.d_model, self.n_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.d_model, self.n_kv_heads * self.head_dim, bias=False)
@@ -140,7 +177,7 @@ class CarbonTiny(nn.Module):
         self.token_embeddings = nn.Embedding(config.vocab_size, config.d_model)
         self.layers = nn.ModuleList([TransformerBlock(config) for _ in range(config.n_layers)])
         self.final_norm = RMSNorm(config.d_model)
-        self.dropout = nn.Dropout(config.dropout)
+        self.dropout = nn.Dropout(float(config.dropout))
         self.apply(self._init_weights)
 
     @staticmethod
@@ -155,10 +192,22 @@ class CarbonTiny(nn.Module):
         input_ids: torch.Tensor,
         targets: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        if input_ids.ndim != 2:
-            raise ValueError("input_ids must have shape [batch, sequence]")
+        if input_ids.ndim != 2 or input_ids.size(1) < 1:
+            raise ValueError("input_ids must have shape [batch, non-empty sequence]")
+        if input_ids.dtype != torch.long:
+            raise ValueError("input_ids must use torch.long token IDs")
         if input_ids.size(1) > self.config.max_seq_len:
             raise ValueError("input sequence exceeds configured max_seq_len")
+        if torch.any(input_ids < 0) or torch.any(input_ids >= self.config.vocab_size):
+            raise ValueError("input_ids contains token IDs outside the configured vocabulary")
+        if targets is not None:
+            if targets.shape != input_ids.shape:
+                raise ValueError("targets must have the same shape as input_ids")
+            if targets.dtype != torch.long:
+                raise ValueError("targets must use torch.long token IDs")
+            if torch.any(targets < 0) or torch.any(targets >= self.config.vocab_size):
+                raise ValueError("targets contains token IDs outside the configured vocabulary")
+
         x = self.dropout(self.token_embeddings(input_ids))
         for layer in self.layers:
             x = layer(x)
@@ -178,25 +227,42 @@ class CarbonTiny(nn.Module):
         max_new_tokens: int = 100,
         temperature: float = 0.8,
         top_k: int = 40,
-        eos_token_id: int = 256,
+        eos_token_id: int = EOS_TOKEN_ID,
     ) -> torch.Tensor:
-        if temperature <= 0:
-            raise ValueError("temperature must be greater than zero")
+        if type(max_new_tokens) is not int or max_new_tokens < 0:
+            raise ValueError("max_new_tokens must be a non-negative integer")
+        if type(top_k) is not int or top_k < 0:
+            raise ValueError("top_k must be a non-negative integer")
+        if not math.isfinite(float(temperature)) or temperature <= 0:
+            raise ValueError("temperature must be finite and greater than zero")
+        if type(eos_token_id) is not int or not 0 <= eos_token_id < self.config.vocab_size:
+            raise ValueError("eos_token_id is outside the configured vocabulary")
+        if input_ids.ndim != 2 or input_ids.size(1) < 1:
+            raise ValueError("input_ids must have shape [batch, non-empty sequence]")
+
+        was_training = self.training
         self.eval()
         output = input_ids
-        for _ in range(max_new_tokens):
-            context = output[:, -self.config.max_seq_len :]
-            logits, _ = self(context)
-            next_logits = logits[:, -1, :] / temperature
-            if top_k > 0:
-                cutoff = torch.topk(next_logits, min(top_k, next_logits.size(-1))).values[:, -1]
-                next_logits = next_logits.masked_fill(next_logits < cutoff[:, None], float("-inf"))
-            probabilities = F.softmax(next_logits, dim=-1)
-            next_token = torch.multinomial(probabilities, num_samples=1)
-            output = torch.cat((output, next_token), dim=1)
-            if torch.all(next_token == eos_token_id):
-                break
-        return output
+        try:
+            for _ in range(max_new_tokens):
+                context = output[:, -self.config.max_seq_len :]
+                logits, _ = self(context)
+                next_logits = logits[:, -1, :] / temperature
+                if top_k > 0:
+                    cutoff = torch.topk(
+                        next_logits, min(top_k, next_logits.size(-1))
+                    ).values[:, -1]
+                    next_logits = next_logits.masked_fill(
+                        next_logits < cutoff[:, None], float("-inf")
+                    )
+                probabilities = F.softmax(next_logits, dim=-1)
+                next_token = torch.multinomial(probabilities, num_samples=1)
+                output = torch.cat((output, next_token), dim=1)
+                if torch.all(next_token == eos_token_id):
+                    break
+            return output
+        finally:
+            self.train(was_training)
 
 
 def count_parameters(model: nn.Module) -> int:
