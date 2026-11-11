@@ -70,6 +70,10 @@ def test_native_windows_scripts_bind_only_loopback_and_use_expected_ports():
     assert "firstTokenSeconds" in verify
     assert "minimumFreeMemoryGiB" in verify
     assert "IsProcessorFeaturePresent" in start
+    assert "$llamaRecordCreated = $true" in start
+    assert "$apiRecordCreated = $true" in start
+    assert "if ($llamaRecordCreated)" in start
+    assert "if ($apiRecordCreated)" in start
     assert "--help" in start
     assert "--version" in start
     assert "kvCacheQ8Supported" in start

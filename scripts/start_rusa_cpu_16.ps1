@@ -84,6 +84,8 @@ $RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
 Push-Location $RepoRoot
 $llamaProcess = $null
 $apiProcess = $null
+$llamaRecordCreated = $false
+$apiRecordCreated = $false
 $rawApiToken = $null
 $rawServiceToken = $null
 $rawTokensCaptured = $false
@@ -282,6 +284,7 @@ $hardwareProfile | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path
         PassThru = $true
     }
     $llamaProcess = Start-Process @llamaStart
+    $llamaRecordCreated = $true
     @{
         pid = $llamaProcess.Id
         executable = $llamaExe
@@ -299,6 +302,7 @@ $hardwareProfile | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path
         PassThru = $true
     }
     $apiProcess = Start-Process @apiStart
+    $apiRecordCreated = $true
     @{
         pid = $apiProcess.Id
         executable = $pythonExe
@@ -320,10 +324,18 @@ $hardwareProfile | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path
     Write-Host "Logs: $logDir"
 }
 catch {
-    if ($apiProcess -and -not $apiProcess.HasExited) { Stop-Process -Id $apiProcess.Id -Force -ErrorAction SilentlyContinue }
-    if ($llamaProcess -and -not $llamaProcess.HasExited) { Stop-Process -Id $llamaProcess.Id -Force -ErrorAction SilentlyContinue }
-    Remove-Item -LiteralPath (Join-Path $stateDir "model-server.json") -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath (Join-Path $stateDir "llama-server.json") -Force -ErrorAction SilentlyContinue
+    if ($apiProcess -and -not $apiProcess.HasExited) {
+        Stop-Process -Id $apiProcess.Id -Force -ErrorAction SilentlyContinue
+    }
+    if ($apiRecordCreated) {
+        Remove-Item -LiteralPath (Join-Path $stateDir "model-server.json") -Force -ErrorAction SilentlyContinue
+    }
+    if ($llamaProcess -and -not $llamaProcess.HasExited) {
+        Stop-Process -Id $llamaProcess.Id -Force -ErrorAction SilentlyContinue
+    }
+    if ($llamaRecordCreated) {
+        Remove-Item -LiteralPath (Join-Path $stateDir "llama-server.json") -Force -ErrorAction SilentlyContinue
+    }
     throw
 }
 finally {
