@@ -198,6 +198,8 @@ def _validate_config(config: DatasetReleaseConfig) -> None:
     for source in config.sources:
         if not isinstance(source, DatasetSource):
             raise DatasetPipelineError("sources must contain DatasetSource values")
+        if not isinstance(source.path, (str, Path)):
+            raise DatasetPipelineError(f"source {source.source_id!r} path must be a string or Path")
         if not isinstance(source.source_id, str) or not _SOURCE_ID.fullmatch(source.source_id):
             raise DatasetPipelineError(f"invalid source_id: {source.source_id!r}")
         if source.source_id in source_ids:
@@ -604,6 +606,12 @@ def load_release_config(config_path: str | Path) -> DatasetReleaseConfig:
             raise DatasetPipelineError("each source requires source_id, path, license_id and optional source_uri")
         if not {"source_id", "path", "license_id"}.issubset(item):
             raise DatasetPipelineError("each source requires source_id, path, and license_id")
+        if not isinstance(item["source_id"], str) or not isinstance(item["path"], str):
+            raise DatasetPipelineError("source_id and path must be strings")
+        if not isinstance(item["license_id"], str):
+            raise DatasetPipelineError("source license_id must be a string")
+        if item.get("source_uri") is not None and not isinstance(item["source_uri"], str):
+            raise DatasetPipelineError("source_uri must be a string when provided")
         source_path = Path(item["path"]).expanduser()
         if not source_path.is_absolute():
             source_path = (path.parent / source_path).resolve()
@@ -621,7 +629,10 @@ def load_release_config(config_path: str | Path) -> DatasetReleaseConfig:
     for key, value in redaction_raw.items():
         if type(value) is not bool:
             raise DatasetPipelineError(f"redaction.{key} must be a boolean")
-    output_root = Path(raw.get("output_root", "artifacts/datasets")).expanduser()
+    output_root_value = raw.get("output_root", "artifacts/datasets")
+    if not isinstance(output_root_value, str):
+        raise DatasetPipelineError("output_root must be a string")
+    output_root = Path(output_root_value).expanduser()
     if not output_root.is_absolute():
         output_root = (path.parent / output_root).resolve()
     return DatasetReleaseConfig(
