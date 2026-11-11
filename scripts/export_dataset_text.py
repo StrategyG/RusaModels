@@ -143,6 +143,9 @@ def export_dataset_split(
         raise DatasetTextExportError(f"dataset release verification failed: {exc}") from exc
 
     source = root / f"{split}.jsonl"
+    current_manifest_sha256, _ = _sha256_file(root / "manifest.json")
+    if current_manifest_sha256 != verification["manifest_sha256"]:
+        raise DatasetTextExportError("release manifest changed after verification")
     release_manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     source_metadata = release_manifest["files"][source.name]
     source_sha256_before, source_size_before = _sha256_file(source)
@@ -189,11 +192,14 @@ def export_dataset_split(
         published_output = True
         output_sha256, output_size = _sha256_file(output)
         source_sha256_after, source_size_after = _sha256_file(source)
+        manifest_sha256_after, _ = _sha256_file(root / "manifest.json")
         if (
             source_sha256_after != source_metadata["sha256"]
             or source_size_after != source_metadata["size_bytes"]
         ):
             raise DatasetTextExportError("source split changed while text export was running")
+        if manifest_sha256_after != verification["manifest_sha256"]:
+            raise DatasetTextExportError("release manifest changed while text export was running")
         release_manifest_sha256 = verification["manifest_sha256"]
         export_manifest = {
             "schema_version": "1.0.0",
