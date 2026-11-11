@@ -63,6 +63,8 @@ def test_native_windows_scripts_bind_only_loopback_and_use_expected_ports():
     assert "127.0.0.1:8081" in verify
     assert "SequentialRequests" in verify
     assert "tokens_predicted_seconds_total" in verify
+    assert "requests_processing" in verify
+    assert "requests_deferred" in verify
     assert "firstTokenSeconds" in verify
     assert "minimumFreeMemoryGiB" in verify
     assert "IsProcessorFeaturePresent" in start

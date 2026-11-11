@@ -54,11 +54,11 @@ function Get-LlamaMetricSnapshot {
     $response = Invoke-WebRequest -Uri "http://127.0.0.1:8081/metrics" -Method Get -TimeoutSec 10 -UseBasicParsing
     $metrics = @{}
     foreach ($line in ($response.Content -split "\r?\n")) {
-        if ($line -match '^llamacpp:(?<name>tokens_predicted_total|tokens_predicted_seconds_total)(?:\{[^}]*\})?\s+(?<value>[0-9.eE+-]+)$') {
+        if ($line -match '^llamacpp:(?<name>tokens_predicted_total|tokens_predicted_seconds_total|requests_processing|requests_deferred)(?:\{[^}]*\})?\s+(?<value>[0-9.eE+-]+)$') {
             $metrics[$Matches.name] = [double]$Matches.value
         }
     }
-    foreach ($required in @("tokens_predicted_total", "tokens_predicted_seconds_total")) {
+    foreach ($required in @("tokens_predicted_total", "tokens_predicted_seconds_total", "requests_processing", "requests_deferred")) {
         if (-not $metrics.ContainsKey($required)) {
             throw "llama.cpp /metrics did not expose llamacpp:$required."
         }
@@ -99,6 +99,9 @@ $tokensPerSecond = @()
 try {
     for ($index = 1; $index -le $SequentialRequests; $index++) {
         $beforeMetrics = Get-LlamaMetricSnapshot
+        if ($beforeMetrics["requests_processing"] -ne 0 -or $beforeMetrics["requests_deferred"] -ne 0) {
+            throw "llama.cpp must be idle before acceptance request $index; stop other inference clients."
+        }
         $payload = @{
             model = "rusa-cpu-4b"
             messages = @(@{ role = "user"; content = "Reply with exactly OK." })
@@ -189,6 +192,9 @@ try {
 
         Add-RusaResourceSample
         $afterMetrics = Get-LlamaMetricSnapshot
+        if ($afterMetrics["requests_processing"] -ne 0 -or $afterMetrics["requests_deferred"] -ne 0) {
+            throw "llama.cpp did not return to an idle state after acceptance request $index."
+        }
         $tokenDelta = $afterMetrics["tokens_predicted_total"] - $beforeMetrics["tokens_predicted_total"]
         $generationSecondsDelta = $afterMetrics["tokens_predicted_seconds_total"] - $beforeMetrics["tokens_predicted_seconds_total"]
         if ($tokenDelta -le 0 -or $generationSecondsDelta -le 0) {
