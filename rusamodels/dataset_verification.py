@@ -58,7 +58,7 @@ def _safe_release_file(root: Path, name: str) -> Path:
     if name not in _EXPECTED_DATA_FILES:
         raise DatasetVerificationError(f"manifest references unsupported file: {name!r}")
     path = root / name
-    if path.resolve().parent != root or not path.is_file():
+    if path.is_symlink() or path.resolve().parent != root or not path.is_file():
         raise DatasetVerificationError(f"dataset release file is missing or unsafe: {name}")
     return path
 
@@ -70,9 +70,9 @@ def verify_dataset_release(release_path: str | Path) -> dict[str, Any]:
         raise DatasetVerificationError(f"dataset release directory does not exist: {root}")
     manifest_path = root / "manifest.json"
     manifest_digest_path = root / "manifest.sha256"
-    if not manifest_path.is_file() or manifest_path.resolve().parent != root:
+    if manifest_path.is_symlink() or not manifest_path.is_file() or manifest_path.resolve().parent != root:
         raise DatasetVerificationError("manifest.json is missing or unsafe")
-    if not manifest_digest_path.is_file() or manifest_digest_path.resolve().parent != root:
+    if manifest_digest_path.is_symlink() or not manifest_digest_path.is_file() or manifest_digest_path.resolve().parent != root:
         raise DatasetVerificationError("manifest.sha256 is missing or unsafe")
     manifest_bytes = manifest_path.read_bytes()
     expected_manifest_digest = manifest_digest_path.read_text(encoding="ascii").strip()
@@ -89,6 +89,9 @@ def verify_dataset_release(release_path: str | Path) -> dict[str, Any]:
     files = manifest.get("files")
     if not isinstance(files, dict) or set(files) != _EXPECTED_DATA_FILES:
         raise DatasetVerificationError("manifest must describe all four dataset release files")
+    expected_entries = _EXPECTED_DATA_FILES | {"manifest.json", "manifest.sha256"}
+    if {entry.name for entry in root.iterdir()} != expected_entries:
+        raise DatasetVerificationError("dataset release contains missing or unmanifested files")
 
     for name in sorted(_EXPECTED_DATA_FILES):
         path = _safe_release_file(root, name)
@@ -170,7 +173,12 @@ def verify_dataset_release(release_path: str | Path) -> dict[str, Any]:
             record_id = item.get("record_id")
             source_id = item.get("source_id")
             source_line = item.get("source_line")
-            if record_id not in record_splits or source_id not in sources:
+            if (
+                not isinstance(record_id, str)
+                or not isinstance(source_id, str)
+                or record_id not in record_splits
+                or source_id not in sources
+            ):
                 raise DatasetVerificationError(
                     f"provenance.jsonl:{line_number}: unknown record or source"
                 )
@@ -228,7 +236,7 @@ def verify_dataset_release(release_path: str | Path) -> dict[str, Any]:
         "raw_records": raw_records,
         "split_counts": split_counts,
         "sources": len(sources),
-        "verified_files": len(_EXPECTED_DATA_FILES) + 1,
+        "verified_files": len(_EXPECTED_DATA_FILES) + 2,
         "manifest_sha256": actual_manifest_digest,
     }
 
