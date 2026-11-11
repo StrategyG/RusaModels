@@ -7,7 +7,7 @@
     "validation_split": 0.05,
     "encoding": "utf-8",
     "tokenizer": "byte-level-v1",
-    "dataset_id": "carbon-cpu-training-corpus",
+    "dataset_id": "rusaai-agent-sft-curated",
     "dataset_version": "0.1.0",
     "source_uri": null,
     "require_export_manifest": true,
