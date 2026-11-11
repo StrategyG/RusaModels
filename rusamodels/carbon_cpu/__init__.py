@@ -16,7 +16,11 @@ __all__ = [
 
 def __getattr__(name: str):
     if name in {"CarbonConfig", "CarbonTiny", "count_parameters"}:
-        from . import model
+        from .model import CarbonConfig, CarbonTiny, count_parameters
 
-        return getattr(model, name)
+        return {
+            "CarbonConfig": CarbonConfig,
+            "CarbonTiny": CarbonTiny,
+            "count_parameters": count_parameters,
+        }[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
