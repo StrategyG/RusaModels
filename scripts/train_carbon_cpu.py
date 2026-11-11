@@ -382,21 +382,26 @@ def main() -> int:
     model = CarbonTiny(model_config).to(device)
     optimizer = torch.optim.AdamW(
         model.parameters(),
-        lr=float(training["learning_rate"]),
-        weight_decay=float(training["weight_decay"]),
+        lr=learning_rate_value,
+        weight_decay=weight_decay_value,
         betas=(0.9, 0.95),
     )
     start_step = 0
     if args.resume:
         resume_path = args.resume.resolve()
-        checkpoint = torch.load(resume_path, map_location="cpu")
+        checkpoint = torch.load(resume_path, map_location="cpu", weights_only=True)
         if checkpoint.get("model_config") != model_config.to_dict():
             raise ValueError("Checkpoint architecture does not match the selected model config")
+        if checkpoint.get("dataset_fingerprint") != dataset_fingerprint:
+            raise ValueError("Checkpoint dataset fingerprint does not match the selected corpus/split")
+        if checkpoint.get("training_contract_digest") != training_contract_digest:
+            raise ValueError("Checkpoint training contract does not match the current training settings")
         model.load_state_dict(checkpoint["model_state"])
         optimizer.load_state_dict(checkpoint["optimizer_state"])
         start_step = int(checkpoint.get("step", 0))
         if start_step >= steps:
             raise ValueError(f"Checkpoint is already at step {start_step}; requested total steps={steps}")
+        restore_rng_state(checkpoint.get("rng_state"), np_rng, eval_rng, torch)
         print(f"Resuming from step {start_step}: {resume_path}")
 
     parameter_count = count_parameters(model)
@@ -428,8 +433,8 @@ def main() -> int:
     run_started = time.monotonic()
 
     def learning_rate(step: int) -> float:
-        warmup = int(training.get("warmup_steps", 20))
-        base = float(training["learning_rate"])
+        warmup = warmup_steps
+        base = learning_rate_value
         if step <= warmup:
             return base * step / max(warmup, 1)
         progress = min(1.0, (step - warmup) / max(steps - warmup, 1))
@@ -447,7 +452,7 @@ def main() -> int:
             _, loss = model(inputs, targets)
             (loss / grad_accum).backward()
             accumulated_loss += float(loss.detach().item()) / grad_accum
-        torch.nn.utils.clip_grad_norm_(model.parameters(), float(training["max_grad_norm"]))
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
         optimizer.step()
 
         if step == 1 or step % eval_interval == 0 or step == steps:
@@ -464,6 +469,8 @@ def main() -> int:
             }
             with metrics_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(record) + "\n")
+                handle.flush()
+                os.fsync(handle.fileno())
             print(json.dumps(record), flush=True)
 
             payload = {
@@ -472,6 +479,9 @@ def main() -> int:
                 "optimizer_state": optimizer.state_dict(),
                 "model_config": model_config.to_dict(),
                 "training_config": training,
+                "dataset_fingerprint": dataset_fingerprint,
+                "training_contract_digest": training_contract_digest,
+                "rng_state": capture_rng_state(np_rng, eval_rng, torch),
                 "smoke_test": bool(args.smoke_test),
             }
             save_checkpoint(output_dir / "checkpoint.pt", payload, torch)
@@ -483,6 +493,8 @@ def main() -> int:
             "step": steps,
             "model_state": model.state_dict(),
             "model_config": model_config.to_dict(),
+            "dataset_fingerprint": dataset_fingerprint,
+            "training_contract_digest": training_contract_digest,
             "smoke_test": bool(args.smoke_test),
         },
         torch,
