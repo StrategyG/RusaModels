@@ -100,7 +100,7 @@ Do not perform these steps with the current design-only manifest. They become va
 5. Record the exact filename and SHA-256 in the model manifest.
 6. Record tokenizer repository/revision and chat-template validation; record artifact filename and SHA-256.
 7. Set the manifest statuses to `SELECTED`, `VERIFIED`, `VALIDATED`, and `BUILT` only when each step has evidence, then set the top-level status to `READY_FOR_DEVICE_VALIDATION`.
-8. For an 8K test, set `benchmark.context_8192_status: TESTING`, `RUSAMODELS_CONTEXT_SIZE=8192` and `RUSAMODELS_CONTEXT_8K_TEST_MODE=true`; run `scripts/verify_rusa_cpu_16_context.ps1`. Change the manifest status to `PASS` only after reviewing its report and confirming at least 2 GB free RAM.
+8. For an 8K test, set `benchmark.context_8192_status: TESTING`, `RUSAMODELS_CONTEXT_SIZE=8192` and `RUSAMODELS_CONTEXT_8K_TEST_MODE=true`; run `scripts/verify_rusa_cpu_16_context.ps1`. Change the manifest status to `PASS` only after reviewing its report and confirming at least 2 GB free RAM; then set test mode to `false` and restart to verify the normal production gate.
 9. Populate `.env` from `.env.rusa-cpu-16.example`, including the local artifact path and the same SHA-256 as the manifest.
 
 The manifest gate in `scripts/start_rusa_cpu_16.ps1` checks the non-Qwen repository, immutable revision, license, checkpoint compatibility, tokenizer/chat-template validation, GGUF Q4_K_M status and SHA-256 agreement. It refuses to start while any required evidence is missing.
