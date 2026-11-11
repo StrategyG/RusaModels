@@ -64,6 +64,8 @@ def load_dataset_export_manifest(
         "dataset_id",
         "dataset_version",
         "split",
+        "source_split_file",
+        "exporter",
         "output_file",
         "output_sha256",
         "release_manifest_sha256",
@@ -79,6 +81,10 @@ def load_dataset_export_manifest(
         )
     if manifest["output_file"] != corpus_path.name:
         raise ValueError("dataset export manifest names a different corpus file")
+    if manifest["exporter"] != "rusamodels.dataset_text_export":
+        raise ValueError("dataset export manifest has an unsupported exporter")
+    if manifest["source_split_file"] != f"{manifest['split']}.jsonl":
+        raise ValueError("dataset export manifest names a different source split")
     if manifest["tokenizer"] != "byte-level-v1" or manifest["encoding"].lower() != "utf-8":
         raise ValueError("dataset export does not match the Carbon byte-level tokenizer")
     license_ids = manifest.get("license_ids")
