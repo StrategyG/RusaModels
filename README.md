@@ -28,6 +28,7 @@ RusaAi is an authenticated service consumer. It does not connect directly to the
 - Independent chat and embedding upstream configuration, allowing local LLM and embedding runtimes to use separate CPU services.
 - CPU-only Codespaces inference profile with private llama.cpp and local embedding containers, bounded CPU/RAM limits and no published runtime ports.
 - Migrated agent SFT dataset validation, QLoRA training, held-out evaluation, adapter merge, GGUF checksum verification and inference benchmark tools.
+- Reproducible JSONL dataset release builder with source provenance, configurable redaction, exact deduplication, deterministic group-aware splits, immutable manifests and SHA-256 verification.
 - Verified model-version artifact download and pinned local embedding snapshot utilities.
 - Immutable Hugging Face commit pinning, upstream license verification, and artifact manifests with SHA-256 digests.
 - Separate Quant Worker with database leases, heartbeat renewal, stale-worker fencing, bounded retries for transient failures and cooperative cancellation.
@@ -61,6 +62,8 @@ Create a Model Server Codespace using `.devcontainer/model-server/devcontainer.j
 Never commit model weights, API tokens or credentials. Production requires PostgreSQL and S3-compatible storage. Give Model Server read-only artifact permissions and Quant Server narrowly scoped write permissions. Apply schema changes with Alembic migrations.
 
 ## Documentation
+
+- [Dataset engineering](docs/DATASET_ENGINE.md)
 
 - [Architecture](docs/architecture.md)
 - [ADR-001](docs/ADR-001-shared-control-plane.md)

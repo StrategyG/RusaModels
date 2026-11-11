@@ -1,0 +1,22 @@
+{
+  "dataset_id": "rusaai-agent-sft-curated",
+  "version": "0.1.0",
+  "output_root": "../../artifacts/datasets",
+  "seed": 42,
+  "validation_fraction": 0.1,
+  "test_fraction": 0.1,
+  "max_record_bytes": 2097152,
+  "redaction": {
+    "emails": true,
+    "secrets": true,
+    "phone_numbers": false
+  },
+  "sources": [
+    {
+      "source_id": "approved-corpus",
+      "path": "../../data/raw/approved-corpus.jsonl",
+      "license_id": "LicenseRef-REPLACE-WITH-APPROVED-LICENSE",
+      "source_uri": "https://example.invalid/dataset"
+    }
+  ]
+}
