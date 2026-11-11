@@ -74,7 +74,7 @@ try {
         }
     }
     if ($bestPromptTokens -lt 7400) {
-        throw "Could not construct a safe 7,400–7,600 token context probe; observed $bestPromptTokens tokens."
+        throw ("Could not construct a safe 7400 to 7600 token context probe; observed {0} tokens." -f $bestPromptTokens)
     }
 
     $payload = @{
