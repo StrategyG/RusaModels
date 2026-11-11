@@ -7,6 +7,10 @@ from pathlib import Path
 import httpx
 import pytest
 
+from rusamodels.evaluation.compare import (
+    BenchmarkComparisonError,
+    compare_benchmark_reports,
+)
 from rusamodels.evaluation.benchmark import (
     BenchmarkError,
     freeze_benchmark_suite,
@@ -229,3 +233,111 @@ def test_freeze_rejects_duplicate_prompts_and_unsafe_source_uri(tmp_path: Path) 
             ["CC0-1.0"],
             source_uri="https://user:secret@example.org/benchmark",
         )
+
+
+def _write_report(
+    path: Path,
+    *,
+    suite_sha: str = "a" * 64,
+    model_id: str = "model",
+    accuracy: float = 0.9,
+    latency: float = 100.0,
+    results: list[dict] | None = None,
+) -> Path:
+    if results is None:
+        results = [
+            {
+                "record_id": "language-1",
+                "category": "language",
+                "scorer": "contains",
+                "score": True,
+            },
+            {
+                "record_id": "safety-1",
+                "category": "safety",
+                "scorer": "contains",
+                "score": False,
+            },
+        ]
+    report = {
+        "schema_version": "1.0.0",
+        "benchmark": {
+            "suite_id": "rusaai-core",
+            "suite_version": "1.0.0",
+            "file_sha256": suite_sha,
+        },
+        "model": {"id": model_id, "artifact_sha256": "b" * 64},
+        "summary": {"accuracy": accuracy, "failed_requests": 0},
+        "latency_ms": {"mean": latency},
+        "results": results,
+    }
+    path.write_text(json.dumps(report), encoding="utf-8")
+    return path
+
+
+def test_benchmark_comparison_passes_within_accuracy_and_latency_gates(
+    tmp_path: Path,
+) -> None:
+    baseline = _write_report(tmp_path / "baseline.json", accuracy=0.9, latency=100.0)
+    candidate = _write_report(
+        tmp_path / "candidate.json",
+        model_id="model-q4",
+        accuracy=0.89,
+        latency=150.0,
+        results=[
+            {"record_id": "language-1", "category": "language", "scorer": "contains", "score": True},
+            {"record_id": "safety-1", "category": "safety", "scorer": "contains", "score": False},
+        ],
+    )
+    result = compare_benchmark_reports(
+        baseline,
+        candidate,
+        tmp_path / "comparison.json",
+        max_accuracy_drop=0.02,
+        max_category_drop=0.05,
+        max_latency_ratio=2.0,
+    )
+    assert result["release_gate"]["passed"] is True
+    assert result["comparison"]["accuracy_drop"] == 0.01
+    assert result["comparison"]["latency_ratio"] == 1.5
+
+
+def test_benchmark_comparison_blocks_protected_category_regression(
+    tmp_path: Path,
+) -> None:
+    baseline = _write_report(tmp_path / "baseline.json", accuracy=0.9)
+    candidate = _write_report(
+        tmp_path / "candidate.json",
+        accuracy=0.9,
+        results=[
+            {"record_id": "language-1", "category": "language", "scorer": "contains", "score": True},
+            {"record_id": "safety-1", "category": "safety", "scorer": "contains", "score": True},
+        ],
+    )
+    result = compare_benchmark_reports(
+        baseline,
+        candidate,
+        tmp_path / "comparison.json",
+    )
+    assert result["release_gate"]["passed"] is False
+    assert "protected_category_regression" in result["release_gate"]["failed_gates"]
+
+
+def test_benchmark_comparison_rejects_different_frozen_suites(tmp_path: Path) -> None:
+    baseline = _write_report(tmp_path / "baseline.json")
+    candidate = _write_report(tmp_path / "candidate.json", suite_sha="c" * 64)
+    with pytest.raises(BenchmarkComparisonError, match="different frozen benchmark suites"):
+        compare_benchmark_reports(baseline, candidate, tmp_path / "comparison.json")
+
+
+def test_benchmark_comparison_rejects_changed_record_contract(tmp_path: Path) -> None:
+    baseline = _write_report(tmp_path / "baseline.json")
+    candidate = _write_report(
+        tmp_path / "candidate.json",
+        results=[
+            {"record_id": "language-1", "category": "coding", "scorer": "contains", "score": True},
+            {"record_id": "safety-1", "category": "safety", "scorer": "contains", "score": False},
+        ],
+    )
+    with pytest.raises(BenchmarkComparisonError, match="record contract changed"):
+        compare_benchmark_reports(baseline, candidate, tmp_path / "comparison.json")
