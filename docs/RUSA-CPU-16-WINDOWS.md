@@ -1,202 +1,166 @@
-# RUSA-CPU-16 — Native Windows 11 Deployment
+# RUSA-CPU-16 — Native Windows 11 Edge Profile
 
-**Profile:** rusa-cpu-16  
-**Version:** 1.0.0  
-**Status:** locked baseline; hardware acceptance is still required  
-**Platform:** Windows 11 64-bit, Intel Core i5, nominal 16 GB RAM, CPU-only
+**Architecture:** RusaAi Unified CPU-First AI Architecture v2.0  
+**Profile:** `rusa-cpu-16`  
+**Profile version:** 2.0.0  
+**Status:** Architecture target — not yet deployable  
+**Platform target:** Windows 11 x64, Intel Core i5 (exact SKU to be detected), 16 GB physical RAM, CPU-only
 
-This is the native local/edge deployment baseline. It is deliberately separate from the optional Docker/Codespaces CPU profile in CPU_INFERENCE.md. The Codespaces profile uses different context, quantization, resource limits and an optional embedding sidecar; do not copy those values into this baseline.
+This document supersedes the Qwen3-based v1.0 deployment instructions for the v2.0 profile. The v1.0 configuration is preserved at `docs/archive/RUSA-CPU-16-WINDOWS-v1.0-Qwen3.md` and `configs/runtime/archive/rusa-cpu-16-v1.0-qwen3.yaml`. Do not mix the two model baselines.
 
-Qwen3-4B is the initial candidate, not a performance certification for every Core i5 SKU. Benchmark representative RUSA tasks; if quality or performance is insufficient, evaluate alternatives without changing the Rusaai–RusaModels service contract.
+## 1. Model readiness gate
 
-## 1. Locked runtime profile
+The v2.0 target model is **RusaAi-Edge-1.54B** (`rusaai-edge-1.54b`). The architecture source explicitly records:
 
-| Component | Baseline |
+- Checkpoint: `NOT_SELECTED`
+- Tokenizer: `NOT_SELECTED`
+- GGUF artifact: `NOT_BUILT`
+- Training: `NOT_STARTED`
+- Benchmark: `NOT_TESTED`
+
+A compatible **non-Qwen open-weight checkpoint** must be selected, its license and immutable revision recorded, and its architecture/tokenizer/chat template audited before a runtime artifact can be built. The target design is not itself a checkpoint or a runnable model. If the selected checkpoint differs from the reference configuration, the actual checkpoint configuration becomes the source of truth and RusaAi-Edge must be described as a derivative/adaptation rather than an identical implementation.
+
+The machine-readable target is:
+
+- `configs/runtime/rusa-cpu-16.yaml` — device/deployment profile.
+- `models/rusaai-edge/manifests/0.1.0-design.json` — model design manifest.
+
+The Windows launcher intentionally fails closed while the manifest remains in its current design-only state. Do not bypass that gate or substitute Qwen3-4B.
+
+## 2. v2.0 deployment baseline
+
+| Component | v2.0 target |
 |---|---|
-| Model family | Qwen3-4B Instruct |
-| Model repository | Qwen/Qwen3-4B-GGUF |
-| Artifact | GGUF Q4_K_M |
-| Runtime | llama.cpp llama-server.exe |
-| Context | 8,192 tokens |
+| Operating system | Windows 11 64-bit |
+| CPU | Intel Core i5; exact SKU, physical cores and logical processors detected |
+| Physical RAM | 16 GB |
+| Model ID | `rusaai-edge-1.54b` |
+| Model architecture | Dense decoder-only Transformer; 1,541,277,696 target parameters |
+| Checkpoint | Non-Qwen open-weight checkpoint; not yet selected |
+| Artifact | GGUF Q4_K_M target; not yet built |
+| Runtime | llama.cpp CPU build |
+| Initial context | 4,096 tokens |
+| Context target | 8,192 tokens, only after target-device RAM acceptance |
 | Generation threads | 4 initially; reduce to detected physical core count when below 4 |
-| Batch threads | 4 |
-| HTTP threads | 2 |
-| Concurrent generations | 1 |
-| Pending inference queue | 3; owned by the Rusaai scheduler |
-| KV cache | Q8_0 for K and V when supported |
-| Batch / micro-batch | 512 / 128 |
+| Batch threads | 4 initially |
+| HTTP threads | 2 initially |
+| Batch / micro-batch | 128 / 64 initially |
+| Active generation | 1 |
+| Pending inference queue | Maximum 3; owned by Rusaai |
+| KV cache | Q8_0 only when supported and validated |
 | GPU layers | 0 |
-| Model runtime | 127.0.0.1:8081 |
-| RusaModels API | 127.0.0.1:8090 |
-| Cloud inference fallback | Disabled |
-| Separate embedding process | Disabled in v1.0 |
+| llama.cpp | `127.0.0.1:8081` |
+| RusaModels Model Server | `127.0.0.1:8090` |
+| External/cloud inference fallback | Disabled by default |
 
-The exact Core i5 SKU is not present in the source baseline. Startup detects physical and logical cores and starts generation at min(4, physical cores), while batch threads remain at 4 as specified. It records Windows-reported SSE, AVX, AVX2, AVX-512F and BMI2 feature flags using IsProcessorFeaturePresent; these are evidence only, not an invented minimum CPU requirement. Startup also records the llama.cpp version and checks that the installed build advertises every required command-line option. Q8_0 K/V cache flags are passed only when that build advertises Q8_0 support. The hardware snapshot is written to .local/rusa-cpu-16/hardware-profile.json and the runtime version to .local/logs/llama-server-version.txt. Do not raise thread count, context or concurrency without hardware-specific benchmark and acceptance evidence.
+The one active generation and three pending requests are an orchestration contract owned by **Rusaai**. RusaModels provides the model runtime and inference API; it does not own agent scheduling, queue priority, workflow decisions, tool execution, or policy.
 
-The matching machine-readable profile is configs/runtime/rusa-cpu-16.yaml.
+## 3. Resource assumptions
 
-The 8K context allocation follows the source baseline: 1,000 tokens for system instruction/policy, 1,500 for user task/conversation, 2,500 for retrieved project context, 1,144 for tool results/evidence, 1,536 for output/reasoning and 512 for margin. The allocation is dynamic but must never exceed 8,192 tokens. Initial retrieval tuning is 300–700 token chunks, 50–100 token overlap and 3–6 retrieved chunks. Context and memory retrieval are owned by Rusaai; the profile records the shared baseline.
+The v2.0 architecture estimates Q4_K_M weights at approximately 0.9–1.1 GB for the reference 1.54B design. Estimated Q8_0 KV cache is approximately 128 MiB at 4K and 256 MiB at 8K. These are planning estimates, not measurements.
 
-## 2. Resource budget
+- Keep at least 2 GB free RAM during inference.
+- Record peak RAM, minimum free RAM, CPU utilization and thermal throttling when telemetry is available.
+- Do not reuse the v1.0 Qwen3-4B 2.5-GB weight estimate for RusaAi-Edge.
+- Other runtime, operating-system and service memory must be measured on the target device.
+- Start with 4K context. Enable 8K only after representative device acceptance.
+- Thread counts are starting values and must be tuned against the exact CPU SKU and benchmark evidence.
 
-The source configuration is a planning budget, not a measured benchmark. The 0.6-GB KV-cache line assumes Q8_0. If the installed llama.cpp build does not advertise Q8_0, the launcher uses the runtime default and the memory budget must be revalidated on the target device:
+The CPU/resource backpressure thresholds (CPU 70%/85%, RAM 75%/85%, free RAM below 2 GB) are owned by the Rusaai resource monitor/scheduler. RusaModels must not implement a second agent scheduler.
 
-| Component | Planned RAM |
-|---|---:|
-| Windows 11 and base applications | 5.0 GB |
-| Qwen3-4B Q4_K_M weights | 2.5 GB |
-| KV cache (Q8_0) | 0.6 GB |
-| Inference buffers | 1.2 GB |
-| Rusaai services | 1.2 GB |
-| RusaModels API, database and telemetry | 0.5 GB |
-| Reserved free memory | 2.0 GB |
-| Planned total | 13.0 GB |
-| Flexible headroom | 3.0 GB |
+## 4. Model-plane and control-plane boundary
 
-The launcher refuses to start when detected physical RAM is below the nominal 16-GB class or free RAM is below 2 GB. These checks do not prove that the full workload will remain within budget. Measure peak RAM while the model is loaded and during the acceptance run.
+**RusaModels owns:**
+- Model registry and model/artifact lifecycle.
+- Checkpoint/artifact metadata and checksum verification.
+- CPU runtime startup and model inference.
+- Model load, inference and runtime telemetry.
+- Versioned Model Server API and structured inference responses.
 
-Resource protection thresholds:
-- CPU below 70%: normal operation.
-- CPU 70–85%: reduce background work.
-- CPU above 85% for a sustained period: defer non-priority tasks.
-- RAM above 75%: do not load another model.
-- RAM above 85%: reduce context and additional tasks.
-- Free RAM below 2 GB: activate memory-protection mode.
+**Rusaai owns:**
+- Supreme Orchestrator, agents, workflow and durable task queue.
+- One-active-generation scheduling and up to three pending inference requests.
+- Context Manager and reasoning controller.
+- Carbon and Astra capability profiles (not separate model copies).
+- SQLite/FTS5 memory and RAG.
+- ORM, PRM-Lite, independent QA, Policy Engine and Tool Gateway.
+- All tool execution and user-approval decisions.
 
-These host-wide backpressure thresholds are owned by the Rusaai resource monitor/scheduler. RusaModels records the agreed profile and exposes llama.cpp metrics; it does not schedule file indexing or build jobs.
+RusaModels must not execute tools or decide workflow permissions. Carbon V1 preprocessing (OCR/ASR/document extraction) is not evidence of native multimodal model capability.
 
-## 3. Install prerequisites
+## 5. Prepare the deployment after model selection
 
-1. Install Python 3.11 or newer.
-2. Install llama.cpp using the approved Windows distribution. The baseline source lists winget install llama.cpp. Verify that llama-server.exe is available with Get-Command llama-server.exe; if it is not on PATH, set LLAMA_SERVER_EXE in .env to the exact installed executable path.
-3. Clone this repository and create a virtual environment:
+Do not perform these steps with the current design-only manifest. They become valid only after the non-Qwen checkpoint, tokenizer and artifact have been approved and recorded.
 
-    py -3.12 -m venv .venv
-    .\.venv\Scripts\Activate.ps1
-    python -m pip install --upgrade pip
-    python -m pip install -e ".[dev]"
+1. Pin the upstream checkpoint to an immutable revision and record its license.
+2. Audit actual layers, hidden size, attention/GQA, FFN, vocabulary, tokenizer and chat template against the target design.
+3. Record whether the checkpoint matches the reference architecture or creates a derivative/adaptation.
+4. Build or obtain a legally usable GGUF artifact and quantize to Q4_K_M.
+5. Record the exact filename and SHA-256 in the model manifest.
+6. Update the manifest statuses to `SELECTED`, `VERIFIED`, `VALIDATED`, and `BUILT` only when each step has evidence.
+7. Populate `.env` from `.env.rusa-cpu-16.example`, including the local artifact path and the same SHA-256 as the manifest.
 
-4. Prepare the model directory inside RusaModels local artifact storage, which is excluded from Git. Download the official Qwen3-4B GGUF Q4_K_M artifact from the pinned immutable revision:
+The manifest gate in `scripts/start_rusa_cpu_16.ps1` checks the non-Qwen repository, immutable revision, license, checkpoint compatibility, tokenizer/chat-template validation, GGUF Q4_K_M status and SHA-256 agreement. It refuses to start while any required evidence is missing.
 
-    python -m pip install --upgrade "huggingface_hub[cli]"
-    New-Item -ItemType Directory -Path "C:\RusaModels\.local\artifacts\models" -Force
-    hf download Qwen/Qwen3-4B-GGUF Qwen3-4B-Q4_K_M.gguf --revision a9a60d009fa7ff9606305047c2bf77ac25dbec49 --local-dir "C:\RusaModels\.local\artifacts\models"
-    Get-FileHash "C:\RusaModels\.local\artifacts\models\Qwen3-4B-Q4_K_M.gguf" -Algorithm SHA256
+## 6. Local edge service configuration
 
-The pinned file is 2,497,280,256 bytes with SHA-256 7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5. The local hash must match this value; do not start the runtime with a different file or an unreviewed model revision. The pinned model repository declares the Apache-2.0 license; retain the model-card/license reference with the artifact and confirm the license remains applicable to the intended use.
-
-Do not assume a filename or revision. Use the exact artifact downloaded and approved. Keep model weights outside the repository; .local/ is ignored by Git.
-
-## 4. Configure the edge service boundary
-
-Copy the example and edit the local paths:
-
-    Copy-Item .env.rusa-cpu-16.example .env
-    notepad .env
-
-The profile uses:
-- RUSAMODELS_ENV=edge
-- SQLite registry database and local artifact storage.
+The edge example uses:
+- Local SQLite for RusaModels registry metadata and local artifact storage.
 - One loopback-only llama.cpp upstream.
-- One dedicated Rusaai inference principal.
+- A dedicated Rusaai inference principal with role `inference`.
 - A separate internal service-token digest.
-- No S3 credentials, embedding sidecar or external inference fallback.
+- No S3 credentials or external inference fallback.
+- No second embedding runtime in this initial edge service configuration.
 
-The launcher removes raw Rusaai API/service tokens from its child-process environment before migrations and service startup, then restores the invoking PowerShell session. It rejects raw token entries in the RusaModels .env file. This prevents the Model Server and migration process from inheriting credentials they do not need.
+Copy the example only after the artifact gate is satisfied:
 
-Generate two independent high-entropy tokens in PowerShell. Keep the raw values in the Rusaai secret store; only their SHA-256 digests belong in the RusaModels .env file:
+```powershell
+Copy-Item .env.rusa-cpu-16.example .env
+notepad .env
+```
 
-    $inferenceToken = python -c "import secrets; print(secrets.token_urlsafe(32))"
-    $inferenceDigest = python -c "import hashlib,sys; print(hashlib.sha256(sys.argv[1].encode()).hexdigest())" $inferenceToken
-    $serviceToken = python -c "import secrets; print(secrets.token_urlsafe(32))"
-    $serviceDigest = python -c "import hashlib,sys; print(hashlib.sha256(sys.argv[1].encode()).hexdigest())" $serviceToken
-    $principalRegistry = @{}
-    $principalRegistry[$inferenceDigest] = @{ subject = "rusa-ai-inference"; role = "inference" }
-    $env:RUSAMODELS_API_PRINCIPALS = ConvertTo-Json -InputObject $principalRegistry -Compress
-    $env:RUSAMODELS_SERVICE_TOKEN_SHA256 = $serviceDigest
+Generate independent high-entropy inference and service tokens. Keep raw tokens in Rusaai secret storage; only their SHA-256 digests belong in the RusaModels `.env`. Never commit raw tokens or the populated `.env`.
 
-Keep only the principal registry and service-token digest available to the RusaModels service process. Store the raw inference and service tokens only in Rusaai secret storage. Configure Rusaai with:
-- OpenAI-compatible base URL: http://127.0.0.1:8090/openai/v1
-- Model ID: rusa-cpu-4b
-- Bearer token: the raw inference token
-- Internal dependency-check header: X-Rusa-Service-Token with the raw service token
+Rusaai connects through the Model Access Gateway using:
 
-The inference token has role inference; it cannot manage models or read administrative audit data. The internal service token is a different credential. Do not commit either raw token or the populated .env.
+- Base URL: `http://127.0.0.1:8090/openai/v1`
+- Model ID: `rusaai-edge-1.54b`
+- Bearer token: raw inference token held by Rusaai.
 
-## 5. Start and stop
+The llama.cpp and Model Server ports remain bound to loopback. Do not publish them to the public internet.
 
-From the repository root, in the PowerShell session containing the required environment variables:
+## 7. Start, stop and acceptance
 
-    .\scripts\start_rusa_cpu_16.ps1
+After the model manifest and local artifact are complete:
 
-Startup:
-1. Loads non-secret settings from .env without overriding current process environment variables.
-2. Requires the edge environment, SQLite, local artifact storage, loopback inference URL and inference-role principal.
-3. Detects CPU physical/logical cores, Windows-reported instruction features, RAM and available memory.
-4. Captures llama.cpp version/help, rejects missing required runtime options and uses Q8_0 K/V cache only if advertised by the installed build.
-5. Verifies the GGUF SHA-256 before loading it.
-6. Applies Alembic migrations.
-7. Starts llama.cpp bound to 127.0.0.1:8081 with the locked 8K/CPU-only parameters.
-8. Starts the RusaModels API bound to 127.0.0.1:8090.
-9. Waits for llama.cpp and API readiness.
+```powershell
+.\scripts\start_rusa_cpu_16.ps1
+.\scripts\verify_rusa_cpu_16.ps1 -SequentialRequests 20
+.\scripts\stop_rusa_cpu_16.ps1
+```
 
-Logs and process records are written under ignored .local/logs/ and .local/rusa-cpu-16/.
+The launcher detects Windows/CPU/RAM, records Windows-reported instruction features, records the llama.cpp version, verifies the manifest and GGUF SHA-256, applies migrations, and starts the runtime with GPU offload disabled. It starts with 4K context unless `RUSAMODELS_CONTEXT_SIZE=8192` is explicitly configured; 8K is refused unless the model manifest records `benchmark.context_8192_status: PASS`.
 
-Stop both services with:
+The acceptance script checks the authenticated model ID and performs 20 sequential streaming requests. It records TTFT, end-to-end latency, generation tokens/second and sampled CPU/free RAM. This does not replace the architecture's full device acceptance.
 
-    .\scripts\stop_rusa_cpu_16.ps1
+Before calling the device production-ready, record evidence for:
 
-The API and llama.cpp ports must remain loopback-only. Do not publish either port to the public internet. If Rusaai runs on another host, this local profile is not directly reachable; use an explicitly reviewed private network design rather than opening the ports.
+- Non-Qwen checkpoint, license, immutable revision and actual configuration.
+- Tokenizer and chat template validation.
+- GGUF Q4_K_M artifact and SHA-256.
+- CPU-only execution and model residency.
+- Context 4K test; context 8K test before enabling 8K.
+- 20 sequential requests and a 30-minute stable session.
+- Minimum 2 GB free RAM, CPU utilization and thermal telemetry where available.
+- One active generation and at most three pending requests in Rusaai.
+- Restart recovery and structured inference/API behavior.
+- TTFT, tokens/second, latency, peak RAM, minimum free RAM and queue wait/depth (queue telemetry from Rusaai).
+- ORM, PRM-Lite, independent verification, Tool Gateway and Policy Engine evidence from Rusaai.
 
-## 6. Smoke and sequential acceptance
-
-Set RUSAMODELS_API_TOKEN in the current PowerShell session to the raw inference token, then run:
-
-    $env:RUSAMODELS_API_TOKEN = $inferenceToken
-    .\scripts\verify_rusa_cpu_16.ps1 -SequentialRequests 20
-
-The script verifies llama.cpp and API readiness, confirms the model ID is exposed to the inference principal, then runs exactly 20 sequential streaming chat requests. During each request it samples free RAM and CPU load, measures time-to-first-token (TTFT) and end-to-end latency, and calculates generated tokens/second from the before/after llama.cpp Prometheus counters. It writes a non-secret acceptance report under .local/logs. RAM is sampled every 500 ms while waiting for response headers or stream data; this is sampled evidence, not continuous hardware telemetry. It does not prove context-window, queue, thermal or long-duration stability. Queue wait time must be collected from the Rusaai scheduler because Rusaai owns the pending-request queue.
-
-## 7. Reasoning and orchestration ownership
-
-Rusaai owns the scheduler, context manager, reasoning selection, ORM, PRM-Lite, Tool Gateway and Policy Engine. RusaModels serves the configured model and does not execute tools or decide workflow permissions.
-
-| Profile | Mode | Output budget | Candidates |
-|---|---|---:|---:|
-| LOW | No-think / light reasoning | 384 tokens | 1 |
-| MEDIUM | Think | 768 tokens | 1 |
-| HIGH | Think + limited search | 1,536 tokens | 2, sequentially |
-
-Initial sampling values from the baseline:
-- Thinking: temperature 0.6, top-p 0.95, top-k 20, min-p 0, presence penalty 1.5.
-- Non-thinking: temperature 0.7, top-p 0.8.
-
-Apply and validate these request parameters in Rusaai against the selected llama.cpp/model version. They are initial tuning values, not measured optimal settings. Keep one active generation; the three pending requests are queued by Rusaai, not by separate model processes.
-
-The initial memory design is SQLite + FTS5 in Rusaai across working, episodic, semantic, procedural and project memory. Do not load a separate embedding model permanently in this 16-GB baseline. Add vector search only after retrieval-quality and RAM testing. Rusaai limits light file indexing to two workers, heavy build/test work to one job and resident models to one. Tool calls must pass through Rusaai Tool Gateway and deterministic Policy Engine; the model itself never authorizes or executes tools.
-
-## 8. Acceptance gate before calling the device production-ready
-
-- [ ] Exact Windows build, Intel Core i5 SKU, physical cores and logical processors recorded.
-- [ ] Approved Qwen3-4B GGUF Q4_K_M revision, file and SHA-256 recorded.
-- [ ] llama.cpp reports CPU-only execution and the model is resident.
-- [ ] 8,192-token context tested with representative RUSA prompts.
-- [ ] At least 20 sequential requests complete without crash.
-- [ ] One active generation and a maximum of three pending requests verified in Rusaai.
-- [ ] LOW, MEDIUM and HIGH reasoning profiles tested.
-- [ ] Free RAM remains at least 2 GB during inference.
-- [ ] ORM, PRM-Lite and independent verification return evidence.
-- [ ] Rusaai calls RusaModels through the authenticated API contract.
-- [ ] Tool execution is only through Tool Gateway and Policy Engine.
-- [ ] Both runtime ports are bound to localhost only.
-- [ ] Restart and recovery after process failure tested.
-- [ ] TTFT, tokens/second, total latency, sampled peak system RAM, minimum sampled free RAM and sampled CPU use recorded by the acceptance report.
-- [ ] Queue wait time recorded separately from Rusaai scheduler telemetry.
-
-Do not set a tokens/second target until the exact CPU SKU and runtime build have been benchmarked. CI validates code, configuration and PowerShell syntax; it does not run the model on the target Windows machine. Production certification still requires the device acceptance evidence above.
+CI validates code, configuration, container builds, and PowerShell syntax. It does not select a checkpoint, build the RusaAi-Edge model, or prove target-device performance.
 
 ## References
 
-- [Pinned Qwen3-4B-Q4_K_M artifact](https://huggingface.co/Qwen/Qwen3-4B-GGUF/blob/a9a60d009fa7ff9606305047c2bf77ac25dbec49/Qwen3-4B-Q4_K_M.gguf) — immutable revision a9a60d009fa7ff9606305047c2bf77ac25dbec49, 2,497,280,256 bytes, SHA-256 7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5.
-- [llama.cpp server parameters and metrics](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md) — validate supported runtime flags and Prometheus counters against the pinned llama.cpp build.
-- [Windows IsProcessorFeaturePresent API](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-isprocessorfeaturepresent) — source of OS-reported CPU instruction-feature flags.
+- RusaAi Unified CPU-First AI Architecture v2.0, especially sections 5, 6, 7, 11, 13, 16–20, 21 and 23.
+- [llama.cpp server parameters and metrics](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md).
+- [Windows IsProcessorFeaturePresent API](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-isprocessorfeaturepresent).

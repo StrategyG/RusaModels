@@ -105,12 +105,60 @@ try {
     if ($env:RUSAMODELS_INFERENCE_BASE_URL -ne "http://127.0.0.1:8081") {
         throw "Inference must target http://127.0.0.1:8081."
     }
-    if ($env:RUSAMODELS_INFERENCE_MODEL_ID -ne "rusa-cpu-4b") {
-        throw "The model ID must be rusa-cpu-4b."
+    $modelId = $env:RUSAMODELS_INFERENCE_MODEL_ID
+    if ($modelId -ne "rusaai-edge-1.54b") {
+        throw "RusaAi Architecture v2.0 requires model ID rusaai-edge-1.54b."
+    }
+    $manifestPath = $env:RUSAMODELS_MODEL_MANIFEST
+    if ([string]::IsNullOrWhiteSpace($manifestPath)) {
+        $manifestPath = "models/rusaai-edge/manifests/0.1.0-design.json"
+    }
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        throw "RusaAi-Edge model manifest is missing: $manifestPath"
+    }
+    $modelManifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+    if ($modelManifest.model_id -ne $modelId) {
+        throw "The model manifest ID does not match RUSAMODELS_INFERENCE_MODEL_ID."
+    }
+    if ($modelManifest.checkpoint.selection_status -ne "SELECTED") {
+        throw "Deployment blocked: Architecture v2.0 requires a selected non-Qwen checkpoint; current status is $($modelManifest.checkpoint.selection_status)."
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$modelManifest.checkpoint.repository) -or
+        $modelManifest.checkpoint.repository -match '(?i)^Qwen/') {
+        throw "Deployment requires an approved non-Qwen checkpoint repository."
+    }
+    if ($modelManifest.checkpoint.immutable_revision -notmatch '^[0-9a-fA-F]{40}$' -or
+        [string]::IsNullOrWhiteSpace([string]$modelManifest.checkpoint.license) -or
+        $modelManifest.checkpoint.compatibility_status -ne "VERIFIED") {
+        throw "An immutable checkpoint revision, license and compatibility evidence are required."
+    }
+    if ($modelManifest.tokenizer.status -ne "VALIDATED" -or
+        $modelManifest.tokenizer.chat_template_status -ne "VALIDATED") {
+        throw "Tokenizer and chat template must be validated before deployment."
+    }
+    if ($modelManifest.artifact.status -ne "BUILT" -or
+        $modelManifest.artifact.format -ne "GGUF" -or
+        $modelManifest.artifact.quantization -ne "Q4_K_M" -or
+        $modelManifest.artifact.sha256 -notmatch '^[0-9a-fA-F]{64}$') {
+        throw "A built GGUF Q4_K_M artifact with a recorded SHA-256 is required."
+    }
+    if ($env:RUSAMODELS_GGUF_MODEL_SHA256 -ine $modelManifest.artifact.sha256) {
+        throw "The configured artifact SHA-256 does not match the approved model manifest."
+    }
+    $contextSize = 4096
+    if (-not [string]::IsNullOrWhiteSpace($env:RUSAMODELS_CONTEXT_SIZE)) {
+        if ($env:RUSAMODELS_CONTEXT_SIZE -notmatch '^(4096|8192)$') {
+            throw "RUSAMODELS_CONTEXT_SIZE must be 4096 or 8192."
+        }
+        $contextSize = [int]$env:RUSAMODELS_CONTEXT_SIZE
+    }
+    if ($contextSize -eq 8192 -and
+        $modelManifest.benchmark.context_8192_status -ne "PASS") {
+        throw "8K context is disabled until target-device RAM acceptance is recorded in the model manifest."
     }
     if (-not [string]::IsNullOrWhiteSpace($env:RUSAMODELS_EMBEDDING_BASE_URL) -or
         -not [string]::IsNullOrWhiteSpace($env:RUSAMODELS_EMBEDDING_MODEL_ID)) {
-        throw "RUSA-CPU-16 v1.0 does not start a separate embedding runtime."
+        throw "The RUSA-CPU-16 edge profile does not start a separate embedding runtime."
     }
     if ($env:RUSAMODELS_SERVICE_TOKEN_SHA256 -notmatch '^[0-9a-f]{64}$') {
         throw "Set RUSAMODELS_SERVICE_TOKEN_SHA256 to a lowercase SHA-256 digest."
@@ -158,7 +206,7 @@ try {
         "--model", "--alias", "--host", "--port", "--ctx-size",
         "--threads", "--threads-batch", "--threads-http", "--parallel",
         "--batch-size", "--ubatch-size", "--n-gpu-layers", "--flash-attn",
-        "--jinja", "--reasoning-budget", "--no-webui", "--metrics"
+        "--jinja", "--no-webui", "--metrics"
     )
     foreach ($option in $requiredLlamaOptions) {
         if ($llamaHelpOutput -notmatch [regex]::Escape($option)) {
@@ -253,16 +301,16 @@ $hardwareProfile | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path
 
     $llamaArgs = @(
         "--model", ('"' + $modelPath + '"'),
-        "--alias", "rusa-cpu-4b",
+        "--alias", $modelId,
         "--host", "127.0.0.1",
         "--port", "8081",
-        "--ctx-size", "8192",
+        "--ctx-size", "$contextSize",
         "--threads", "$threads",
         "--threads-batch", "4",
         "--threads-http", "2",
         "--parallel", "1",
-        "--batch-size", "512",
-        "--ubatch-size", "128"
+        "--batch-size", "128",
+        "--ubatch-size", "64"
     )
     if ($kvCacheQ8Supported) {
         $llamaArgs += @("--cache-type-k", "q8_0", "--cache-type-v", "q8_0")
@@ -271,7 +319,6 @@ $hardwareProfile | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path
         "--n-gpu-layers", "0",
         "--flash-attn", "auto",
         "--jinja",
-        "--reasoning-budget", "1536",
         "--no-webui",
         "--metrics"
     )
@@ -318,6 +365,7 @@ $hardwareProfile | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path
     Write-Host "llama.cpp:    http://127.0.0.1:8081 (loopback only)"
     Write-Host "llama.cpp version: $llamaVersionOutput"
     Write-Host "Q8_0 K/V cache supported: $kvCacheQ8Supported"
+    Write-Host "Model ID: $modelId | Context: $contextSize tokens | Batch/ubatch: 128/64"
     Write-Host "Physical cores: $physicalCores | Logical processors: $logicalProcessors | Generation threads: $threads"
     Write-Host ("Windows-reported CPU features: {0}" -f ($availableCpuFeatures -join ", "))
     Write-Host "Total RAM: $memoryGiB GiB | Free RAM at startup: $freeMemoryGiB GiB"

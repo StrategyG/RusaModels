@@ -1,76 +1,99 @@
-schema_version: 1
+schema_version: 2
 profile:
   id: rusa-cpu-16
-  version: 1.0.0
-  status: locked_baseline
+  version: 2.0.0
+  source_architecture: RusaAi Architecture v2.0
+  status: architecture_target_not_yet_deployable
   deployment: native_local_edge
 platform:
   operating_system: Windows 11 64-bit
   cpu:
     vendor: Intel
     family: Core i5
+    sku_detection: required
     physical_core_detection: required
     logical_processor_detection: required
     instruction_features_to_record: [SSE, SSE2, SSE3, SSSE3, SSE4_1, SSE4_2, AVX, AVX2, AVX512F, BMI2]
     instruction_feature_source: Windows_IsProcessorFeaturePresent
-    instruction_feature_requirement: record_only_no_hardcoded_minimum
-    generation: not_yet_confirmed
-  memory_gb: 16
+    generation_threads_initial: 4
+    generation_threads_adjustment: min_4_or_detected_physical_core_count
+    batch_threads_initial: 4
+    http_threads_initial: 2
+    generation_sku_status: not_yet_confirmed
+  physical_memory_gb: 16
   accelerator: cpu_only
 model:
-  id: rusa-cpu-4b
-  family: Qwen3-4B Instruct
-  repository: Qwen/Qwen3-4B-GGUF
-  format: GGUF
-  quantization: Q4_K_M
-  evaluation_status: initial_candidate_pending_device_task_benchmark
-  artifact_filename: Qwen3-4B-Q4_K_M.gguf
-  artifact_size_bytes: 2497280256
-  artifact_sha256: 7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5
-  repository_revision: a9a60d009fa7ff9606305047c2bf77ac25dbec49
-  license: Apache-2.0
-  artifact_path_env: RUSAMODELS_GGUF_MODEL_PATH
-  artifact_sha256_env: RUSAMODELS_GGUF_MODEL_SHA256
-  revision_policy: pinned_immutable_huggingface_commit
-  load_policy: one_resident_model
+  id: rusaai-edge-1.54b
+  version: 0.1.0-design
+  architecture:
+    type: dense_decoder_only_transformer
+    normalization: pre_norm
+    layers: 32
+    hidden_size: 2048
+    query_heads: 16
+    key_value_heads: 4
+    head_dimension: 128
+    gqa_ratio: 4
+    feed_forward: swiglu
+    feed_forward_intermediate: 5632
+    vocabulary_target: 48000
+    embeddings: tied_input_output
+    position_encoding: rope
+    rope_scaling: optional_only_after_evaluation
+    rms_norm_epsilon: 0.00001
+    linear_bias: false
+    dropout: 0.0
+    mixture_of_experts: false
+  target_parameters: 1541277696
+  checkpoint:
+    selection_requirement: non_qwen_open_weight
+    selection_status: NOT_SELECTED
+    repository: null
+    immutable_revision: null
+    license: null
+    compatibility_status: NOT_VERIFIED
+  tokenizer:
+    status: NOT_SELECTED
+  training:
+    status: NOT_STARTED
+  artifact:
+    status: NOT_BUILT
+    format: GGUF
+    quantization_target: Q4_K_M
+    filename: null
+    sha256: null
+    estimated_weight_size_gb:
+      minimum: 0.9
+      maximum: 1.1
+  benchmark:
+    status: NOT_TESTED
+    context_8192_status: NOT_TESTED
 runtime:
   backend: llama.cpp
-  executable_env: LLAMA_SERVER_EXE
+  model_format: GGUF
+  quantization: Q4_K_M
   host: 127.0.0.1
   port: 8081
-  context_size: 8192
-  generation_threads:
-    initial: 4
-    adjustment: min_4_or_detected_physical_core_count
-  batch_threads:
-    initial: 4
-  http_threads: 2
+  context:
+    initial_tokens: 4096
+    target_tokens: 8192
+    target_activation_requires_device_ram_acceptance: true
+  generation_threads_initial: 4
+  batch_threads_initial: 4
+  http_threads_initial: 2
   parallel_slots: 1
-  batch_size: 512
-  micro_batch_size: 128
+  batch_size_initial: 128
+  micro_batch_size_initial: 64
   kv_cache:
-    key: q8_0
-    value: q8_0
-    required_if_supported: true
-    fallback_policy: runtime_default_requires_memory_revalidation
+    key: Q8_0
+    value: Q8_0
+    use_only_if_supported_and_validated: true
   gpu_layers: 0
-  flash_attention: auto
-  jinja_chat_template: true
+  memory_mapping: enabled_when_supported
   web_ui: disabled
   metrics: enabled
-  maximum_reasoning_budget: 1536
-  version_policy: record_llama_server_version_and_build_at_startup
-context_budget_tokens:
-  system_instruction_and_agent_policy: 1000
-  user_task_and_conversation: 1500
-  retrieved_project_context: 2500
-  tool_result_and_evidence: 1144
-  output_and_reasoning: 1536
-  margin: 512
-  total: 8192
-  allocation_policy: dynamic_but_never_exceed_active_context
 services:
-  rusamodels_api:
+  rusamodels_model_server:
     host: 127.0.0.1
     port: 8090
     base_path: /openai/v1
@@ -78,103 +101,72 @@ services:
     database: sqlite
     artifact_storage: local
     upstream_url: http://127.0.0.1:8081
-    model_id: rusa-cpu-4b
+    model_id: rusaai-edge-1.54b
   llama_cpp:
     host: 127.0.0.1
     port: 8081
   external_inference_fallback: false
-  separate_embedding_runtime: disabled
 orchestration:
   owner: Rusaai
-  agent_identity_policy: preserve_all_registered_agents
   active_generation_limit: 1
   pending_inference_queue_limit: 3
-  high_reasoning_candidates: 2
-  high_reasoning_execution: sequential
-  resource_limits:
-    light_file_indexing_workers: 2
-    heavy_build_test_jobs: 1
-    resident_models: 1
+  queue_owner: Rusaai
+  reasoning_candidate_execution: sequential
+  high_reasoning_candidates_target: 2
   tool_execution_owner: Rusaai_Tool_Gateway
   policy_enforcement_owner: Rusaai_Policy_Engine
   workflow_decision_owner: Rusaai_Supreme_Orchestrator
-reasoning_profiles:
-  low:
-    mode: no_think_or_light_reasoning
-    max_output_tokens: 384
-    candidates: 1
-    sampling:
-      temperature: 0.7
-      top_p: 0.8
-  medium:
-    mode: think
-    max_output_tokens: 768
-    candidates: 1
-    sampling:
-      temperature: 0.6
-      top_p: 0.95
-      top_k: 20
-      min_p: 0
-      presence_penalty: 1.5
-  high:
-    mode: think_and_limited_search
-    max_output_tokens: 1536
-    candidates: 2
-    execution: sequential
-    sampling:
-      temperature: 0.6
-      top_p: 0.95
-      top_k: 20
-      min_p: 0
-      presence_penalty: 1.5
-memory_budget_gb:
-  windows_and_base_apps: 5.0
-  model_weights: 2.5
-  kv_cache_q8_0: 0.6
-  kv_cache_fallback: runtime_default_requires_memory_revalidation
-  inference_buffers: 1.2
-  rusai_services: 1.2
-  rusamodels_api_database_telemetry: 0.5
-  reserved_free_memory: 2.0
-  planned_total: 13.0
-  flexible_headroom: 3.0
 resource_protection:
   owner: Rusaai
-  minimum_free_memory_gib: 2.0
+  minimum_free_memory_gb: 2.0
   cpu_percent:
     normal_below: 70
-    background_throttle_from: 70
+    reduce_background_from: 70
     defer_nonpriority_above: 85
   ram_percent:
     limit_new_model_loads_above: 75
-    reduce_context_and_tasks_above: 85
+    reduce_context_and_additional_tasks_above: 85
   thermal_throttling_telemetry: when_available
-memory_retrieval:
-  memory_types: [working, episodic, semantic, procedural, project]
-  chunking:
-    chunk_size_tokens: {minimum: 300, maximum: 700}
-    overlap_tokens: {minimum: 50, maximum: 100}
-    initial_retrieval_chunks: {minimum: 3, maximum: 6}
-  context_policy:
-    retrieve_only_relevant_repository_content: true
-    summarize_before_expanding_context: true
-    checkpoint_long_running_workflows: true
-storage_and_memory:
-  rusai_memory_database: SQLite
-  rusai_text_search: FTS5
-  vector_search: optional_after_quality_validation
-  model_artifacts: local_verified_files
-  checkpointing: enabled
+memory_estimates:
+  physical_memory_gb: 16
+  model_weights_q4_k_m_gb:
+    minimum: 0.9
+    maximum: 1.1
+  kv_cache_q8_0_mib:
+    context_4096: 128
+    context_8192: 256
+  other_process_memory: measure_on_target_device
+  minimum_free_memory_gb: 2.0
+control_plane_reference:
+  owner: Rusaai
+  memory_categories: [working, episodic, semantic, procedural, project]
+  text_search: SQLite_FTS5
+  vector_retrieval: optional_after_quality_validation
+  retrieval:
+    chunk_tokens:
+      minimum: 400
+      maximum: 600
+    overlap_tokens:
+      minimum: 50
+      maximum: 80
+    initial_chunks:
+      minimum: 3
+      maximum: 6
+    expanded_chunks:
+      minimum: 6
+      maximum: 10
 acceptance:
+  non_qwen_checkpoint_selected_and_license_recorded: required
+  checkpoint_configuration_and_tokenizer_validated: required
+  gguf_artifact_sha256_recorded: required
+  gpu_offload_layers: 0
+  context_4096_test: required
+  context_8192_test_before_enablement: required
   sequential_requests: 20
-  minimum_free_memory_gib_during_inference: 2.0
-  context_tokens: 8192
+  stable_session_minutes: 30
+  minimum_free_memory_gb_during_inference: 2.0
   active_generations: 1
   pending_requests: 3
-  reasoning_profiles: [LOW, MEDIUM, HIGH]
-  orm: required
-  prm_lite: required
-  tool_calls_only_through_rusai_gateway: true
-  model_and_artifact_sha256: required
-  localhost_binding_only: true
   restart_recovery: required
+  ttft_tokens_per_second_latency_ram_cpu_recorded: required
+  queue_wait_and_depth_owner: Rusaai

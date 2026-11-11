@@ -84,8 +84,8 @@ $totalMemoryGiB = [math]::Round(((Get-CimInstance -ClassName Win32_ComputerSyste
 $null = Invoke-RestMethod -Uri "http://127.0.0.1:8081/health" -Method Get -TimeoutSec 10
 $null = Invoke-RestMethod -Uri "$ApiBaseUrl/health/ready" -Method Get -TimeoutSec 10
 $models = Invoke-RestMethod -Uri "$ApiBaseUrl/openai/v1/models" -Headers @{ Authorization = "Bearer $env:RUSAMODELS_API_TOKEN" } -Method Get -TimeoutSec 10
-if (@($models.data | Where-Object { $_.id -eq "rusa-cpu-4b" }).Count -ne 1) {
-    throw "The model ID rusa-cpu-4b is not exposed to the inference principal."
+if (@($models.data | Where-Object { $_.id -eq "rusaai-edge-1.54b" }).Count -ne 1) {
+    throw "The model ID rusaai-edge-1.54b is not exposed to the inference principal."
 }
 
 Add-Type -AssemblyName System.Net.Http
@@ -103,7 +103,7 @@ try {
             throw "llama.cpp must be idle before acceptance request $index; stop other inference clients."
         }
         $payload = @{
-            model = "rusa-cpu-4b"
+            model = "rusaai-edge-1.54b"
             messages = @(@{ role = "user"; content = "Reply with exactly OK." })
             temperature = 0
             max_tokens = 16
@@ -234,7 +234,8 @@ if ($script:cpuSamples.Count -gt 0) {
 }
 $report = [pscustomobject]@{
     Status = "PASS"
-    Profile = "RUSA-CPU-16"
+    Profile = "RUSA-CPU-16-v2.0"
+    ModelId = "rusaai-edge-1.54b"
     SequentialRequests = $SequentialRequests
     AverageLatencySeconds = [math]::Round((($latencies | Measure-Object -Average).Average), 3)
     P50LatencySeconds = $sortedLatency[[int][math]::Floor(($sortedLatency.Count - 1) * 0.5)]
