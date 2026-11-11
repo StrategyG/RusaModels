@@ -70,6 +70,7 @@ model:
     context_8192_status: NOT_TESTED
 runtime:
   backend: llama.cpp
+  resident_model_limit: 1
   model_format: GGUF
   quantization: Q4_K_M
   host: 127.0.0.1
@@ -111,8 +112,9 @@ orchestration:
   active_generation_limit: 1
   pending_inference_queue_limit: 3
   queue_owner: Rusaai
+  reasoning_controller_owner: Rusaai
   reasoning_candidate_execution: sequential
-  high_reasoning_candidates_target: 2
+  deep_reasoning_candidates_target: 2
   tool_execution_owner: Rusaai_Tool_Gateway
   policy_enforcement_owner: Rusaai_Policy_Engine
   workflow_decision_owner: Rusaai_Supreme_Orchestrator
@@ -139,6 +141,24 @@ memory_estimates:
   minimum_free_memory_gb: 2.0
 control_plane_reference:
   owner: Rusaai
+  capability_profiles_share_one_model: true
+  reasoning_profiles:
+    quick:
+      max_output_tokens: 256
+      candidates: 1
+    standard:
+      max_output_tokens: 1024
+      candidates: 1
+    deep:
+      minimum_output_tokens: 2048
+      maximum_output_tokens: 4096
+      candidates: 2
+      execution: sequential
+    max:
+      maximum_output_tokens: 8192
+      candidates: 3
+      execution: sequential
+      status: experimental_not_enabled_in_initial_profile
   memory_categories: [working, episodic, semantic, procedural, project]
   text_search: SQLite_FTS5
   vector_retrieval: optional_after_quality_validation

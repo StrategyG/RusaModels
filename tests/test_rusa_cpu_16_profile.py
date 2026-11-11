@@ -58,11 +58,16 @@ def test_v2_runtime_parameters_and_control_plane_ownership():
     assert profile["runtime"]["batch_size_initial"] == 128
     assert profile["runtime"]["micro_batch_size_initial"] == 64
     assert profile["runtime"]["parallel_slots"] == 1
+    assert profile["runtime"]["resident_model_limit"] == 1
     assert profile["runtime"]["gpu_layers"] == 0
     assert profile["orchestration"]["owner"] == "Rusaai"
     assert profile["orchestration"]["active_generation_limit"] == 1
     assert profile["orchestration"]["pending_inference_queue_limit"] == 3
     assert profile["orchestration"]["queue_owner"] == "Rusaai"
+    assert profile["orchestration"]["deep_reasoning_candidates_target"] == 2
+    assert profile["control_plane_reference"]["capability_profiles_share_one_model"] is True
+    assert profile["control_plane_reference"]["reasoning_profiles"]["deep"]["candidates"] == 2
+    assert profile["control_plane_reference"]["reasoning_profiles"]["max"]["status"] == "experimental_not_enabled_in_initial_profile"
     assert profile["resource_protection"]["minimum_free_memory_gb"] == 2.0
     assert profile["memory_estimates"]["kv_cache_q8_0_mib"]["context_4096"] == 128
     assert profile["memory_estimates"]["kv_cache_q8_0_mib"]["context_8192"] == 256

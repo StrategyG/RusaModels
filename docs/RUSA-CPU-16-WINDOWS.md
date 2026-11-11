@@ -45,6 +45,7 @@ The Windows launcher intentionally fails closed while the manifest remains in it
 | Batch threads | 4 initially |
 | HTTP threads | 2 initially |
 | Batch / micro-batch | 128 / 64 initially |
+| Resident model | 1 |
 | Active generation | 1 |
 | Pending inference queue | Maximum 3; owned by Rusaai |
 | KV cache | Q8_0 only when supported and validated |
