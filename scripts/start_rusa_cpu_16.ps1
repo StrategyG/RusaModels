@@ -158,9 +158,13 @@ try {
         }
         $contextSize = [int]$env:RUSAMODELS_CONTEXT_SIZE
     }
-    if ($contextSize -eq 8192 -and
-        $modelManifest.benchmark.context_8192_status -ne "PASS") {
-        throw "8K context is disabled until target-device RAM acceptance is recorded in the model manifest."
+    if ($contextSize -eq 8192) {
+        $context8kStatus = $modelManifest.benchmark.context_8192_status
+        $context8kTestMode = $env:RUSAMODELS_CONTEXT_8K_TEST_MODE -eq "true"
+        if ($context8kStatus -ne "PASS" -and
+            -not ($context8kStatus -eq "TESTING" -and $context8kTestMode)) {
+            throw "8K context requires PASS evidence, or TESTING status plus RUSAMODELS_CONTEXT_8K_TEST_MODE=true."
+        }
     }
     if (-not [string]::IsNullOrWhiteSpace($env:RUSAMODELS_EMBEDDING_BASE_URL) -or
         -not [string]::IsNullOrWhiteSpace($env:RUSAMODELS_EMBEDDING_MODEL_ID)) {

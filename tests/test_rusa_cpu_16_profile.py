@@ -97,6 +97,13 @@ def test_native_windows_launcher_fails_closed_until_model_is_ready():
     assert "IsProcessorFeaturePresent" in start
     assert "RUSA-CPU-16 services are ready" in start
 
+    context_test = (ROOT / "scripts" / "verify_rusa_cpu_16_context.ps1").read_text(encoding="utf-8")
+    assert "RUSAMODELS_CONTEXT_8K_TEST_MODE" in context_test
+    assert "http://127.0.0.1:8081/tokenize" in context_test
+    assert "ActualPromptTokens" in context_test
+    assert "MinimumSampledFreeMemoryGiB" in context_test
+    assert "totalTokens -gt 8192" in context_test
+
 
 def test_qwen3_v1_profile_is_preserved_as_historical_reference():
     legacy = yaml.safe_load(

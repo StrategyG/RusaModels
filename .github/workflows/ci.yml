@@ -196,7 +196,8 @@ jobs:
           $scripts = @(
             "scripts/start_rusa_cpu_16.ps1",
             "scripts/stop_rusa_cpu_16.ps1",
-            "scripts/verify_rusa_cpu_16.ps1"
+            "scripts/verify_rusa_cpu_16.ps1",
+            "scripts/verify_rusa_cpu_16_context.ps1"
           )
           foreach ($script in $scripts) {
             $tokens = $null
@@ -219,7 +220,8 @@ jobs:
           $scripts = @(
             "scripts/start_rusa_cpu_16.ps1",
             "scripts/stop_rusa_cpu_16.ps1",
-            "scripts/verify_rusa_cpu_16.ps1"
+            "scripts/verify_rusa_cpu_16.ps1",
+            "scripts/verify_rusa_cpu_16_context.ps1"
           )
           foreach ($script in $scripts) {
             $tokens = $null

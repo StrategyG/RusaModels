@@ -143,7 +143,7 @@ After the model manifest and local artifact are complete:
 
 The launcher detects Windows/CPU/RAM, records Windows-reported instruction features, records the llama.cpp version, verifies the manifest and GGUF SHA-256, applies migrations, and starts the runtime with GPU offload disabled. It starts with 4K context unless `RUSAMODELS_CONTEXT_SIZE=8192` is explicitly configured; 8K is refused unless the model manifest records `benchmark.context_8192_status: PASS`.
 
-The acceptance script checks the authenticated model ID and performs 20 sequential streaming requests. It records TTFT, end-to-end latency, generation tokens/second and sampled CPU/free RAM. This does not replace the architecture's full device acceptance.
+The sequential acceptance script checks the authenticated model ID and performs 20 streaming requests. It records TTFT, end-to-end latency, generation tokens/second and sampled CPU/free RAM. The separate 8K context script tokenizes a long probe, sends a 7,400–7,600-token prompt, checks returned usage against the 8,192-token limit and records free RAM before/after. Those two memory samples are not continuous peak-RAM telemetry. Neither script replaces the architecture's full device acceptance.
 
 Before calling the device production-ready, record evidence for:
 
