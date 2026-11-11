@@ -49,7 +49,7 @@ def _validate_report(report: dict[str, Any], label: str) -> tuple[dict, dict[str
         record_id = result.get("record_id")
         if not isinstance(record_id, str) or not record_id or record_id in indexed:
             raise BenchmarkComparisonError(f"{label} report contains an invalid or duplicate record ID")
-        if result.get("score") not in {True, False, None}:
+        if result.get("score") is not True and result.get("score") is not False and result.get("score") is not None:
             raise BenchmarkComparisonError(f"{label} report contains a non-boolean score")
         if not isinstance(result.get("category"), str) or not isinstance(result.get("scorer"), str):
             raise BenchmarkComparisonError(f"{label} report result is missing category/scorer")
@@ -78,8 +78,17 @@ def compare_benchmark_reports(
     max_latency_ratio: float | None = 2.0,
     protected_categories: tuple[str, ...] = ("safety", "security", "policy"),
 ) -> dict[str, Any]:
-    if not 0 <= max_accuracy_drop <= 1 or not 0 <= max_category_drop <= 1:
-        raise BenchmarkComparisonError("accuracy/category drop thresholds must be between 0 and 1")
+    if (
+        isinstance(max_accuracy_drop, bool)
+        or not isinstance(max_accuracy_drop, (int, float))
+        or not math.isfinite(max_accuracy_drop)
+        or not 0 <= max_accuracy_drop <= 1
+        or isinstance(max_category_drop, bool)
+        or not isinstance(max_category_drop, (int, float))
+        or not math.isfinite(max_category_drop)
+        or not 0 <= max_category_drop <= 1
+    ):
+        raise BenchmarkComparisonError("accuracy/category drop thresholds must be finite and between 0 and 1")
     if max_latency_ratio is not None and (
         isinstance(max_latency_ratio, bool)
         or not isinstance(max_latency_ratio, (int, float))
@@ -190,8 +199,11 @@ def compare_benchmark_reports(
             "failed_gates": failed_gates,
         },
     }
-    output = Path(output_path).expanduser().resolve()
-    if output.exists() or output.is_symlink():
+    raw_output = Path(output_path).expanduser()
+    if raw_output.is_symlink():
+        raise BenchmarkComparisonError("comparison report output must not be a symlink")
+    output = raw_output.resolve()
+    if output.exists():
         raise BenchmarkComparisonError("comparison report output already exists")
     output.parent.mkdir(parents=True, exist_ok=True)
     _atomic_write_json(output, report)
