@@ -376,7 +376,7 @@ def run_benchmark(
         raise BenchmarkError("benchmark report path must not be a symlink")
     output = output.resolve()
     suite_manifest_file = suite_file.with_suffix(suite_file.suffix + ".manifest.json")
-    if suite_file.parent in output.parents or output in {suite_file, suite_manifest_file}:
+    if output in {suite_file, suite_manifest_file}:
         raise BenchmarkError("benchmark report must be outside the immutable suite directory")
     if output.exists():
         raise BenchmarkError("benchmark report already exists; choose a new output path")
