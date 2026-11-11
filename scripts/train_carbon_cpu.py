@@ -45,6 +45,67 @@ def sha256_file(path: Path) -> str:
 
 
 
+def load_dataset_export_manifest(
+    corpus_path: Path,
+    expected_splits: set[str],
+) -> dict | None:
+    sidecar = corpus_path.with_suffix(corpus_path.suffix + ".manifest.json")
+    if not sidecar.exists():
+        return None
+    if sidecar.is_symlink() or sidecar.resolve().parent != corpus_path.resolve().parent:
+        raise ValueError("dataset export manifest is unsafe")
+    try:
+        manifest = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeError) as exc:
+        raise ValueError("dataset export manifest is invalid JSON") from exc
+    if not isinstance(manifest, dict) or manifest.get("schema_version") != "1.0.0":
+        raise ValueError("unsupported dataset export manifest schema")
+    required_strings = (
+        "dataset_id",
+        "dataset_version",
+        "split",
+        "output_file",
+        "output_sha256",
+        "release_manifest_sha256",
+        "source_split_sha256",
+        "tokenizer",
+        "encoding",
+    )
+    if any(not isinstance(manifest.get(key), str) or not manifest[key] for key in required_strings):
+        raise ValueError("dataset export manifest is missing required fields")
+    if manifest["split"] not in expected_splits:
+        raise ValueError(
+            f"dataset export split {manifest['split']!r} is not valid for this training input"
+        )
+    if manifest["output_file"] != corpus_path.name:
+        raise ValueError("dataset export manifest names a different corpus file")
+    if manifest["tokenizer"] != "byte-level-v1" or manifest["encoding"].lower() != "utf-8":
+        raise ValueError("dataset export does not match the Carbon byte-level tokenizer")
+    license_ids = manifest.get("license_ids")
+    if (
+        not isinstance(license_ids, list)
+        or not license_ids
+        or any(not isinstance(item, str) or not item.strip() for item in license_ids)
+        or license_ids != sorted(set(license_ids))
+    ):
+        raise ValueError("dataset export manifest has invalid license_ids")
+    if type(manifest.get("records")) is not int or manifest["records"] < 1:
+        raise ValueError("dataset export manifest has invalid record count")
+    if type(manifest.get("output_size_bytes")) is not int:
+        raise ValueError("dataset export manifest has invalid output size")
+    for key in ("output_sha256", "release_manifest_sha256", "source_split_sha256"):
+        value = manifest[key]
+        if len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
+            raise ValueError(f"dataset export manifest has invalid {key}")
+    if (
+        sha256_file(corpus_path) != manifest["output_sha256"]
+        or corpus_path.stat().st_size != manifest["output_size_bytes"]
+    ):
+        raise ValueError("dataset export corpus checksum or size does not match its manifest")
+    manifest["sidecar_sha256"] = sha256_file(sidecar)
+    return manifest
+
+
 def canonical_digest(value: dict) -> str:
     encoded = json.dumps(
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
