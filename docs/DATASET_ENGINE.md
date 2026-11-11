@@ -120,6 +120,27 @@ The verifier checks:
 
 The verifier cannot recalculate source-file digests unless the original source files are separately available. Retain source snapshots or immutable source references according to the project's data retention policy.
 
+
+## Export a verified split for byte-level CPU training
+
+Carbon-Tiny consumes UTF-8 text corpora, while the Dataset Engine releases JSONL. Export each split independently; never combine train and validation/test splits.
+
+~~~bash
+python scripts/export_dataset_text.py \\
+  --release artifacts/datasets/rusaai-agent-sft-curated/0.1.0 \\
+  --split train \\
+  --output artifacts/corpora/rusaai-agent-sft-curated-0.1.0-train.txt
+
+python scripts/export_dataset_text.py \\
+  --release artifacts/datasets/rusaai-agent-sft-curated/0.1.0 \\
+  --split validation \\
+  --output artifacts/corpora/rusaai-agent-sft-curated-0.1.0-validation.txt
+~~~
+
+Each text file has a sibling manifest named <output-file>.manifest.json. It records the source dataset ID/version, split, declared license IDs, source release-manifest digest, source split digest, output digest, record count, encoding, and byte-tokenizer identifier. The exporter omits record IDs, group IDs, and metadata from the text corpus. The output and sidecar are written outside the immutable dataset release; existing outputs are not overwritten.
+
+Use the train export as the Carbon trainer's training corpus and the validation export as its held-out evaluation corpus. Copy the dataset identity and reviewed license declaration into the training config. The trainer independently hashes both text files and rejects identical train/evaluation corpora.
+
 ## Redaction and privacy limits
 
 Email and common credential patterns are redacted by default. Phone-number redaction is disabled by default because numeric sequences can be legitimate model content. These regex rules are a defensive preprocessing layer, not a comprehensive PII detector or privacy certification.
