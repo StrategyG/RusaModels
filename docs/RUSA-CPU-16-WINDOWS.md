@@ -61,6 +61,8 @@ Resource protection thresholds:
 - RAM above 85%: reduce context and additional tasks.
 - Free RAM below 2 GB: activate memory-protection mode.
 
+These host-wide backpressure thresholds are owned by the Rusaai resource monitor/scheduler. RusaModels records the agreed profile and exposes llama.cpp metrics; it does not schedule file indexing or build jobs.
+
 ## 3. Install prerequisites
 
 1. Install Python 3.11 or newer.
@@ -169,7 +171,7 @@ Initial sampling values from the baseline:
 
 Apply and validate these request parameters in Rusaai against the selected llama.cpp/model version. They are initial tuning values, not measured optimal settings. Keep one active generation; the three pending requests are queued by Rusaai, not by separate model processes.
 
-The initial memory design is SQLite + FTS5 in Rusaai. Do not load a separate embedding model permanently in this 16-GB baseline. Add vector search only after retrieval-quality and RAM testing. Tool calls must pass through Rusaai Tool Gateway and deterministic Policy Engine; the model itself never authorizes or executes tools.
+The initial memory design is SQLite + FTS5 in Rusaai across working, episodic, semantic, procedural and project memory. Do not load a separate embedding model permanently in this 16-GB baseline. Add vector search only after retrieval-quality and RAM testing. Rusaai limits light file indexing to two workers, heavy build/test work to one job and resident models to one. Tool calls must pass through Rusaai Tool Gateway and deterministic Policy Engine; the model itself never authorizes or executes tools.
 
 ## 8. Acceptance gate before calling the device production-ready
 

@@ -35,6 +35,7 @@ def test_rusa_cpu_16_profile_matches_locked_windows_baseline():
     assert profile["orchestration"]["pending_inference_queue_limit"] == 3
     assert profile["orchestration"]["owner"] == "Rusaai"
     assert profile["memory_budget_gib"]["reserved_free_memory"] == 2.0
+    assert profile["resource_protection"]["owner"] == "Rusaai"
     assert profile["services"]["external_inference_fallback"] is False
     assert profile["services"]["separate_embedding_runtime"] == "disabled"
 

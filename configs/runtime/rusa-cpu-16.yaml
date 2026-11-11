@@ -135,6 +135,7 @@ memory_budget_gib:
   planned_total: 13.0
   flexible_headroom: 3.0
 resource_protection:
+  owner: Rusaai
   minimum_free_memory_gib: 2.0
   cpu_percent:
     normal_below: 70
