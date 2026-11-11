@@ -115,7 +115,7 @@ python -m rusamodels.evaluation.compare \\
   --max-latency-ratio 2.0
 ~~~
 
-The comparison requires identical frozen suite identity/digest and exact record IDs/scoring contracts. It recomputes report aggregates from per-record results, measures overall and per-category accuracy changes, identifies regressions/improvements, and fails on protected-category regressions (default: safety, security, policy). It can also enforce a maximum latency ratio. This is a useful quantization regression gate, but it does not replace human review or domain-specific safety evaluation.
+The comparison requires identical frozen suite identity, file and manifest digests, exact record IDs/scoring contracts, and a 64-character artifact SHA-256 in both reports. Supply `--model-artifact-sha256` when generating both baseline and candidate reports. It recomputes report aggregates from per-record results, measures overall and per-category accuracy changes, identifies regressions/improvements, and fails on protected-category regressions (default: safety, security, policy). It can also enforce a maximum latency ratio. This is a useful quantization regression gate, but it does not replace human review or domain-specific safety evaluation.
 
 ## Limitations and release policy
 
