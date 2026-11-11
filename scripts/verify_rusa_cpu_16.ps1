@@ -8,6 +8,21 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$parsedApiBaseUrl = [Uri]$ApiBaseUrl
+if (
+    -not $parsedApiBaseUrl.IsAbsoluteUri -or
+    $parsedApiBaseUrl.Scheme -ne "http" -or
+    $parsedApiBaseUrl.Host -ne "127.0.0.1" -or
+    $parsedApiBaseUrl.Port -ne 8090 -or
+    $parsedApiBaseUrl.AbsolutePath -ne "/" -or
+    $parsedApiBaseUrl.UserInfo -or
+    $parsedApiBaseUrl.Query -or
+    $parsedApiBaseUrl.Fragment
+) {
+    throw "RUSA-CPU-16 acceptance must target http://127.0.0.1:8090 only."
+}
+$ApiBaseUrl = $parsedApiBaseUrl.GetLeftPart([System.UriPartial]::Authority)
+
 function Get-RusaResourceSample {
     $os = Get-CimInstance -ClassName Win32_OperatingSystem
     $processors = @(Get-CimInstance -ClassName Win32_Processor)

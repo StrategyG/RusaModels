@@ -49,6 +49,12 @@ def test_native_windows_scripts_bind_only_loopback_and_use_expected_ports():
     assert "127.0.0.1:8090" in start
     assert "127.0.0.1:8081" in verify
     assert "SequentialRequests" in verify
+    assert "tokens_predicted_seconds_total" in verify
+    assert "firstTokenSeconds" in verify
+    assert "minimumFreeMemoryGiB" in verify
+    assert "IsProcessorFeaturePresent" in start
+    assert '$parsedApiBaseUrl.Host -ne "127.0.0.1"' in verify
+    assert "$parsedApiBaseUrl.Port -ne 8090" in verify
 
 
 def test_codespaces_profile_is_documented_as_separate_from_native_windows():
