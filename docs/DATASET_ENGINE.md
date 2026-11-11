@@ -24,8 +24,8 @@ The pipeline does not infer whether a license is legally compatible, identify al
 
 Each source is a UTF-8 JSONL file. Every non-empty line must be a JSON object containing at least one non-empty text value. Existing record fields are preserved except for the optional top-level **group_id** field, which is used only to keep related records in one split and is recorded in the provenance sidecar.
 
-- **id**: optional string, maximum 256 characters. If absent, a stable ID is generated from the normalized and redacted record content.
-- **group_id**: optional string, maximum 256 characters. Use this to keep messages from the same conversation/document/customer grouping in one split. Without it, each unique content record is treated as its own group. If exact duplicate content is supplied with conflicting explicit group IDs, the release fails closed and requires the source grouping to be reconciled.
+- **id**: optional string, maximum 256 characters. If supplied, it is SHA-256 pseudonymized using the dataset ID as namespace. If absent, a stable ID is generated from normalized and redacted content.
+- **group_id**: optional string, maximum 256 characters. Use this to keep messages from the same conversation/document/customer grouping in one split. It is pseudonymized before it is written to provenance. Without it, each unique content record is treated as its own group. If exact duplicate content is supplied with conflicting explicit group IDs, the release fails closed and requires the source grouping to be reconciled.
 - All other JSON fields are retained and recursively normalized/redacted.
 
 A source must have a unique **source_id** and a declared **license_id**. The pipeline records the declaration; it does not validate the legal meaning or grant rights under that license. Complete the legal/source review before releasing a dataset.
@@ -114,7 +114,7 @@ Review the redaction counts and sample the output before training. For regulated
 
 The current data/agent_sft/train.jsonl and data/agent_sft/eval.jsonl are already separate synthetic seed splits. Do not feed both files into one random split build: that would mix a held-out evaluation set into the generated training pool and invalidate the existing holdout. Use one approved raw/curated pool for a new release, or preserve the existing train/eval separation and verify it with the existing SFT dataset validator.
 
-The dataset release pipeline preserves the existing SFT record shape (including id, agent_role, messages, and response) and writes group_id only to the provenance sidecar.
+The dataset release pipeline preserves the existing SFT record shape (including id, agent_role, messages, and response), replaces source IDs with deterministic pseudonymous IDs, and writes only the pseudonymous group ID to the provenance sidecar.
 
 ## Remaining Phase 2 work
 
