@@ -268,7 +268,7 @@ $hardwareProfile | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path
     Write-Host "OpenAI API:   http://127.0.0.1:8090/openai/v1"
     Write-Host "llama.cpp:    http://127.0.0.1:8081 (loopback only)"
     Write-Host "Physical cores: $physicalCores | Logical processors: $logicalProcessors | Generation threads: $threads"
-Write-Host "Windows-reported CPU features: $($availableCpuFeatures -join \", \")"
+Write-Host ("Windows-reported CPU features: {0}" -f ($availableCpuFeatures -join ", "))
     Write-Host "Total RAM: $memoryGiB GiB | Free RAM at startup: $freeMemoryGiB GiB"
     Write-Host "Logs: $logDir"
 }
