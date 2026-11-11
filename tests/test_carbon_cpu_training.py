@@ -84,8 +84,8 @@ def test_build_token_cache_is_byte_exact_and_appends_eos(tmp_path: Path) -> None
     destination = tmp_path / "cache.u16"
     count = build_token_cache(source, destination)
     tokens = np.memmap(destination, dtype=np.uint16, mode="r", shape=(count,))
-    assert count == len("RusaAi 🇮🇩".encode("utf-8")) + 1
-    assert list(tokens[:-1]) == list("RusaAi 🇮🇩".encode("utf-8"))
+    assert count == len("RusaAi 🇮🇩".encode()) + 1
+    assert list(tokens[:-1]) == list("RusaAi 🇮🇩".encode())
     assert int(tokens[-1]) == 256
 
 
