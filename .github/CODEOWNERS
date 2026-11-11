@@ -7,3 +7,4 @@
 /Dockerfile @StrategyG
 /Dockerfile.quant-worker @StrategyG
 /docs/PRODUCTION_DEPLOYMENT.md @StrategyG
+/deploy/ @StrategyG

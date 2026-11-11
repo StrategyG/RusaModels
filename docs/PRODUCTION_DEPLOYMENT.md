@@ -17,8 +17,9 @@ as a production credential or availability model.
 - An API gateway/reverse proxy that terminates TLS, forwards only to the
   loopback-bound Model Server and Quant Server ports, and enforces a WAF,
   per-principal/IP rate limits, request-body limits, connection/concurrency
-  limits, and upstream timeouts. The application does not provide distributed
-  rate limiting or per-principal usage quotas.
+  limits, and upstream timeouts. A per-IP Nginx reference configuration is
+  provided at `deploy/nginx/rusamodels.conf.example`; per-principal quotas
+  still require an API gateway or shared rate-limit service.
 - Network egress controls for the Quant Worker. Restrict downloads to approved
   model sources and do not allow arbitrary egress from conversion subprocesses.
 - A persistent worker workspace with sufficient free disk for the largest
@@ -132,7 +133,12 @@ The Compose file binds API ports to loopback only:
 - Model Server: `127.0.0.1:8000`
 - Quant Server: `127.0.0.1:8001`
 
-Expose them only through an authenticated TLS reverse proxy and firewall.
+Expose the public inference surface only through an authenticated TLS reverse
+proxy and firewall. Keep Quant Server on a management/VPN ingress; do not
+publish its management API to the public internet. The Nginx example applies
+per-IP request and connection limits, a bounded inference request size, and
+an allowlist for the management API. Replace its example hostnames, TLS paths,
+and VPN CIDRs before use. It does not provide per-principal billing quotas.
 The worker image is separate because it includes the optional `quantization`
 dependencies; keep the larger ML dependency set out of the Model Server image.
 GGUF conversion additionally requires the compatible llama.cpp converter and
@@ -196,7 +202,9 @@ repository administrator must apply and verify these settings.
   with package, CVE, exposure analysis, owner, and review date. Do not suppress
   findings solely to obtain a green workflow.
 - Publish an SBOM and build provenance for each image and verify the signature
-  before deployment.
+  before deployment. The tag-triggered workflow
+  `.github/workflows/publish-images.yml` builds both images, publishes SBOM
+  and provenance attestations, and signs their immutable digests.
 - Pin Python dependencies to security-supported versions and run
   `pip check` in the final image.
 - Keep training adapters experimental until the full held-out evaluation,
