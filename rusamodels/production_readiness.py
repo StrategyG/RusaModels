@@ -12,6 +12,7 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 
 class ProductionEvidenceError(ValueError):
@@ -56,7 +57,20 @@ def _is_finite_number(value: Any) -> bool:
 
 
 def _is_https_url(value: Any) -> bool:
-    return isinstance(value, str) and value.startswith("https://") and len(value) <= 2048
+    if not isinstance(value, str) or len(value) > 2048:
+        return False
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "https"
+        and bool(parsed.netloc)
+        and not parsed.username
+        and not parsed.password
+        and not parsed.query
+        and not parsed.fragment
+    )
 
 
 def _gate(name: str, checks: list[tuple[bool, str]]) -> dict[str, Any]:
