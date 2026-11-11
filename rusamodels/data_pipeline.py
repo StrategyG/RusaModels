@@ -170,14 +170,22 @@ def _record_fingerprint(record: dict[str, Any]) -> str:
 
 
 def _validate_config(config: DatasetReleaseConfig) -> None:
-    if not _DATASET_ID.fullmatch(config.dataset_id) or config.dataset_id in {".", ".."}:
+    if not isinstance(config.dataset_id, str) or not _DATASET_ID.fullmatch(config.dataset_id) or config.dataset_id in {".", ".."}:
         raise DatasetPipelineError("dataset_id must be a safe 1-64 character identifier")
-    if not _VERSION.fullmatch(config.version) or config.version in {".", ".."}:
+    if not isinstance(config.version, str) or not _VERSION.fullmatch(config.version) or config.version in {".", ".."}:
         raise DatasetPipelineError("version must be a safe 1-64 character identifier")
     if not config.sources:
         raise DatasetPipelineError("at least one dataset source is required")
     if type(config.seed) is not int:
         raise DatasetPipelineError("seed must be an integer")
+    if type(config.validation_fraction) not in {int, float} or type(config.test_fraction) not in {int, float}:
+        raise DatasetPipelineError("split fractions must be numbers")
+    if not isinstance(config.redaction, RedactionPolicy) or any(
+        type(value) is not bool for value in (
+            config.redaction.emails, config.redaction.secrets, config.redaction.phone_numbers
+        )
+    ):
+        raise DatasetPipelineError("redaction policy values must be booleans")
     if not (0 < config.validation_fraction < 1):
         raise DatasetPipelineError("validation_fraction must be between 0 and 1")
     if not (0 < config.test_fraction < 1):
@@ -188,15 +196,22 @@ def _validate_config(config: DatasetReleaseConfig) -> None:
         raise DatasetPipelineError("max_record_bytes must be a positive integer")
     source_ids: set[str] = set()
     for source in config.sources:
-        if not _SOURCE_ID.fullmatch(source.source_id):
+        if not isinstance(source, DatasetSource):
+            raise DatasetPipelineError("sources must contain DatasetSource values")
+        if not isinstance(source.source_id, str) or not _SOURCE_ID.fullmatch(source.source_id):
             raise DatasetPipelineError(f"invalid source_id: {source.source_id!r}")
         if source.source_id in source_ids:
             raise DatasetPipelineError(f"duplicate source_id: {source.source_id}")
         source_ids.add(source.source_id)
-        if not source.license_id or not source.license_id.strip():
+        if not isinstance(source.license_id, str) or not source.license_id.strip():
             raise DatasetPipelineError(f"source {source.source_id} requires a declared license_id")
-        if source.source_uri is not None and len(source.source_uri) > 2048:
-            raise DatasetPipelineError(f"source_uri for {source.source_id} is too long")
+        if source.source_uri is not None:
+            if not isinstance(source.source_uri, str) or len(source.source_uri) > 2048:
+                raise DatasetPipelineError(f"source_uri for {source.source_id} is invalid or too long")
+            from urllib.parse import urlsplit
+            parsed = urlsplit(source.source_uri)
+            if parsed.username or parsed.password or parsed.query or parsed.fragment:
+                raise DatasetPipelineError(f"source_uri for {source.source_id} must not contain credentials, query, or fragment")
 
 
 def _prepare_record(
@@ -415,7 +430,7 @@ def _write_provenance(connection: sqlite3.Connection, output_path: Path) -> dict
         rows = connection.execute(
             """
             SELECT p.record_id, p.source_id, s.name, s.license_id, s.sha256,
-                   p.source_line, p.fingerprint, r.split
+                   p.source_line, p.fingerprint, r.split, r.group_key
             FROM provenance p
             JOIN sources s ON s.source_id = p.source_id
             JOIN records r ON r.record_id = p.record_id
@@ -432,6 +447,7 @@ def _write_provenance(connection: sqlite3.Connection, output_path: Path) -> dict
                 "source_line": row[5],
                 "record_fingerprint": row[6],
                 "split": row[7],
+                "group_id": row[8],
             }
             encoded = (_canonical_json(payload) + "\n").encode("utf-8")
             handle.write(encoded)
