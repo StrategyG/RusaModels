@@ -37,13 +37,13 @@ The 8K context allocation follows the source baseline: 1,000 tokens for system i
 
 ## 2. Resource budget
 
-The source configuration is a planning budget, not a measured benchmark:
+The source configuration is a planning budget, not a measured benchmark. The 0.6-GB KV-cache line assumes Q8_0. If the installed llama.cpp build does not advertise Q8_0, the launcher uses the runtime default and the memory budget must be revalidated on the target device:
 
 | Component | Planned RAM |
 |---|---:|
 | Windows 11 and base applications | 5.0 GB |
 | Qwen3-4B Q4_K_M weights | 2.5 GB |
-| KV cache | 0.6 GB |
+| KV cache (Q8_0) | 0.6 GB |
 | Inference buffers | 1.2 GB |
 | Rusaai services | 1.2 GB |
 | RusaModels API, database and telemetry | 0.5 GB |

@@ -51,6 +51,7 @@ runtime:
     key: q8_0
     value: q8_0
     required_if_supported: true
+    fallback_policy: runtime_default_requires_memory_revalidation
   gpu_layers: 0
   flash_attention: auto
   jinja_chat_template: true
@@ -127,7 +128,8 @@ reasoning_profiles:
 memory_budget_gib:
   windows_and_base_apps: 5.0
   model_weights: 2.5
-  kv_cache: 0.6
+  kv_cache_q8_0: 0.6
+  kv_cache_fallback: runtime_default_requires_memory_revalidation
   inference_buffers: 1.2
   rusai_services: 1.2
   rusamodels_api_database_telemetry: 0.5
