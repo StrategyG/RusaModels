@@ -35,7 +35,7 @@ The Carbon trainer explicitly creates tensors and the model on `cpu`; it does no
 
 ## Prepare data
 
-Place an authorized UTF-8 text corpus at `data/carbon_cpu/corpus.txt`, or pass another file with `--data`. Set `data.dataset_id`, `data.dataset_version`, and a reviewed, non-placeholder `data.license_id` in the training config before a non-smoke run. The trainer records the corpus SHA-256 and dataset declaration; it does not legally validate the license. The trainer makes a 95/5 train/validation split when no separate evaluation file is supplied. Alternatively, pass `--eval-data path/to/heldout.txt` and declare `data.eval_license_id` if the evaluation corpus has a different license. The trainer rejects identical train/eval files or identical SHA-256 values.
+Use the Dataset Engine text exporter to produce separate train and validation corpora. The reference config requires both export sidecars by default (`data.require_export_manifest: true`). Set `data.dataset_id`, `data.dataset_version`, and `data.license_ids` to exactly match the export sidecars before a non-smoke run. The trainer verifies each text-file SHA-256, sidecar schema, dataset identity, split name, license declarations, tokenizer, and shared source release-manifest digest. It does not legally validate the declared licenses. For manually curated plain text, set `require_export_manifest` to false and provide a reviewed license declaration; this is a less strongly traceable path. The trainer rejects identical train/eval files or identical SHA-256 values.
 
 A few kilobytes can validate code paths but will overfit immediately. For actual pretraining, curate a large, diverse corpus with documented source, license, language distribution, deduplication, and held-out evaluation. Keep the held-out set out of training.
 
@@ -54,7 +54,7 @@ For a short pipeline-only check (uses synthetic text and must not be described a
 python scripts/train_carbon_cpu.py --smoke-test --steps 3 --batch-size 1 --block-size 32
 ```
 
-Resume from the latest checkpoint. Resume is accepted only when the model configuration, training contract, dataset fingerprint, and source checksums match. You may increase the requested total step count; changing the data, seed, batch/block settings, optimizer configuration, or thread count requires a new run:
+Resume from the latest checkpoint. Resume is accepted only when the model configuration, training contract, dataset fingerprint, export-sidecar digests, and source checksums match. You may increase the requested total step count; changing the data, seed, batch/block settings, optimizer configuration, or thread count requires a new run:
 
 ```bash
 python scripts/train_carbon_cpu.py \
