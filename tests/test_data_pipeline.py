@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -223,3 +224,65 @@ def test_exact_duplicate_content_with_conflicting_group_ids_is_rejected(tmp_path
     )
     with pytest.raises(DatasetPipelineError, match="different group_id values"):
         build_dataset_release(_config(tmp_path, source))
+
+
+def test_verifier_detects_group_leakage_even_when_manifest_checksums_are_recomputed(
+    tmp_path: Path,
+) -> None:
+    source = _write_jsonl(
+        tmp_path / "records.jsonl",
+        [
+            _record(1, group_id="group-a"),
+            _record(2, group_id="group-b"),
+            _record(3, group_id="group-c"),
+        ],
+    )
+    release = build_dataset_release(_config(tmp_path, source))
+    provenance_path = release / "provenance.jsonl"
+    provenance = [
+        json.loads(line)
+        for line in provenance_path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert provenance[0]["split"] != provenance[1]["split"]
+    provenance[1]["group_id"] = provenance[0]["group_id"]
+    provenance_bytes = (
+        "".join(json.dumps(item, sort_keys=True) + "\n" for item in provenance)
+    ).encode("utf-8")
+    provenance_path.write_bytes(provenance_bytes)
+
+    manifest_path = release / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"]["provenance.jsonl"]["sha256"] = hashlib.sha256(
+        provenance_bytes
+    ).hexdigest()
+    manifest["files"]["provenance.jsonl"]["size_bytes"] = len(provenance_bytes)
+    manifest_bytes = (
+        json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    ).encode("utf-8")
+    manifest_path.write_bytes(manifest_bytes)
+    (release / "manifest.sha256").write_text(
+        hashlib.sha256(manifest_bytes).hexdigest() + "\n",
+        encoding="ascii",
+    )
+
+    with pytest.raises(DatasetVerificationError, match="group crosses"):
+        verify_dataset_release(release)
+
+
+def test_disk_backed_verifier_handles_a_larger_dataset_release(tmp_path: Path) -> None:
+    source = _write_jsonl(
+        tmp_path / "larger.jsonl",
+        [
+            {
+                "id": f"large-{index}",
+                "group_id": f"conversation-{index}",
+                "text": f"Distinct dataset example number {index} with unique topic {index * 17}",
+            }
+            for index in range(1, 1001)
+        ],
+    )
+    release = build_dataset_release(_config(tmp_path, source))
+    summary = verify_dataset_release(release)
+    assert summary["unique_records"] == 1000
+    assert summary["raw_records"] == 1000
+    assert sum(summary["split_counts"].values()) == 1000
