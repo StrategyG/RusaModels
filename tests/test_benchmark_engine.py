@@ -216,7 +216,11 @@ def test_freeze_rejects_duplicate_prompts_and_unsafe_source_uri(tmp_path: Path) 
         freeze_benchmark_suite(suite, "rusaai", "1.0.0", ["CC0-1.0"])
     other_directory = tmp_path / "other"
     other_directory.mkdir()
-    other_suite = _write_suite(other_directory, _records())
+    other_suite = other_directory / "raw-suite.jsonl"
+    other_suite.write_text(
+        "".join(json.dumps(record) + "\n" for record in _records()),
+        encoding="utf-8",
+    )
     with pytest.raises(BenchmarkError, match="credentials"):
         freeze_benchmark_suite(
             other_suite,
