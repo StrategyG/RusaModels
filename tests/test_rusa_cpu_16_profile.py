@@ -63,6 +63,10 @@ def test_rusa_cpu_16_profile_matches_rusaai_architecture_v2():
     assert profile["model"]["benchmark"]["status"] == "NOT_TESTED"
 
     assert model["model_id"] == "rusaai-edge-1.54b"
+    assert model["identity_alignment"]["architecture_reference_model_id"] == "rusaai-edge-1.54b"
+    assert model["identity_alignment"]["training_engine_pre_audit_product_model_id"] == "rusaai-edge-derived"
+    assert model["identity_alignment"]["runtime_model_id"] is None
+    assert model["identity_alignment"]["runtime_model_id_decision"] == "PENDING"
     assert model["status"] == "DESIGN_ONLY"
     assert model["checkpoint"]["selection_status"] == "NOT_SELECTED"
     assert model["checkpoint"]["non_qwen_lineage_status"] == "NOT_VERIFIED"
