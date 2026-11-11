@@ -2,7 +2,14 @@ import json
 import pytest
 from pydantic import ValidationError
 from rusamodels.config import Settings
-from rusamodels.security import ROLE_PERMISSIONS, parse_principals, sha256_hex
+from types import SimpleNamespace
+
+from rusamodels.security import (
+    ROLE_PERMISSIONS,
+    parse_principals,
+    sha256_hex,
+    validate_production_service_credentials,
+)
 
 
 def test_role_boundaries():
@@ -46,3 +53,40 @@ def test_inference_role_is_not_a_model_manager_or_administrator():
     assert "quantization:run" not in permissions
     assert "admin:destructive" not in permissions
     assert "audit:read" not in permissions
+
+
+
+def test_production_service_credentials_require_valid_principal_registry():
+    settings = SimpleNamespace(
+        service_token_sha256="a" * 64,
+        api_principals_json=json.dumps({
+            sha256_hex("rusa-inference-secret"): {
+                "subject": "rusa-ai-inference",
+                "role": "inference",
+            }
+        }),
+    )
+    validate_production_service_credentials(settings, require_inference=True)
+
+
+def test_model_server_fails_closed_without_dedicated_inference_principal():
+    settings = SimpleNamespace(
+        service_token_sha256="a" * 64,
+        api_principals_json=json.dumps({
+            sha256_hex("manager-secret"): {
+                "subject": "operator",
+                "role": "manager",
+            }
+        }),
+    )
+    with pytest.raises(RuntimeError, match="role=inference"):
+        validate_production_service_credentials(settings, require_inference=True)
+
+
+def test_production_service_rejects_invalid_service_token_digest():
+    settings = SimpleNamespace(
+        service_token_sha256="not-a-digest",
+        api_principals_json="{}",
+    )
+    with pytest.raises(RuntimeError, match="SHA-256 digest"):
+        validate_production_service_credentials(settings)

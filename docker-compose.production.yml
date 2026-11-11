@@ -1,0 +1,162 @@
+services:
+  migrate:
+    image: \${RUSAMODELS_IMAGE:?Set RUSAMODELS_IMAGE to an immutable GHCR digest}
+    command: ["alembic", "upgrade", "head"]
+    profiles: ["migration"]
+    restart: "no"
+    environment:
+      RUSAMODELS_ENV: production
+      DATABASE_URL: \${RUSAMODELS_MIGRATION_DATABASE_URL:?Set the migration-only PostgreSQL DSN}
+      STORAGE_BACKEND: s3
+      S3_ENDPOINT_URL: \${RUSAMODELS_S3_ENDPOINT_URL:-}
+      S3_REGION: \${RUSAMODELS_S3_REGION:-us-east-1}
+      S3_BUCKET: \${RUSAMODELS_S3_BUCKET:?Set the immutable model artifact bucket}
+    read_only: true
+    init: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    pids_limit: 128
+    mem_limit: 1g
+    cpus: 1.0
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    networks: [egress]
+
+  model-server:
+    image: \${RUSAMODELS_IMAGE:?Set RUSAMODELS_IMAGE to an immutable GHCR digest}
+    command: ["uvicorn", "services.model_server.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+    restart: unless-stopped
+    init: true
+    environment:
+      RUSAMODELS_ENV: production
+      DATABASE_URL: \${RUSAMODELS_MODEL_DATABASE_URL:?Set the read-mostly Model Server PostgreSQL DSN}
+      STORAGE_BACKEND: s3
+      S3_ENDPOINT_URL: \${RUSAMODELS_S3_ENDPOINT_URL:-}
+      S3_REGION: \${RUSAMODELS_S3_REGION:-us-east-1}
+      S3_BUCKET: \${RUSAMODELS_S3_BUCKET:?Set the immutable model artifact bucket}
+      S3_READ_ACCESS_KEY_ID: \${RUSAMODELS_S3_READ_ACCESS_KEY_ID:-}
+      S3_READ_SECRET_ACCESS_KEY: \${RUSAMODELS_S3_READ_SECRET_ACCESS_KEY:-}
+      RUSAMODELS_API_PRINCIPALS: \${RUSAMODELS_API_PRINCIPALS:?Set hashed API principal registry}
+      RUSAMODELS_SERVICE_TOKEN_SHA256: \${RUSAMODELS_SERVICE_TOKEN_SHA256:?Set the internal service-token digest}
+      RUSAMODELS_INFERENCE_BASE_URL: \${RUSAMODELS_INFERENCE_BASE_URL:?Set the approved upstream inference URL}
+      RUSAMODELS_INFERENCE_MODEL_ID: \${RUSAMODELS_INFERENCE_MODEL_ID:?Set the approved generation model ID}
+      RUSAMODELS_INFERENCE_API_KEY: \${RUSAMODELS_INFERENCE_API_KEY:?Set the upstream inference service key}
+      RUSAMODELS_INFERENCE_TIMEOUT_SECONDS: \${RUSAMODELS_INFERENCE_TIMEOUT_SECONDS:-300}
+      RUSAMODELS_EMBEDDING_BASE_URL: \${RUSAMODELS_EMBEDDING_BASE_URL:-}
+      RUSAMODELS_EMBEDDING_MODEL_ID: \${RUSAMODELS_EMBEDDING_MODEL_ID:-}
+      RUSAMODELS_EMBEDDING_API_KEY: \${RUSAMODELS_EMBEDDING_API_KEY:-}
+      RUSAMODELS_EMBEDDING_TIMEOUT_SECONDS: \${RUSAMODELS_EMBEDDING_TIMEOUT_SECONDS:-120}
+    ports:
+      - "127.0.0.1:8000:8000"
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    pids_limit: 256
+    mem_limit: 4g
+    cpus: 2.0
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks: [internal, egress]
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  quant-server:
+    image: \${RUSAMODELS_IMAGE:?Set RUSAMODELS_IMAGE to an immutable GHCR digest}
+    command: ["uvicorn", "services.quant_server.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    restart: unless-stopped
+    init: true
+    environment:
+      RUSAMODELS_ENV: production
+      DATABASE_URL: \${RUSAMODELS_QUANT_DATABASE_URL:?Set the least-privilege Quant Server PostgreSQL DSN}
+      STORAGE_BACKEND: s3
+      S3_ENDPOINT_URL: \${RUSAMODELS_S3_ENDPOINT_URL:-}
+      S3_REGION: \${RUSAMODELS_S3_REGION:-us-east-1}
+      S3_BUCKET: \${RUSAMODELS_S3_BUCKET:?Set the immutable model artifact bucket}
+      S3_READ_ACCESS_KEY_ID: \${RUSAMODELS_S3_READ_ACCESS_KEY_ID:-}
+      S3_READ_SECRET_ACCESS_KEY: \${RUSAMODELS_S3_READ_SECRET_ACCESS_KEY:-}
+      S3_WRITE_ACCESS_KEY_ID: \${RUSAMODELS_S3_WRITE_ACCESS_KEY_ID:-}
+      S3_WRITE_SECRET_ACCESS_KEY: \${RUSAMODELS_S3_WRITE_SECRET_ACCESS_KEY:-}
+      RUSAMODELS_API_PRINCIPALS: \${RUSAMODELS_API_PRINCIPALS:?Set hashed API principal registry}
+      RUSAMODELS_SERVICE_TOKEN_SHA256: \${RUSAMODELS_SERVICE_TOKEN_SHA256:?Set the internal service-token digest}
+      MAX_UPLOAD_BYTES: \${RUSAMODELS_MAX_UPLOAD_BYTES:-10737418240}
+    ports:
+      - "127.0.0.1:8001:8000"
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    pids_limit: 128
+    mem_limit: 2g
+    cpus: 1.0
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks: [internal, egress]
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  quant-worker:
+    image: \${RUSAMODELS_IMAGE:?Set RUSAMODELS_IMAGE to an immutable GHCR digest}
+    command:
+      - python
+      - -c
+      - "import os; os.makedirs('/var/lib/rusamodels/workspace/tmp', exist_ok=True); os.execvp('python', ['python', '-m', 'services.quant_server.worker'])"
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 120s
+    environment:
+      RUSAMODELS_ENV: production
+      DATABASE_URL: \${RUSAMODELS_WORKER_DATABASE_URL:?Set the least-privilege Quant Worker PostgreSQL DSN}
+      STORAGE_BACKEND: s3
+      S3_ENDPOINT_URL: \${RUSAMODELS_S3_ENDPOINT_URL:-}
+      S3_REGION: \${RUSAMODELS_S3_REGION:-us-east-1}
+      S3_BUCKET: \${RUSAMODELS_S3_BUCKET:?Set the immutable model artifact bucket}
+      S3_READ_ACCESS_KEY_ID: \${RUSAMODELS_S3_READ_ACCESS_KEY_ID:-}
+      S3_READ_SECRET_ACCESS_KEY: \${RUSAMODELS_S3_READ_SECRET_ACCESS_KEY:-}
+      S3_WRITE_ACCESS_KEY_ID: \${RUSAMODELS_S3_WRITE_ACCESS_KEY_ID:-}
+      S3_WRITE_SECRET_ACCESS_KEY: \${RUSAMODELS_S3_WRITE_SECRET_ACCESS_KEY:-}
+      HF_TOKEN: \${RUSAMODELS_HF_TOKEN:-}
+      RUSAMODELS_WORKER_POLL_SECONDS: \${RUSAMODELS_WORKER_POLL_SECONDS:-5}
+      LLAMA_CPP_CONVERT_SCRIPT: \${LLAMA_CPP_CONVERT_SCRIPT:-}
+      LLAMA_QUANTIZE_BIN: \${LLAMA_QUANTIZE_BIN:-llama-quantize}
+      RUSAMODELS_GGUF_MODEL_TYPES: \${RUSAMODELS_GGUF_MODEL_TYPES:-}
+      TMPDIR: /var/lib/rusamodels/workspace/tmp
+    volumes:
+      - \${RUSAMODELS_WORKSPACE_ROOT:?Set a persistent worker workspace directory}:/var/lib/rusamodels/workspace:rw
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    pids_limit: 256
+    mem_limit: \${RUSAMODELS_WORKER_MEMORY_LIMIT:-16g}
+    cpus: \${RUSAMODELS_WORKER_CPU_LIMIT:-4.0}
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    networks: [egress]
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+networks:
+  internal:
+    driver: bridge
+    internal: true
+  egress:
+    driver: bridge

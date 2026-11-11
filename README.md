@@ -20,7 +20,7 @@ RusaAi is an authenticated service consumer. It does not connect directly to the
 - Optional OpenAI-compatible chat, completion, embedding and model-list proxy endpoints on Model Server, with streaming support and a separately configured upstream runtime.
 - PostgreSQL/SQLite adapters and Alembic migrations.
 - S3-compatible and development-only local artifact storage.
-- Viewer, Manager and Administrator roles, hashed bearer tokens and service-token authentication.
+- Viewer, inference-only, Manager and Administrator roles, hashed bearer tokens and separate service-token authentication.
 - Model catalog CRUD, version registration and administrator-only archival.
 - Resumable multipart uploads, per-part checksums, object-level SHA-256 verification and streamed artifact downloads.
 - Hugging Face Hub search and queued model download jobs with upstream license verification and explicit license acknowledgement.
@@ -58,7 +58,7 @@ Create a Model Server Codespace using `.devcontainer/model-server/devcontainer.j
 
 ## Security
 
-Never commit model weights, API tokens or credentials. Production requires PostgreSQL and S3-compatible storage. Give Model Server read-only artifact permissions and Quant Server narrowly scoped write permissions. Apply schema changes with Alembic migrations.
+Never commit model weights, API tokens or credentials. Production requires PostgreSQL with `sslmode=verify-full` and HTTPS S3-compatible storage. Give Model Server read-only artifact permissions; give Quant Server and Quant Worker separate, narrowly scoped write credentials. Use a dedicated `inference` bearer principal for RusaAi. Apply schema changes with Alembic migrations.
 
 ## Documentation
 
@@ -66,6 +66,7 @@ Never commit model weights, API tokens or credentials. Production requires Postg
 - [ADR-001](docs/ADR-001-shared-control-plane.md)
 - [Codespaces setup](docs/CODESPACES.md)
 - [Operations runbook](docs/OPERATIONS.md)
+- [Production deployment](docs/PRODUCTION_DEPLOYMENT.md)
 - [RusaAi integration](docs/RUSAAI-INTEGRATION.md)
 - [CPU inference](docs/CPU_INFERENCE.md)
 - [Training](docs/TRAINING.md)

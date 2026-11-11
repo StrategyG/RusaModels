@@ -34,7 +34,13 @@ from rusamodels.schemas import (
 )
 from rusamodels.hub import search_models
 from rusamodels.inference import openai_model_list, proxy_openai_request
-from rusamodels.security import Principal, authenticate, record_audit, require_service_token
+from rusamodels.security import (
+    Principal,
+    authenticate,
+    record_audit,
+    require_service_token,
+    validate_production_service_credentials,
+)
 from rusamodels.storage import create_storage
 
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
@@ -56,6 +62,19 @@ def create_service_app(
     storage=None,
 ) -> FastAPI:
     runtime = settings or get_settings()
+    if runtime.environment in {"staging", "production"}:
+        validate_production_service_credentials(
+            runtime,
+            require_inference=(service_name == "model-server" and bool(runtime.inference_base_url)),
+        )
+        if (
+            service_name == "quant-server"
+            and runtime.s3_access_key_id
+            and not runtime.s3_write_access_key_id
+        ):
+            raise RuntimeError(
+                "Quant Server requires distinct S3 write credentials when static read credentials are used"
+            )
     db_engine = engine or build_engine(runtime.database_url)
     sessions = build_session_factory(db_engine)
     artifact_storage = storage or create_storage(runtime)
@@ -63,6 +82,9 @@ def create_service_app(
         title=f"RusaModels {service_name}",
         version="0.2.0",
         description="Independent RUSA-AI model infrastructure control plane.",
+        docs_url=None if runtime.environment in {"staging", "production"} else "/docs",
+        redoc_url=None if runtime.environment in {"staging", "production"} else "/redoc",
+        openapi_url=None if runtime.environment in {"staging", "production"} else "/openapi.json",
     )
     app.state.settings = runtime
     app.state.engine = db_engine

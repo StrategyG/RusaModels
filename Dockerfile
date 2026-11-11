@@ -7,7 +7,9 @@ COPY rusamodels ./rusamodels
 COPY services ./services
 COPY migrations ./migrations
 COPY alembic.ini ./
-RUN pip install --no-cache-dir . && chown -R vscode:vscode /app
+RUN python -m pip install --no-cache-dir --upgrade "pip>=25.3" "setuptools>=84.1.0" "wheel>=0.46.2" \
+    && python -m pip install --no-cache-dir . \
+    && chown -R vscode:vscode /app
 ENV HOME=/home/vscode PATH=/home/vscode/.local/bin:$PATH
 USER vscode
 EXPOSE 8000

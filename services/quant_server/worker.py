@@ -555,6 +555,14 @@ def main():
     parser.add_argument("--once", action="store_true", help="Process at most one queued job")
     args = parser.parse_args()
     settings = get_settings()
+    if (
+        settings.environment in {"staging", "production"}
+        and settings.s3_access_key_id
+        and not settings.s3_write_access_key_id
+    ):
+        raise RuntimeError(
+            "Quant Worker requires distinct S3 write credentials when static read credentials are used"
+        )
     engine = build_engine(settings.database_url)
     sessions = build_session_factory(engine)
     storage = create_storage(settings)

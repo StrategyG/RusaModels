@@ -7,7 +7,7 @@ from rusamodels.config import Settings
 def production_settings(**overrides):
     values = {
         "environment": "production",
-        "database_url": "postgresql+psycopg://rusamodels:secret@db.example/rusamodels",
+        "database_url": "postgresql+psycopg://rusamodels:secret@db.example/rusamodels?sslmode=verify-full",
         "storage_backend": "s3",
         "api_principals_json": '{"manager":"digest"}',
         "service_token_sha256": "a" * 64,
@@ -85,3 +85,36 @@ def test_production_embedding_requires_https_and_upstream_key():
         embedding_api_key="embedding-secret",
     )
     assert settings.embedding_model_id == "e5-small"
+
+
+
+def test_staging_and_production_require_full_database_identity_verification():
+    with pytest.raises(ValidationError, match="sslmode=verify-full"):
+        production_settings(
+            database_url="postgresql+psycopg://rusamodels:secret@db.example/rusamodels?sslmode=require"
+        )
+
+
+def test_staging_and_production_reject_insecure_s3_endpoint():
+    with pytest.raises(ValidationError, match="credential-free HTTPS"):
+        production_settings(s3_endpoint_url="http://s3.internal")
+
+
+def test_staging_and_production_accept_https_s3_endpoint():
+    settings = production_settings(s3_endpoint_url="https://s3.internal")
+    assert settings.s3_endpoint_url == "https://s3.internal"
+
+
+def test_s3_static_credentials_must_be_configured_as_pairs():
+    with pytest.raises(ValidationError, match="read access key ID and secret"):
+        production_settings(s3_access_key_id="read-key")
+    with pytest.raises(ValidationError, match="write access key ID and secret"):
+        production_settings(
+            s3_write_access_key_id="write-key",
+            s3_write_secret_access_key="",
+        )
+
+
+def test_service_token_digest_must_be_lowercase_sha256():
+    with pytest.raises(ValidationError, match="lowercase SHA-256"):
+        production_settings(service_token_sha256="not-a-digest")
