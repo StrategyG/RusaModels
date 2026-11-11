@@ -61,6 +61,9 @@ def test_native_windows_scripts_bind_only_loopback_and_use_expected_ports():
     assert "--help" in start
     assert "--version" in start
     assert "kvCacheQ8Supported" in start
+    assert "Raw Rusaai tokens must not be stored" in start
+    assert 'SetEnvironmentVariable("RUSAMODELS_API_TOKEN", $null, "Process")' in start
+    assert 'SetEnvironmentVariable("RUSAMODELS_SERVICE_TOKEN", $null, "Process")' in start
     assert '$parsedApiBaseUrl.Host -ne "127.0.0.1"' in verify
     assert "$parsedApiBaseUrl.Port -ne 8090" in verify
 
@@ -76,3 +79,14 @@ def test_windows_edge_example_uses_official_qwen3_q4_k_m_filename():
 
     assert "Qwen3-4B-Q4_K_M.gguf" in env
     assert "Qwen3-4B-Q4_K_M.gguf" in docs
+
+
+
+def test_raw_rusaai_tokens_are_kept_out_of_rusamodels_env_and_child_processes():
+    docs = (ROOT / "docs" / "RUSA-CPU-16-WINDOWS.md").read_text(encoding="utf-8")
+    env = (ROOT / ".env.rusa-cpu-16.example").read_text(encoding="utf-8")
+
+    assert "$env:RUSAMODELS_API_TOKEN = $inferenceToken" not in docs.split("## 5. Start and stop")[0]
+    assert "$env:RUSAMODELS_SERVICE_TOKEN = $serviceToken" not in docs
+    assert "RUSAMODELS_API_TOKEN=" not in env
+    assert "RUSAMODELS_SERVICE_TOKEN=" not in env

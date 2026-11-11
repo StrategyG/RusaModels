@@ -17,6 +17,9 @@ function Import-RusaDotEnv {
         if (-not $match.Success) { continue }
 
         $name = $match.Groups[1].Value
+        if ($name -in @("RUSAMODELS_API_TOKEN", "RUSAMODELS_SERVICE_TOKEN")) {
+            throw "Raw Rusaai tokens must not be stored in the RusaModels .env file."
+        }
         $value = $match.Groups[2].Value.Trim()
         if ($value.Length -ge 2) {
             $first = $value.Substring(0, 1)
@@ -81,9 +84,17 @@ $RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
 Push-Location $RepoRoot
 $llamaProcess = $null
 $apiProcess = $null
+$rawApiToken = $null
+$rawServiceToken = $null
+$rawTokensCaptured = $false
 $stateDir = Join-Path $RepoRoot ".local\rusa-cpu-16"
 
 try {
+    $rawApiToken = [Environment]::GetEnvironmentVariable("RUSAMODELS_API_TOKEN", "Process")
+    $rawServiceToken = [Environment]::GetEnvironmentVariable("RUSAMODELS_SERVICE_TOKEN", "Process")
+    $rawTokensCaptured = $true
+    [Environment]::SetEnvironmentVariable("RUSAMODELS_API_TOKEN", $null, "Process")
+    [Environment]::SetEnvironmentVariable("RUSAMODELS_SERVICE_TOKEN", $null, "Process")
     Import-RusaDotEnv -Path (Join-Path $RepoRoot ".env")
 
     if ($env:RUSAMODELS_ENV -ne "edge") { throw "RUSA-CPU-16 requires RUSAMODELS_ENV=edge." }
@@ -304,7 +315,7 @@ $hardwareProfile | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path
     Write-Host "llama.cpp version: $llamaVersionOutput"
     Write-Host "Q8_0 K/V cache supported: $kvCacheQ8Supported"
     Write-Host "Physical cores: $physicalCores | Logical processors: $logicalProcessors | Generation threads: $threads"
-Write-Host ("Windows-reported CPU features: {0}" -f ($availableCpuFeatures -join ", "))
+    Write-Host ("Windows-reported CPU features: {0}" -f ($availableCpuFeatures -join ", "))
     Write-Host "Total RAM: $memoryGiB GiB | Free RAM at startup: $freeMemoryGiB GiB"
     Write-Host "Logs: $logDir"
 }
@@ -316,5 +327,9 @@ catch {
     throw
 }
 finally {
+    if ($rawTokensCaptured) {
+        [Environment]::SetEnvironmentVariable("RUSAMODELS_API_TOKEN", $rawApiToken, "Process")
+        [Environment]::SetEnvironmentVariable("RUSAMODELS_SERVICE_TOKEN", $rawServiceToken, "Process")
+    }
     Pop-Location
 }

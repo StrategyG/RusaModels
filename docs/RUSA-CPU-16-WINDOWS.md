@@ -93,6 +93,8 @@ The profile uses:
 - A separate internal service-token digest.
 - No S3 credentials, embedding sidecar or external inference fallback.
 
+The launcher removes raw Rusaai API/service tokens from its child-process environment before migrations and service startup, then restores the invoking PowerShell session. It rejects raw token entries in the RusaModels .env file. This prevents the Model Server and migration process from inheriting credentials they do not need.
+
 Generate two independent high-entropy tokens in PowerShell. Keep the raw values in the Rusaai secret store; only their SHA-256 digests belong in the RusaModels .env file:
 
     $inferenceToken = python -c "import secrets; print(secrets.token_urlsafe(32))"
@@ -103,10 +105,8 @@ Generate two independent high-entropy tokens in PowerShell. Keep the raw values 
     $principalRegistry[$inferenceDigest] = @{ subject = "rusa-ai-inference"; role = "inference" }
     $env:RUSAMODELS_API_PRINCIPALS = ConvertTo-Json -InputObject $principalRegistry -Compress
     $env:RUSAMODELS_SERVICE_TOKEN_SHA256 = $serviceDigest
-    $env:RUSAMODELS_API_TOKEN = $inferenceToken
-    $env:RUSAMODELS_SERVICE_TOKEN = $serviceToken
 
-Keep these variables available to the service process. Configure Rusaai with:
+Keep only the principal registry and service-token digest available to the RusaModels service process. Store the raw inference and service tokens only in Rusaai secret storage. Configure Rusaai with:
 - OpenAI-compatible base URL: http://127.0.0.1:8090/openai/v1
 - Model ID: rusa-cpu-4b
 - Bearer token: the raw inference token
@@ -143,6 +143,7 @@ The API and llama.cpp ports must remain loopback-only. Do not publish either por
 
 Set RUSAMODELS_API_TOKEN in the current PowerShell session to the raw inference token, then run:
 
+    $env:RUSAMODELS_API_TOKEN = $inferenceToken
     .\scripts\verify_rusa_cpu_16.ps1 -SequentialRequests 20
 
 The script verifies llama.cpp and API readiness, confirms the model ID is exposed to the inference principal, then runs exactly 20 sequential streaming chat requests. During each request it samples free RAM and CPU load, measures time-to-first-token (TTFT) and end-to-end latency, and calculates generated tokens/second from the before/after llama.cpp Prometheus counters. It writes a non-secret acceptance report under .local/logs. RAM is sampled every 500 ms while waiting for response headers or stream data; this is sampled evidence, not continuous hardware telemetry. It does not prove context-window, queue, thermal or long-duration stability. Queue wait time must be collected from the Rusaai scheduler because Rusaai owns the pending-request queue.
