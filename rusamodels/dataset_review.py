@@ -46,8 +46,10 @@ _REVIEW_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _REVIEWER_ID = re.compile(r"^reviewer_[A-Za-z0-9._-]{1,60}$")
 _LANGUAGE = re.compile(r"^(?:[a-z]{2,3}|mixed|und)$")
 _TASK_TYPE = re.compile(r"^[a-z][a-z0-9_.-]{0,63}$")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _REVIEW_KEYS = {
     "review_id",
+    "release_manifest_sha256",
     "record_id",
     "review_type",
     "reviewer_id",
@@ -92,6 +94,10 @@ def _parse_review(raw: str, source: str) -> dict[str, Any]:
 
     if not isinstance(value["review_id"], str) or not _REVIEW_ID.fullmatch(value["review_id"]):
         raise DatasetReviewError(f"{source}: review_id is invalid")
+    if not isinstance(value["release_manifest_sha256"], str) or not _SHA256.fullmatch(
+        value["release_manifest_sha256"]
+    ):
+        raise DatasetReviewError(f"{source}: release_manifest_sha256 must be a lowercase SHA-256 digest")
     if not isinstance(value["record_id"], str) or not _RECORD_ID.fullmatch(value["record_id"]):
         raise DatasetReviewError(f"{source}: record_id must be a pseudonymized dataset record ID")
     if not isinstance(value["review_type"], str) or value["review_type"] not in _REQUIRED_REVIEW_TYPES:
@@ -303,6 +309,11 @@ def evaluate_dataset_reviews(
                             f"{ledger.name}:{line_number}: review ledger must be UTF-8"
                         ) from exc
                     event = _parse_review(decoded, f"{ledger.name}:{line_number}")
+                    if event["release_manifest_sha256"] != verification["manifest_sha256"]:
+                        raise DatasetReviewError(
+                            f"{ledger.name}:{line_number}: review event release manifest SHA-256 "
+                            "does not match the selected dataset release"
+                        )
                     record_exists = connection.execute(
                         "SELECT 1 FROM release_records WHERE record_id = ?",
                         (event["record_id"],),
