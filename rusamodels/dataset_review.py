@@ -439,7 +439,7 @@ def evaluate_dataset_reviews(
                         for review_type, review in reviews.items()
                         if review_type != "publication_approval"
                     )
-                    if publication["reviewed_epoch"] < latest_review_epoch:
+                    if publication["reviewed_epoch"] <= latest_review_epoch:
                         blockers.append("publication_approval_stale")
                     if technical["reviewer_id"] == independent_qa["reviewer_id"]:
                         blockers.append("independent_qa_reviewer_conflict")
