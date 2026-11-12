@@ -104,9 +104,9 @@ def _validate_manifest(manifest: Any, output_path: Path) -> dict[str, Any]:
         or not _DATASET_ID.fullmatch(manifest["dataset_version"])
     ):
         raise TokenizedDatasetVerificationError("tokenized dataset identity is invalid")
-    if manifest["split"] not in {"train", "validation", "test"}:
+    if not isinstance(manifest["split"], str) or manifest["split"] not in {"train", "validation", "test"}:
         raise TokenizedDatasetVerificationError("tokenized dataset split is invalid")
-    if manifest["source_split_file"] != f"{manifest['split']}.jsonl":
+    if not isinstance(manifest["source_split_file"], str) or manifest["source_split_file"] != f"{manifest['split']}.jsonl":
         raise TokenizedDatasetVerificationError("source split file does not match the declared split")
     for field in (
         "release_manifest_sha256",
@@ -126,6 +126,8 @@ def _validate_manifest(manifest: Any, output_path: Path) -> dict[str, Any]:
         raise TokenizedDatasetVerificationError("output file name does not match the manifest")
     if manifest["encoding"] != "jsonl-int64":
         raise TokenizedDatasetVerificationError("unsupported tokenized artifact encoding")
+    if not isinstance(manifest["output_file"], str):
+        raise TokenizedDatasetVerificationError("output_file must be a basename string")
     for field, minimum in (
         ("vocab_size", 1),
         ("sequence_length", 2),
@@ -174,6 +176,8 @@ def verify_tokenized_split(
         raise TokenizedDatasetVerificationError("symlink paths are not allowed for tokenized artifacts")
     output = output_input.parent.resolve() / output_input.name
     manifest_file = manifest_input.parent.resolve() / manifest_input.name
+    if output == manifest_file:
+        raise TokenizedDatasetVerificationError("tokenized output and manifest paths must be different")
     if not output.is_file() or not manifest_file.is_file():
         raise TokenizedDatasetVerificationError("tokenized output or manifest is missing")
     manifest_bytes = manifest_file.read_bytes()
@@ -188,17 +192,31 @@ def verify_tokenized_split(
     if output_size_before != manifest["output_size_bytes"]:
         raise TokenizedDatasetVerificationError("tokenized output size does not match manifest")
 
+    tokenizer_root: Path | None = None
+    tokenizer_sha256_before: str | None = None
     if tokenizer_path is not None:
-        try:
-            actual_tokenizer_sha256 = hash_tokenizer_directory(tokenizer_path)
-        except (DatasetTokenizationError, OSError) as exc:
-            raise TokenizedDatasetVerificationError(f"tokenizer verification failed: {exc}") from exc
-        if not hmac.compare_digest(actual_tokenizer_sha256, manifest["tokenizer_sha256"]):
+        tokenizer_input = Path(tokenizer_path).expanduser()
+        if tokenizer_input.is_symlink():
+            raise TokenizedDatasetVerificationError("tokenizer path must not be a symlink")
+        tokenizer_root = tokenizer_input.resolve()
+        tokenizer_sha256_before = hash_tokenizer_directory(tokenizer_root)
+        if not hmac.compare_digest(tokenizer_sha256_before, manifest["tokenizer_sha256"]):
             raise TokenizedDatasetVerificationError("tokenizer assets do not match tokenization manifest")
 
+    release_root: Path | None = None
+    source_path: Path | None = None
+    source_sha256_before: str | None = None
+    source_size_before: int | None = None
+    release_manifest_path: Path | None = None
+    release_manifest_sha256_before: str | None = None
     if release_path is not None:
+        release_root = Path(release_path).expanduser().resolve()
+        if release_root == output or release_root in output.parents or release_root == manifest_file or release_root in manifest_file.parents:
+            raise TokenizedDatasetVerificationError("tokenized artifacts must be outside the immutable source release")
+        if tokenizer_root is not None and (tokenizer_root == release_root or release_root in tokenizer_root.parents):
+            raise TokenizedDatasetVerificationError("tokenizer assets must be outside the immutable source release")
         try:
-            release = verify_dataset_release(release_path)
+            release = verify_dataset_release(release_root)
         except (DatasetVerificationError, OSError, UnicodeError) as exc:
             raise TokenizedDatasetVerificationError(f"source dataset verification failed: {exc}") from exc
         if (
@@ -207,18 +225,19 @@ def verify_tokenized_split(
             or release["manifest_sha256"] != manifest["release_manifest_sha256"]
         ):
             raise TokenizedDatasetVerificationError("tokenized artifact is bound to a different dataset release")
-        release_root = Path(release_path).expanduser().resolve()
-        source_path = release_root / manifest["source_split_file"]
-        source_sha256, source_size = _hash_file(source_path)
+        release_manifest_path = release_root / "manifest.json"
+        release_manifest_sha256_before, _ = _hash_file(release_manifest_path)
         release_manifest = _load_json(
-            (release_root / "manifest.json").read_text(encoding="utf-8"),
+            release_manifest_path.read_text(encoding="utf-8"),
             "manifest.json",
         )
+        source_path = release_root / manifest["source_split_file"]
+        source_sha256_before, source_size_before = _hash_file(source_path)
         source_metadata = release_manifest["files"][manifest["source_split_file"]]
         if (
-            source_sha256 != manifest["source_split_sha256"]
-            or source_sha256 != source_metadata["sha256"]
-            or source_size != source_metadata["size_bytes"]
+            source_sha256_before != manifest["source_split_sha256"]
+            or source_sha256_before != source_metadata["sha256"]
+            or source_size_before != source_metadata["size_bytes"]
             or source_metadata["records"] != manifest["records"]
         ):
             raise TokenizedDatasetVerificationError("tokenized artifact source split binding is invalid")
@@ -273,6 +292,10 @@ def verify_tokenized_split(
                 raise TokenizedDatasetVerificationError(
                     f"{output.name}:{line_number}: record_ids are invalid"
                 )
+            if not any(attention_mask):
+                raise TokenizedDatasetVerificationError(
+                    f"{output.name}:{line_number}: sequence contains no unpadded tokens"
+                )
             seen_padding = False
             for input_id, mask, label in zip(input_ids, attention_mask, labels, strict=True):
                 if mask == 0:
@@ -300,6 +323,19 @@ def verify_tokenized_split(
         or padding_count != manifest["padding_tokens"]
     ):
         raise TokenizedDatasetVerificationError("tokenized sequence and token counts do not match manifest")
+    if source_path is not None and release_manifest_path is not None:
+        source_sha256_after, source_size_after = _hash_file(source_path)
+        release_manifest_sha256_after, _ = _hash_file(release_manifest_path)
+        if (
+            source_sha256_after != source_sha256_before
+            or source_size_after != source_size_before
+            or release_manifest_sha256_after != release_manifest_sha256_before
+        ):
+            raise TokenizedDatasetVerificationError("source dataset changed during tokenized verification")
+    if tokenizer_root is not None and tokenizer_sha256_before is not None:
+        tokenizer_sha256_after = hash_tokenizer_directory(tokenizer_root)
+        if tokenizer_sha256_after != tokenizer_sha256_before:
+            raise TokenizedDatasetVerificationError("tokenizer assets changed during verification")
     output_sha256_after, output_size_after = _hash_file(output)
     manifest_sha256_after, _ = _hash_file(manifest_file)
     if (
