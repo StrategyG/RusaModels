@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -153,9 +154,16 @@ def load_tokenizer_artifact(directory: str | Path) -> TokenizerArtifact:
         raise TokenizerArtifactError("tokenizer manifest has unsupported or missing fields")
     if manifest["schema_version"] != "1.0.0" or manifest["algorithm"] != "byte_level_bpe":
         raise TokenizerArtifactError("unsupported tokenizer artifact version or algorithm")
-    if not isinstance(manifest["tokenizer_id"], str) or not manifest["tokenizer_id"]:
+    if (
+        not isinstance(manifest["tokenizer_id"], str)
+        or not re.fullmatch(r"^[a-z0-9][a-z0-9._-]{0,63}$", manifest["tokenizer_id"])
+    ):
         raise TokenizerArtifactError("tokenizer_id is invalid")
-    if not isinstance(manifest["tokenizer_version"], str) or not manifest["tokenizer_version"]:
+    if (
+        not isinstance(manifest["tokenizer_version"], str)
+        or not manifest["tokenizer_version"].strip()
+        or len(manifest["tokenizer_version"]) > 64
+    ):
         raise TokenizerArtifactError("tokenizer_version is invalid")
     if manifest["tokenizer_file"] != "tokenizer.json":
         raise TokenizerArtifactError("tokenizer_file must be tokenizer.json")
@@ -193,22 +201,37 @@ def load_tokenizer_artifact(directory: str | Path) -> TokenizerArtifact:
     if type(corpus["corpus_size_bytes"]) is not int or corpus["corpus_size_bytes"] < 1:
         raise TokenizerArtifactError("training corpus size is invalid")
     if (
-        not isinstance(corpus["license_ids"], list)
+        not isinstance(corpus["dataset_id"], str)
+        or not corpus["dataset_id"].strip()
+        or len(corpus["dataset_id"]) > 128
+        or not isinstance(corpus["dataset_version"], str)
+        or not corpus["dataset_version"].strip()
+        or len(corpus["dataset_version"]) > 64
+        or not isinstance(corpus["license_ids"], list)
         or not corpus["license_ids"]
-        or any(not isinstance(item, str) or not item.strip() for item in corpus["license_ids"])
+        or any(
+            not isinstance(item, str) or not item.strip() or "replace" in item.casefold()
+            for item in corpus["license_ids"]
+        )
+        or len(corpus["license_ids"]) != len(set(corpus["license_ids"]))
     ):
-        raise TokenizerArtifactError("training corpus license_ids are invalid")
+        raise TokenizerArtifactError("training corpus dataset/license metadata is invalid")
     if (
         type(trainer["requested_vocab_size"]) is not int
         or type(trainer["min_frequency"]) is not int
         or trainer["requested_vocab_size"] < 260
+        or trainer["requested_vocab_size"] != manifest["vocab_size"]
         or trainer["min_frequency"] < 1
         or trainer["pre_tokenizer"] != "bytelevel"
         or trainer["normalizer"] != "none"
     ):
         raise TokenizerArtifactError("tokenizer trainer settings are invalid")
-    if not isinstance(manifest["created_at"], str) or not manifest["created_at"]:
-        raise TokenizerArtifactError("created_at is invalid")
+    try:
+        created_at = datetime.fromisoformat(manifest["created_at"].replace("Z", "+00:00"))
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise TokenizerArtifactError("created_at must be ISO-8601") from exc
+    if created_at.tzinfo is None or created_at.utcoffset() is None:
+        raise TokenizerArtifactError("created_at must include a timezone")
     actual_sha256, actual_size = _sha256_file(tokenizer_path)
     if actual_sha256 != manifest["tokenizer_sha256"] or actual_size != manifest["tokenizer_size_bytes"]:
         raise TokenizerArtifactError("tokenizer.json integrity does not match its manifest")
