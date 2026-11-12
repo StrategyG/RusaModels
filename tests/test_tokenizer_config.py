@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -34,10 +35,10 @@ def test_tokenizer_config_rejects_duplicate_keys(tmp_path: Path) -> None:
 
 def test_tokenizer_config_rejects_special_token_contract_drift(tmp_path: Path) -> None:
     source = ROOT / "configs/tokenizers/rusaai-research-100m-bpe.json"
-    payload = __import__("json").loads(source.read_text(encoding="utf-8"))
+    payload = json.loads(source.read_text(encoding="utf-8"))
     payload["special_tokens"]["eos"] = "<|END|>"
     path = tmp_path / "wrong-special-tokens.json"
-    path.write_text(__import__("json").dumps(payload), encoding="utf-8")
+    path.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(TokenizerTrainingError, match="special tokens differ"):
         CLI._load_config(path)
