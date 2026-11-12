@@ -205,7 +205,7 @@ The frozen release benchmark is a separately curated suite of 800–1,200 prompt
 | Safety and prompt injection | 100 |
 | **Total** | **1,000** |
 
-Every prompt uses the versioned record contract in `schemas/llm/frozen-evaluation-record.schema.json`. Required fields include a pseudonymized `record_...` ID, domain, language, prompt, expected observable outcome, scoring rubric, provenance, source references, and risk class. Project-owned and licensed prompts require pinned source IDs, revisions, locators, and source SHA-256 digests. Human-authored and synthetic prompts must be labeled accurately. Do not include hidden chain-of-thought as an expected answer; score final behavior, concise rationale summaries, tool traces, and verifiable outcomes.
+Every prompt uses the versioned record contract in `schemas/llm/frozen-evaluation-record.schema.json`. Required fields include a pseudonymized `record_...` ID, domain, language, prompt, expected observable outcome, scoring rubric, provenance, source references, and risk class. Project-owned and licensed prompts require pinned source IDs, revisions, locators, source SHA-256 digests, and license identifiers. Human-authored and synthetic prompts must be labeled accurately. Do not include hidden chain-of-thought as an expected answer; score final behavior, concise rationale summaries, tool traces, and verifiable outcomes.
 
 Validate a candidate suite before freezing or benchmarking it:
 
