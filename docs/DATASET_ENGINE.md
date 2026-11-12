@@ -277,6 +277,17 @@ Run the command separately for validation and test. The packer verifies the sour
 
 The record contract is defined by `schemas/llm/tokenized-sequence.schema.json`; the artifact manifest is defined by `schemas/llm/dataset-tokenization-manifest.schema.json`. Training loaders must honor attention masks and ignore labels equal to -100. Do not combine train, validation, and test outputs.
 
+Verify the packed output before handing it to a training job:
+
+~~~bash
+python -m rusamodels.dataset_tokenized_verification \
+  --output artifacts/tokenized/rusaai-agent-sft-curated-0.1.0-train.jsonl \
+  --release artifacts/datasets/rusaai-agent-sft-curated/0.1.0 \
+  --tokenizer-path artifacts/tokenizers/approved-tokenizer
+~~~
+
+The verifier checks output and manifest checksums, sequence lengths, vocabulary bounds, padding placement, attention masks, labels, token counts, the exact source release/split, and (when supplied) the local tokenizer asset digest. It refuses tokenized outputs inside the immutable source release or tokenizer asset directory.
+
 This packer is for plain-text causal-LM continuation/pretraining. It does not replace the Agent SFT tokenizer path: the existing SFT trainer applies the model chat template and masks prompt tokens so loss is computed on the intended assistant completion. Use the SFT workflow for supervised chat adaptation. The tokenizer revision is operator-supplied provenance; the local asset SHA-256 is the byte-level identity actually verified by this tool.
 
 ## Dataset inspection and sampling
