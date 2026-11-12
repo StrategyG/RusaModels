@@ -84,10 +84,14 @@ def validate_chat_template(
     template = getattr(tokenizer, "chat_template", None)
     if not template:
         raise ValueError("foundation tokenizer must define a non-empty chat_template")
-    sample_messages = messages or [
-        {"role": "system", "content": "You are RusaAi, a local-first technical assistant."},
-        {"role": "user", "content": "Jelaskan cara memvalidasi JSON API response."},
-    ]
+    sample_messages = (
+        [
+            {"role": "system", "content": "You are RusaAi, a local-first technical assistant."},
+            {"role": "user", "content": "Jelaskan cara memvalidasi JSON API response."},
+        ]
+        if messages is None
+        else messages
+    )
     if (
         not isinstance(sample_messages, list)
         or not sample_messages
