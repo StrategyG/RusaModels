@@ -360,3 +360,51 @@ def test_upload_mutations_lock_the_upload_session_row(api_client, monkeypatch):
     )
     assert aborted.status_code == 204
     assert_upload_row_lock()
+
+
+def test_postgres_upload_session_row_lock_blocks_competing_transaction(postgres_api_client):
+    """A real PostgreSQL transaction must hold the upload row lock until commit."""
+    import pytest
+    from sqlalchemy import select
+    from sqlalchemy.exc import OperationalError
+    from rusamodels.models import UploadSession
+
+    model_id, version_id = create_model_version(postgres_api_client)
+    payload = b"postgres-row-lock"
+    started = postgres_api_client.post(
+        f"/v1/models/{model_id}/versions/{version_id}/uploads",
+        json={
+            "filename": "postgres-lock.bin",
+            "expected_size": len(payload),
+            "expected_sha256": hashlib.sha256(payload).hexdigest(),
+        },
+        headers=auth("manager-test-token"),
+    )
+    assert started.status_code == 201
+    upload_id = started.json()["id"]
+
+    sessions = postgres_api_client.app.state.sessions
+    locker = sessions()
+    contender = sessions()
+    statement = select(UploadSession).where(UploadSession.id == upload_id)
+    try:
+        locker.begin()
+        locked = locker.scalar(statement.with_for_update())
+        assert locked is not None and locked.status == "open"
+
+        contender.begin()
+        with pytest.raises(OperationalError) as error:
+            contender.scalar(statement.with_for_update(nowait=True))
+        assert getattr(error.value.orig, "sqlstate", None) == "55P03"
+        contender.rollback()
+
+        locker.commit()
+        contender.begin()
+        released = contender.scalar(statement.with_for_update(nowait=True))
+        assert released is not None and released.status == "open"
+        contender.commit()
+    finally:
+        locker.rollback()
+        contender.rollback()
+        locker.close()
+        contender.close()
