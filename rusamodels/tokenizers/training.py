@@ -107,13 +107,13 @@ def _load_export_manifest(corpus: Path, manifest_path: Path) -> tuple[dict[str, 
     if (
         not isinstance(licenses, list)
         or not licenses
-        or len(licenses) != len(set(licenses))
         or any(
             not isinstance(item, str)
             or not item.strip()
             or "replace" in item.casefold()
             for item in licenses
         )
+        or len(licenses) != len(set(licenses))
     ):
         raise TokenizerTrainingError("dataset export license_ids are missing, duplicated, or placeholders")
     actual_sha256, actual_size = _sha256_file(corpus)
@@ -166,7 +166,7 @@ def train_tokenizer(
     except ImportError as exc:
         raise RuntimeError("Install the tokenizer extra to train a BPE tokenizer") from exc
 
-    staging = Path(tempfile.mkdtemp(prefix=f".{output.name}.", dir=output.parent))
+    staging: Path | None = Path(tempfile.mkdtemp(prefix=f".{output.name}.", dir=output.parent))
     try:
         backend = Tokenizer(models.BPE(unk_token=SPECIAL_TOKENS["unk"]))
         backend.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
@@ -241,7 +241,7 @@ def train_tokenizer(
         if output.exists():
             raise TokenizerTrainingError(f"tokenizer output appeared during training: {output}")
         os.rename(staging, output)
-        staging = Path()
+        staging = None
         loaded = load_tokenizer_artifact(output)
         loaded_audit = audit_tokenizer(loaded.backend, loaded.special_token_ids)
         return {
@@ -257,6 +257,6 @@ def train_tokenizer(
             "output_dir": str(output),
         }
     except Exception:
-        if staging and staging.exists():
+        if staging is not None and staging.exists():
             shutil.rmtree(staging, ignore_errors=True)
         raise
