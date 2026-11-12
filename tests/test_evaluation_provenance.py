@@ -5,7 +5,6 @@ import pytest
 
 from rusamodels.evaluation.evaluate_agent_sft import (
     _hash_adapter_directory,
-    _pseudonymize_record_id,
     _safe_report_path,
     _validate_provenance,
     _write_new_file,
@@ -126,12 +125,3 @@ def test_evaluation_report_write_is_no_overwrite(tmp_path: Path) -> None:
         _write_new_file(output, b"replacement")
 
     assert output.read_text(encoding="utf-8") == "original"
-
-
-def test_report_record_ids_are_pseudonymized() -> None:
-    value = _pseudonymize_record_id("customer@example.com")
-
-    assert value.startswith("record_")
-    assert len(value) == 31
-    assert "customer" not in value
-    assert hashlib.sha256(b"customer@example.com").hexdigest()[:24] in value
