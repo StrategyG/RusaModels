@@ -279,7 +279,7 @@ def run_training(config_path: Path, *, train_path: Path | None = None, eval_path
     )
     tokenizer_kwargs = getattr(tokenizer, "init_kwargs", {})
     resolved_tokenizer_revision = (
-        tokenizer_kwargs.get("_commit_hash", model_revision)
+        (tokenizer_kwargs.get("_commit_hash") or model_revision)
         if isinstance(tokenizer_kwargs, dict)
         else model_revision
     )
