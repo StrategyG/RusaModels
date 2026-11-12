@@ -250,6 +250,35 @@ The default screening policy requires at least 40 normalized characters, six wor
 
 This tool produces eligibility evidence only. It does not delete or rewrite rejected records, identify semantic quality, classify toxicity, detect all unsafe content, or certify that a record is suitable for training. Use its report to drive a reviewed filtering decision, then build a new immutable dataset version. High-risk and unsafe content must remain quarantined through the human security-review gate.
 
+## Pinned-tokenizer preprocessing and sequence packing
+
+Install the optional Transformers tokenizer runtime:
+
+~~~bash
+python -m pip install -e ".[tokenization]"
+~~~
+
+Download or provision the approved tokenizer snapshot separately, verify its upstream source revision, and keep the files in a local directory. The packer loads only local files with remote code disabled; it does not download tokenizer assets or execute repository-provided custom tokenizer code.
+
+Pack one split at a time:
+
+~~~bash
+python -m rusamodels.dataset_tokenization \
+  --release artifacts/datasets/rusaai-agent-sft-curated/0.1.0 \
+  --split train \
+  --tokenizer-path artifacts/tokenizers/approved-tokenizer \
+  --tokenizer-id organization/model-tokenizer \
+  --tokenizer-revision 0123456789abcdef0123456789abcdef01234567 \
+  --sequence-length 2048 \
+  --output artifacts/tokenized/rusaai-agent-sft-curated-0.1.0-train.jsonl
+~~~
+
+Run the command separately for validation and test. The packer verifies the source release, hashes every local tokenizer asset by relative path and file digest, records the declared 40-character tokenizer revision, inserts EOS between records, and emits fixed-length JSONL sequences with input IDs, attention masks, labels, and pseudonymized source record IDs. The final partial sequence is padded; padded labels use -100 and the attention mask uses zero. The tokenized artifact manifest binds the exact source split, dataset release manifest, tokenizer identity/revision/content digest, sequence length, token counts, and output checksum.
+
+The record contract is defined by `schemas/llm/tokenized-sequence.schema.json`; the artifact manifest is defined by `schemas/llm/dataset-tokenization-manifest.schema.json`. Training loaders must honor attention masks and ignore labels equal to -100. Do not combine train, validation, and test outputs.
+
+This packer is for plain-text causal-LM continuation/pretraining. It does not replace the Agent SFT tokenizer path: the existing SFT trainer applies the model chat template and masks prompt tokens so loss is computed on the intended assistant completion. Use the SFT workflow for supervised chat adaptation. The tokenizer revision is operator-supplied provenance; the local asset SHA-256 is the byte-level identity actually verified by this tool.
+
 ## Dataset inspection and sampling
 
 Inspect split sizes, text-length distributions, task/language/role/risk labels, and deterministic content samples:
@@ -285,7 +314,7 @@ The following roadmap items are not implemented by this initial release builder:
 - Semantic quality classifiers, toxicity/unsafe-content classifiers, and a reviewed filter-to-new-release workflow remain open.
 - Human review ledger and publication gate are implemented as an initial workflow; integration with an authenticated annotation UI and signed reviewer attestations remains open.
 - Frozen evaluation contamination gate is implemented for exact text and SimHash near-duplicates; semantic contamination detection and capacity calibration remain open.
-- Tokenizer-aware preprocessing and sequence packing.
+- Pinned local Hugging Face tokenizer preprocessing and fixed-length causal-LM sequence packing are implemented. A production training loader, full-model tokenizer compatibility certification, and capacity benchmarking remain required.
 - Dataset registry integration and registry-level promotion/retention.
 - External object-storage upload/download for dataset releases.
 - Large-scale load/performance testing on representative datasets.
