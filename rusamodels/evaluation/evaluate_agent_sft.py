@@ -168,10 +168,6 @@ def _write_new_file(path: Path, payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def _pseudonymize_record_id(value: str) -> str:
-    return f"record_{hashlib.sha256(value.encode('utf-8')).hexdigest()[:24]}"
-
-
 def _load_config(path: Path) -> dict[str, Any]:
     import yaml
 
@@ -278,7 +274,7 @@ def run_evaluation(
         raise ValueError("evaluation.max_new_tokens must be an integer from 1 to 8192")
     device = model.get_input_embeddings().weight.device
 
-    for record in records:
+    for record_index, record in enumerate(records, start=1):
         prompt_ids = tokenizer.apply_chat_template(
             record["messages"], tokenize=True, add_generation_prompt=True
         )
@@ -287,7 +283,7 @@ def run_evaluation(
         if prompt_ids and isinstance(prompt_ids[0], list):
             prompt_ids = prompt_ids[0]
         if not prompt_ids:
-            raise ValueError(f"evaluation record {_pseudonymize_record_id(record['id'])} has an empty prompt")
+            raise ValueError(f"evaluation record index {record_index} has an empty prompt")
         input_ids = torch.tensor([prompt_ids], dtype=torch.long, device=device)
         attention_mask = torch.ones_like(input_ids)
         with torch.inference_mode():
@@ -330,7 +326,7 @@ def run_evaluation(
             except DatasetValidationError:
                 error_code = "invalid_contract"
         details.append({
-            "record_id": _pseudonymize_record_id(record["id"]),
+            "record_index": record_index,
             "agent_role": record["agent_role"],
             "json_valid": parsed is not None,
             "contract_valid": error_code is None and parsed is not None,
