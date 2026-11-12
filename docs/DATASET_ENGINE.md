@@ -189,6 +189,37 @@ python -m rusamodels.dataset_review \
 
 Exit code 0 means every record passed the configured review gate; exit code 1 means the report was generated but one or more records are blocked; exit code 2 means the release or ledger could not be evaluated. The report binds the review ledger digest to the exact dataset manifest digest, and each individual event is required to carry that same digest. This tool validates reviewer identifiers and separation rules; it does not authenticate real-world reviewer identity, enforce storage-level append-only/WORM behavior for the ledger, or cryptographically sign approvals. The report records the exact ledger digest observed during evaluation, but the ledger must be retained in access-controlled append-only storage and approvals must be backed by identity-provider verification, controlled authorization, and an externally managed signature/attestation in production.
 
+## Frozen release evaluation suite contract
+
+The frozen release benchmark is a separately curated suite of 800–1,200 prompts. Do not generate filler prompts to satisfy the count, and do not use this suite for training, prompt tuning, or synthetic-data generation. The initial 1,000-prompt domain targets follow the RusaAi Training Engine specification:
+
+| Evaluation domain | Target prompts |
+|---|---:|
+| Indonesian language and instruction | 200 |
+| English and bilingual | 100 |
+| Reasoning and problem solving | 120 |
+| Coding and debugging | 150 |
+| Architecture and DevOps | 120 |
+| Tool selection and JSON contracts | 120 |
+| RAG grounding and source attribution | 90 |
+| Safety and prompt injection | 100 |
+| **Total** | **1,000** |
+
+Every prompt uses the versioned record contract in `schemas/llm/frozen-evaluation-record.schema.json`. Required fields include a pseudonymized `record_...` ID, domain, language, prompt, expected observable outcome, scoring rubric, provenance, source references, and risk class. Project-owned and licensed prompts require pinned source IDs, revisions, locators, and source SHA-256 digests. Human-authored and synthetic prompts must be labeled accurately. Do not include hidden chain-of-thought as an expected answer; score final behavior, concise rationale summaries, tool traces, and verifiable outcomes.
+
+Validate a candidate suite before freezing or benchmarking it:
+
+~~~bash
+python -m rusamodels.frozen_evaluation \\
+  --evaluation data/frozen_eval/release-eval.jsonl \\
+  --manifest data/frozen_eval/release-eval.manifest.json \\
+  --report artifacts/reports/release-eval-validation.json
+~~~
+
+The default gate requires 800–1,200 records, all eight domains, no duplicate normalized prompts, and domain counts within a 20% relative tolerance of the target proportions. The tolerance and record-count bounds can be changed explicitly for a governed benchmark version. Exit code 0 means the suite structure and distribution passed; exit code 1 means a validation report was written but one or more suite gates are blocked; exit code 2 means the suite could not be evaluated.
+
+The validator does not create or approve prompts, establish legal rights, authenticate reviewers, prove benchmark independence, or certify model quality. Human curation, source/rights review, safety review, and access-controlled frozen storage remain mandatory. The manifest's `locked=true` value is an operator attestation, not a storage lock or cryptographic signature.
+
 ## Frozen evaluation contamination gate
 
 Keep the frozen release evaluation set separate from training, validation, and internal test sources. Every evaluation record must use a pseudonymized ID matching `record_[0-9a-f]{24}`; do not place email addresses, usernames, customer IDs, or other direct identifiers in record IDs. The frozen set must have a manifest with `purpose=frozen_evaluation`, `locked=true`, a pinned file name, SHA-256, byte size, record count, dataset ID/version, and timezone-aware creation timestamp. The manifest contract is defined by `schemas/llm/frozen-evaluation-manifest.schema.json`.
