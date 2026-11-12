@@ -308,7 +308,7 @@ def pack_dataset_split(
             "source_split_sha256": source_sha256_before,
             "tokenizer_id": tokenizer_id,
             "tokenizer_revision": tokenizer_revision,
-            "tokenizer_sha256": tokenizer_sha256,
+            "tokenizer_sha256": tokenizer_sha256_before,
             "vocab_size": vocab_size,
             "sequence_length": sequence_length,
             "add_bos": add_bos,
