@@ -85,8 +85,7 @@ def _tokenizer_properties(
         raise DatasetTokenizationError("tokenizer must expose a positive vocabulary size")
     if max(eos_token_id, pad_token_id, bos_token_id or 0) >= vocab_size:
         raise DatasetTokenizationError("tokenizer special token ID is outside its vocabulary")
-    model_max_length = getattr(tokenizer, "model_max_length", None)
-    return eos_token_id, pad_token_id, bos_token_id, vocab_size if model_max_length is None else vocab_size
+    return eos_token_id, pad_token_id, bos_token_id, vocab_size
 
 
 def _validate_packing_inputs(
@@ -243,7 +242,7 @@ def pack_dataset_split(
                 try:
                     text = record_to_text(record)
                     encoded = list(tokenizer.encode(text, add_special_tokens=False))
-                except (DatasetTextExportError, TypeError, ValueError) as exc:
+                except (DatasetTextExportError, TypeError, ValueError, RuntimeError) as exc:
                     raise DatasetTokenizationError(
                         f"{source_path.name}:{line_number}: tokenization failed: {exc}"
                     ) from exc
@@ -378,7 +377,7 @@ def load_local_tokenizer(tokenizer_path: str | Path) -> Any:
             trust_remote_code=False,
             use_fast=True,
         )
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, TypeError, KeyError) as exc:
         raise DatasetTokenizationError(f"cannot load local tokenizer assets: {exc}") from exc
 
 
