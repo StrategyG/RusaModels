@@ -48,20 +48,26 @@ class DatasetLanguagePolicy:
 def _validate_policy(policy: DatasetLanguagePolicy) -> None:
     if not isinstance(policy, DatasetLanguagePolicy):
         raise DatasetLanguageError("policy must be a DatasetLanguagePolicy")
-    if not policy.detector_languages or len(set(policy.detector_languages)) != len(policy.detector_languages):
-        raise DatasetLanguageError("detector_languages must be a non-empty list of unique language codes")
+    if (
+        not isinstance(policy.detector_languages, tuple)
+        or not policy.detector_languages
+        or any(not isinstance(code, str) for code in policy.detector_languages)
+        or len(set(policy.detector_languages)) != len(policy.detector_languages)
+    ):
+        raise DatasetLanguageError("detector_languages must be a non-empty tuple of unique language codes")
     if any(
-        not isinstance(code, str) or not _LANGUAGE_CODE.fullmatch(code)
+        not _LANGUAGE_CODE.fullmatch(code)
         for code in policy.detector_languages
     ):
         raise DatasetLanguageError("detector_languages must use lowercase ISO 639-1/3 codes")
-    if not policy.allowed_languages:
-        raise DatasetLanguageError("allowed_languages must not be empty")
-    supported = set(policy.detector_languages) | {"mixed", "und"}
-    if any(
-        not isinstance(code, str) or code not in supported
-        for code in policy.allowed_languages
+    if (
+        not isinstance(policy.allowed_languages, tuple)
+        or not policy.allowed_languages
+        or any(not isinstance(code, str) for code in policy.allowed_languages)
     ):
+        raise DatasetLanguageError("allowed_languages must be a non-empty tuple of language labels")
+    supported = set(policy.detector_languages) | {"mixed", "und"}
+    if any(code not in supported for code in policy.allowed_languages):
         raise DatasetLanguageError(
             "allowed_languages must be selected detector languages plus mixed and/or und"
         )
