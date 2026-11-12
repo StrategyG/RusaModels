@@ -42,7 +42,7 @@ def test_architecture_rejects_invalid_gqa_and_head_dimension() -> None:
         DecoderArchitectureConfig(
             vocab_size=32000,
             layers=2,
-            hidden_size=30,
+            hidden_size=25,
             query_heads=5,
             kv_heads=1,
             intermediate_size=64,
