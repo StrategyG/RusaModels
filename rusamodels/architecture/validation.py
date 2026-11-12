@@ -56,6 +56,14 @@ def validate_model_shapes(model: Any, config: DecoderArchitectureConfig) -> dict
         mlp = getattr(layer, "mlp", None)
         if attention is None or mlp is None:
             raise ValueError(f"decoder layer {index} is missing attention or feed-forward modules")
+        if (
+            getattr(attention, "n_heads", None) != config.query_heads
+            or getattr(attention, "n_kv_heads", None) != config.kv_heads
+            or getattr(attention, "head_dim", None) != config.head_dim
+        ):
+            raise ValueError(f"decoder layer {index} attention head configuration is invalid")
+        if _shape(attention.rope_cos) != (config.context_length, config.head_dim):
+            raise ValueError(f"decoder layer {index} RoPE cache shape is invalid")
         for name in ("q_proj", "k_proj", "v_proj", "o_proj"):
             if _shape(getattr(attention, name).weight) != expected[name]:
                 raise ValueError(f"decoder layer {index} {name} shape is invalid")
@@ -64,11 +72,19 @@ def validate_model_shapes(model: Any, config: DecoderArchitectureConfig) -> dict
                 raise ValueError(f"decoder layer {index} {name} shape is invalid")
         for norm_name in ("attn_norm", "ffn_norm"):
             norm = getattr(layer, norm_name, None)
-            if norm is None or _shape(norm.weight) != (config.hidden_size,):
-                raise ValueError(f"decoder layer {index} {norm_name} shape is invalid")
+            if (
+                norm is None
+                or _shape(norm.weight) != (config.hidden_size,)
+                or float(norm.eps) != float(config.rms_norm_eps)
+            ):
+                raise ValueError(f"decoder layer {index} {norm_name} shape/epsilon is invalid")
     final_norm = getattr(model, "final_norm", None)
-    if final_norm is None or _shape(final_norm.weight) != (config.hidden_size,):
-        raise ValueError("final RMSNorm shape is invalid")
+    if (
+        final_norm is None
+        or _shape(final_norm.weight) != (config.hidden_size,)
+        or float(final_norm.eps) != float(config.rms_norm_eps)
+    ):
+        raise ValueError("final RMSNorm shape/epsilon is invalid")
     actual_parameters = sum(
         int(parameter.numel())
         for parameter in model.parameters()
