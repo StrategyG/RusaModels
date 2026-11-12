@@ -28,6 +28,14 @@ class DatasetInspectionError(ValueError):
 _WORD = re.compile(r"\w+", re.UNICODE)
 
 
+def _hash_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def inspect_dataset_release(
     release_path: str | Path,
     *,
@@ -126,7 +134,7 @@ def inspect_dataset_release(
                         replacement_index = random_source.randrange(records)
                         if replacement_index < sample_per_split:
                             samples[replacement_index] = sample
-        actual_digest = hashlib.sha256(split_path.read_bytes()).hexdigest()
+        actual_digest = _hash_file(split_path)
         expected_digest = manifest["files"][split_path.name]["sha256"]
         if actual_digest != expected_digest:
             raise DatasetInspectionError(f"{split_path.name} changed during inspection")
@@ -145,7 +153,7 @@ def inspect_dataset_release(
             "samples": samples,
         }
 
-    final_manifest_sha256 = hashlib.sha256((root / "manifest.json").read_bytes()).hexdigest()
+    final_manifest_sha256 = _hash_file(root / "manifest.json")
     if final_manifest_sha256 != manifest_sha256 or final_manifest_sha256 != verification["manifest_sha256"]:
         raise DatasetInspectionError("release manifest changed during inspection")
 
