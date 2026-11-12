@@ -143,7 +143,7 @@ def test_complete_independent_review_and_publication_approval_passes(tmp_path: P
         "independent_qa",
         "publication_approval",
     ]
-    assert len(report["report_sha256"]) == 64
+    assert len(report["report_payload_sha256"]) == 64
 
 
 def test_missing_review_type_blocks_publication(tmp_path: Path) -> None:
