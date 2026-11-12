@@ -265,3 +265,42 @@ def test_review_events_require_timezone_and_pseudonymous_reviewer_ids(tmp_path: 
 
     with pytest.raises(DatasetReviewError, match="must include a timezone"):
         evaluate_dataset_reviews(release, ledger, tmp_path / "report.json")
+
+
+def test_duplicate_review_event_ids_are_rejected(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    ids = _record_ids(release)
+    ledger = _write_ledger(tmp_path / "reviews.jsonl", ids)
+    events = ledger.read_text(encoding="utf-8").splitlines()
+    duplicate = json.loads(events[0])
+    duplicate["record_id"] = ids[1]
+    events.append(json.dumps(duplicate))
+    ledger.write_text("\n".join(events) + "\n", encoding="utf-8")
+
+    with pytest.raises(DatasetReviewError, match="duplicate review_id"):
+        evaluate_dataset_reviews(release, ledger, tmp_path / "report.json")
+
+
+def test_malformed_review_types_fail_closed_without_type_errors(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    ids = _record_ids(release)
+    ledger = _write_ledger(tmp_path / "reviews.jsonl", ids)
+    events = ledger.read_text(encoding="utf-8").splitlines()
+    event = json.loads(events[0])
+    event["decision"] = ["approved"]
+    events[0] = json.dumps(event)
+    ledger.write_text("\n".join(events) + "\n", encoding="utf-8")
+
+    with pytest.raises(DatasetReviewError, match="unsupported review decision"):
+        evaluate_dataset_reviews(release, ledger, tmp_path / "report.json")
+
+
+def test_review_gate_rejects_symlink_ledger(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    ids = _record_ids(release)
+    ledger = _write_ledger(tmp_path / "reviews.jsonl", ids)
+    symlink = tmp_path / "reviews-link.jsonl"
+    symlink.symlink_to(ledger)
+
+    with pytest.raises(DatasetReviewError, match="symlink paths"):
+        evaluate_dataset_reviews(release, symlink, tmp_path / "report.json")
