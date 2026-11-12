@@ -19,7 +19,7 @@ class FakeChatTokenizer:
 
     def decode(self, token_ids, *, skip_special_tokens):
         assert skip_special_tokens is False
-        return "<|system|>RusaAi<|user|>Jelaskan<|assistant|>"
+        return "<|system|>RusaAi<|user|>Jelaskan cara memvalidasi JSON API response.<|assistant|>"
 
 
 def test_foundation_chat_template_and_generation_prompt_are_compatible() -> None:
