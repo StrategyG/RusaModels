@@ -19,6 +19,7 @@ def _provenance() -> dict:
             "id": "organization/model",
             "configured_revision": "a" * 40,
             "resolved_revision": "a" * 40,
+            "license": "apache-2.0",
         },
         "tokenizer": {
             "id": "organization/model",
@@ -29,6 +30,7 @@ def _provenance() -> dict:
             "train_sha256": "b" * 64,
             "eval_sha256": "c" * 64,
             "eval_examples": 36,
+            "training_config_sha256": "d" * 64,
         },
     }
 
@@ -39,6 +41,7 @@ def test_evaluation_requires_exact_training_eval_digest_and_revision() -> None:
         {"id": "organization/model", "revision": "a" * 40},
         "c" * 64,
         36,
+        "d" * 64,
     )
 
     assert model_id == "organization/model"
@@ -52,6 +55,7 @@ def test_evaluation_rejects_different_eval_file_or_model_revision() -> None:
             {"id": "organization/model", "revision": "a" * 40},
             "d" * 64,
             36,
+            "d" * 64,
         )
 
     with pytest.raises(ValueError, match="does not match the configured model"):
@@ -60,6 +64,7 @@ def test_evaluation_rejects_different_eval_file_or_model_revision() -> None:
             {"id": "organization/model", "revision": "e" * 40},
             "c" * 64,
             36,
+            "d" * 64,
         )
 
 
