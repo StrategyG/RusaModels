@@ -192,9 +192,14 @@ def check_frozen_evaluation_contamination(
         raise DatasetContaminationError("max_candidates_per_record must be a positive integer")
 
     root = Path(release_path).expanduser().resolve()
-    evaluation = Path(frozen_evaluation_path).expanduser().resolve()
-    frozen_manifest_path = Path(frozen_manifest_path).expanduser().resolve()
-    output = Path(report_path).expanduser().resolve()
+    evaluation_input = Path(frozen_evaluation_path).expanduser()
+    manifest_input = Path(frozen_manifest_path).expanduser()
+    output_input = Path(report_path).expanduser()
+    if evaluation_input.is_symlink() or manifest_input.is_symlink() or output_input.is_symlink():
+        raise DatasetContaminationError("symlink paths are not allowed for frozen inputs or reports")
+    evaluation = evaluation_input.parent.resolve() / evaluation_input.name
+    frozen_manifest_path = manifest_input.parent.resolve() / manifest_input.name
+    output = output_input.parent.resolve() / output_input.name
     summary_path = output.with_suffix(output.suffix + ".summary.json")
     for path, label in (
         (evaluation, "frozen evaluation file"),
