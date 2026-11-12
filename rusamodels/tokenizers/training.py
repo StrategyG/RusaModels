@@ -8,6 +8,7 @@ import re
 import shutil
 import tempfile
 from datetime import UTC, datetime
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
@@ -153,7 +154,11 @@ def train_tokenizer(
         raise TokenizerTrainingError("symlink paths are not allowed for tokenizer inputs or output")
     corpus = corpus_input.resolve()
     corpus_manifest = manifest_input.resolve()
+    if output_input.name in {"", ".", ".."}:
+        raise TokenizerTrainingError("output_dir must name a new artifact directory")
     output = output_input.parent.resolve() / output_input.name
+    if output in {corpus, corpus_manifest}:
+        raise TokenizerTrainingError("output directory must differ from corpus inputs")
     if not corpus.is_file() or not corpus_manifest.is_file():
         raise TokenizerTrainingError("training corpus and its export manifest must exist")
     if output.exists():
@@ -229,6 +234,7 @@ def train_tokenizer(
                 "min_frequency": min_frequency,
                 "pre_tokenizer": "bytelevel",
                 "normalizer": "none",
+                "library_version": version("tokenizers"),
             },
             "created_at": datetime.now(UTC).isoformat(),
         }
