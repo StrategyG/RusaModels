@@ -5,7 +5,10 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
+import re
 import sys
+import tempfile
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -35,6 +38,60 @@ def _package_version(name: str) -> str | None:
 def _resolve_path(value: str, root: Path = ROOT) -> Path:
     path = Path(value).expanduser()
     return path.resolve() if path.is_absolute() else (root / path).resolve()
+
+
+def _snapshot_input_file(value: str | Path, label: str, *, root: Path = ROOT) -> tuple[Path, dict[str, Any]]:
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = root / path
+    if path.is_symlink():
+        raise ValueError(f"{label} must not be a symlink")
+    path = path.resolve(strict=True)
+    if not path.is_file():
+        raise ValueError(f"{label} must be a regular file")
+    snapshot = {
+        "path": str(path),
+        "sha256": sha256_file(path),
+        "size_bytes": path.stat().st_size,
+    }
+    return path, snapshot
+
+
+def _assert_input_file_unchanged(snapshot: dict[str, Any], label: str) -> None:
+    path = Path(snapshot["path"])
+    if path.is_symlink() or not path.is_file():
+        raise RuntimeError(f"{label} disappeared or became unsafe during training")
+    if sha256_file(path) != snapshot["sha256"] or path.stat().st_size != snapshot["size_bytes"]:
+        raise RuntimeError(f"{label} changed during training")
+
+
+def _create_new_output_directory(value: str | Path, *, root: Path = ROOT) -> Path:
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = root / path
+    if path.is_symlink():
+        raise ValueError("training output directory must not be a symlink")
+    path = path.resolve()
+    if path.exists():
+        raise ValueError(f"training output directory already exists; use a new run path: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.mkdir(exist_ok=False)
+    return path
+
+
+def _write_new_file(path: Path, payload: bytes) -> None:
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.link(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _build_torch_dataset(records: list[dict[str, Any]], tokenizer: Any, max_seq_length: int, torch: Any):
@@ -121,18 +178,45 @@ def _load_config(path: Path) -> dict[str, Any]:
 
 def run_training(config_path: Path, *, train_path: Path | None = None, eval_path: Path | None = None,
                  output_path: Path | None = None, allow_small_dataset: bool = False) -> Path:
+    config_path, config_snapshot = _snapshot_input_file(
+        config_path, "training config", root=Path.cwd()
+    )
+    config_bytes = config_path.read_bytes()
     config = _load_config(config_path)
+    _assert_input_file_unchanged(config_snapshot, "training config")
     model_cfg = config["model"]
     dataset_cfg = config["dataset"]
     training_cfg = config["training"]
     qlora_cfg = config["qlora"]
     lora_cfg = config["lora"]
 
-    train_file = train_path or _resolve_path(dataset_cfg["train_file"])
-    eval_file = eval_path or _resolve_path(dataset_cfg["eval_file"])
-    output_dir = output_path or _resolve_path(training_cfg["output_dir"])
+    model_id = model_cfg.get("id")
+    model_revision = model_cfg.get("revision")
+    if not isinstance(model_id, str) or not model_id.strip() or len(model_id) > 256:
+        raise ValueError("model.id must be a non-empty model identifier")
+    if not isinstance(model_revision, str) or not re.fullmatch(r"[0-9a-f]{40}", model_revision):
+        raise ValueError("model.revision must be a pinned 40-character commit SHA")
+    if not isinstance(model_cfg.get("license"), str) or not model_cfg["license"].strip():
+        raise ValueError("model.license must contain a reviewed license identifier")
+
+    train_value = train_path if train_path is not None else dataset_cfg["train_file"]
+    eval_value = eval_path if eval_path is not None else dataset_cfg["eval_file"]
+    input_root = Path.cwd() if train_path is not None else ROOT
+    train_file, train_snapshot = _snapshot_input_file(
+        train_value, "training dataset", root=input_root
+    )
+    eval_root = Path.cwd() if eval_path is not None else ROOT
+    eval_file, eval_snapshot = _snapshot_input_file(
+        eval_value, "evaluation dataset", root=eval_root
+    )
     train_records = load_jsonl(train_file)
     eval_records = load_jsonl(eval_file)
+    _assert_input_file_unchanged(train_snapshot, "training dataset")
+    _assert_input_file_unchanged(eval_snapshot, "evaluation dataset")
+    validate_dataset_splits(train_records, eval_records)
+    output_value = output_path if output_path is not None else training_cfg["output_dir"]
+    output_root = Path.cwd() if output_path is not None else ROOT
+    output_dir = output_value
     validate_dataset_splits(train_records, eval_records)
     minimum = int(dataset_cfg.get("min_train_examples", 100))
     minimum_eval = int(dataset_cfg.get("min_eval_examples", 30))
@@ -235,7 +319,7 @@ def run_training(config_path: Path, *, train_path: Path | None = None, eval_path
     max_seq_length = int(dataset_cfg.get("max_seq_length", 4096))
     train_dataset = _build_torch_dataset(train_records, tokenizer, max_seq_length, torch)
     eval_dataset = _build_torch_dataset(eval_records, tokenizer, max_seq_length, torch)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = _create_new_output_directory(output_dir, root=output_root)
     checkpoint_dir = output_dir / "checkpoints"
     adapter_dir = output_dir / "adapter"
 
@@ -297,12 +381,15 @@ def run_training(config_path: Path, *, train_path: Path | None = None, eval_path
         },
         "method": "QLoRA",
         "dataset": {
-            "train_path": str(train_file.relative_to(ROOT)) if train_file.is_relative_to(ROOT) else str(train_file),
-            "train_sha256": sha256_file(train_file),
+            "train_path": train_snapshot["path"],
+            "train_sha256": train_snapshot["sha256"],
+            "train_size_bytes": train_snapshot["size_bytes"],
             "train_examples": len(train_records),
-            "eval_path": str(eval_file.relative_to(ROOT)) if eval_file.is_relative_to(ROOT) else str(eval_file),
-            "eval_sha256": sha256_file(eval_file),
+            "eval_path": eval_snapshot["path"],
+            "eval_sha256": eval_snapshot["sha256"],
+            "eval_size_bytes": eval_snapshot["size_bytes"],
             "eval_examples": len(eval_records),
+            "training_config_sha256": config_snapshot["sha256"],
         },
         "training": training_cfg,
         "qlora": qlora_cfg,
@@ -324,13 +411,11 @@ def run_training(config_path: Path, *, train_path: Path | None = None, eval_path
         "metrics": {"train": train_result.metrics, "eval": eval_metrics},
         "weights_status": "adapter_trained_not_production_certified",
     }
-    (adapter_dir / "rusa-finetune-provenance.json").write_text(
-        json.dumps(provenance, ensure_ascii=False, indent=2, default=str) + "\n",
-        encoding="utf-8",
+    _write_new_file(
+        adapter_dir / "rusa-finetune-provenance.json",
+        (json.dumps(provenance, ensure_ascii=False, indent=2, default=str) + "\n").encode("utf-8"),
     )
-    (output_dir / "training-config.yaml").write_text(
-        config_path.read_text(encoding="utf-8"), encoding="utf-8"
-    )
+    _write_new_file(output_dir / "training-config.yaml", config_bytes)
     LOGGER.info("QLoRA adapter saved to %s", adapter_dir)
     return adapter_dir
 
@@ -346,10 +431,10 @@ def main() -> int:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     run_training(
-        args.config.resolve(),
-        train_path=args.train_file.resolve() if args.train_file else None,
-        eval_path=args.eval_file.resolve() if args.eval_file else None,
-        output_path=args.output_dir.resolve() if args.output_dir else None,
+        args.config,
+        train_path=args.train_file,
+        eval_path=args.eval_file,
+        output_path=args.output_dir,
         allow_small_dataset=args.allow_small_dataset,
     )
     return 0
