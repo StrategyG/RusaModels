@@ -74,7 +74,7 @@ def test_exact_frozen_evaluation_match_fails_contamination_gate(tmp_path: Path) 
     target = json.loads((release / "train.jsonl").read_text(encoding="utf-8").splitlines()[0])
     evaluation, manifest = _frozen_set(
         tmp_path,
-        [{"id": "frozen-001", "text": target["text"]}],
+        [{"id": "record_000000000000000000000001", "text": target["text"]}],
     )
 
     result = check_frozen_evaluation_contamination(
@@ -107,7 +107,7 @@ def test_simhash_near_duplicate_against_frozen_evaluation_is_detected(tmp_path: 
     )
     evaluation, manifest = _frozen_set(
         tmp_path,
-        [{"id": "frozen-near", "text": frozen_text}],
+        [{"id": "record_000000000000000000000002", "text": frozen_text}],
     )
 
     result = check_frozen_evaluation_contamination(
@@ -125,7 +125,7 @@ def test_unrelated_frozen_evaluation_set_passes(tmp_path: Path) -> None:
     release = _release(tmp_path)
     evaluation, manifest = _frozen_set(
         tmp_path,
-        [{"id": "frozen-001", "text": "Oceanographic sensors measure salinity and temperature in deep water"}],
+        [{"id": "record_000000000000000000000001", "text": "Oceanographic sensors measure salinity and temperature in deep water"}],
     )
 
     result = check_frozen_evaluation_contamination(
@@ -144,9 +144,9 @@ def test_frozen_evaluation_file_tampering_is_rejected(tmp_path: Path) -> None:
     release = _release(tmp_path)
     evaluation, manifest = _frozen_set(
         tmp_path,
-        [{"id": "frozen-001", "text": "A separately frozen evaluation prompt"}],
+        [{"id": "record_000000000000000000000001", "text": "A separately frozen evaluation prompt"}],
     )
-    evaluation.write_text('{"id":"frozen-001","text":"modified"}\n', encoding="utf-8")
+    evaluation.write_text('{"id":"record_000000000000000000000001","text":"modified"}\n', encoding="utf-8")
 
     with pytest.raises(DatasetContaminationError, match="SHA-256 does not match"):
         check_frozen_evaluation_contamination(
@@ -162,8 +162,8 @@ def test_frozen_evaluation_duplicate_content_is_rejected(tmp_path: Path) -> None
     evaluation, manifest = _frozen_set(
         tmp_path,
         [
-            {"id": "frozen-001", "text": "Repeated frozen evaluation prompt"},
-            {"id": "frozen-002", "text": "Repeated frozen evaluation prompt"},
+            {"id": "record_000000000000000000000001", "text": "Repeated frozen evaluation prompt"},
+            {"id": "record_000000000000000000000003", "text": "Repeated frozen evaluation prompt"},
         ],
     )
 
@@ -180,7 +180,7 @@ def test_contamination_report_cannot_be_written_inside_immutable_release(tmp_pat
     release = _release(tmp_path)
     evaluation, manifest = _frozen_set(
         tmp_path,
-        [{"id": "frozen-001", "text": "Independent evaluation prompt"}],
+        [{"id": "record_000000000000000000000001", "text": "Independent evaluation prompt"}],
     )
 
     with pytest.raises(DatasetContaminationError, match="outside the immutable dataset release"):
@@ -196,7 +196,7 @@ def test_frozen_evaluation_manifest_must_be_locked(tmp_path: Path) -> None:
     release = _release(tmp_path)
     evaluation, manifest_path = _frozen_set(
         tmp_path,
-        [{"id": "frozen-001", "text": "Independent evaluation prompt"}],
+        [{"id": "record_000000000000000000000001", "text": "Independent evaluation prompt"}],
     )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["locked"] = False
@@ -227,7 +227,7 @@ def test_lsh_candidate_cap_is_applied_before_loading_all_candidates(tmp_path: Pa
         text = f"{base_text} {suffix}"
         bands = set(simhash_bands(simhash64_text(text)))
         if base_bands.intersection(bands):
-            variants.append({"id": f"frozen-{suffix}", "text": text})
+            variants.append({"id": f"record_{len(variants) + 10:024x}", "text": text})
         if len(variants) == 2:
             break
     assert len(variants) == 2
@@ -240,4 +240,20 @@ def test_lsh_candidate_cap_is_applied_before_loading_all_candidates(tmp_path: Pa
             manifest,
             tmp_path / "candidate-cap.jsonl",
             max_candidates_per_record=1,
+        )
+
+
+def test_frozen_evaluation_rejects_non_pseudonymous_record_ids(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    evaluation, manifest = _frozen_set(
+        tmp_path,
+        [{"id": "customer-email@example.com", "text": "Independent evaluation prompt"}],
+    )
+
+    with pytest.raises(DatasetContaminationError, match="pseudonymized record ID"):
+        check_frozen_evaluation_contamination(
+            release,
+            evaluation,
+            manifest,
+            tmp_path / "invalid-id-report.jsonl",
         )
