@@ -137,7 +137,7 @@ python scripts/export_dataset_text.py \\
   --output /path/to/rusaai-train.txt
 ~~~
 
-Train and publish the immutable tokenizer artifact:
+The default versioned settings are loaded from configs/tokenizers/rusaai-research-100m-bpe.json; pass --config to select another reviewed tokenizer-training configuration. Train and publish the immutable tokenizer artifact:
 
 ~~~bash
 python scripts/train_rusa_tokenizer.py \\
