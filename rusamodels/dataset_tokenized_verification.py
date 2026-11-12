@@ -199,7 +199,10 @@ def verify_tokenized_split(
         if tokenizer_input.is_symlink():
             raise TokenizedDatasetVerificationError("tokenizer path must not be a symlink")
         tokenizer_root = tokenizer_input.resolve()
-        tokenizer_sha256_before = hash_tokenizer_directory(tokenizer_root)
+        try:
+            tokenizer_sha256_before = hash_tokenizer_directory(tokenizer_root)
+        except (DatasetTokenizationError, OSError) as exc:
+            raise TokenizedDatasetVerificationError(f"tokenizer verification failed: {exc}") from exc
         if not hmac.compare_digest(tokenizer_sha256_before, manifest["tokenizer_sha256"]):
             raise TokenizedDatasetVerificationError("tokenizer assets do not match tokenization manifest")
 
@@ -227,6 +230,14 @@ def verify_tokenized_split(
             raise TokenizedDatasetVerificationError("tokenized artifact is bound to a different dataset release")
         release_manifest_path = release_root / "manifest.json"
         release_manifest_sha256_before, _ = _hash_file(release_manifest_path)
+        if release_manifest_sha256_before != release["manifest_sha256"]:
+            raise TokenizedDatasetVerificationError("source release manifest changed after verification")
+        if tokenizer_root is not None and (
+            tokenizer_root == release_root
+            or release_root in tokenizer_root.parents
+            or tokenizer_root in release_root.parents
+        ):
+            raise TokenizedDatasetVerificationError("tokenizer assets must be separate from the source release")
         release_manifest = _load_json(
             release_manifest_path.read_text(encoding="utf-8"),
             "manifest.json",
@@ -333,7 +344,10 @@ def verify_tokenized_split(
         ):
             raise TokenizedDatasetVerificationError("source dataset changed during tokenized verification")
     if tokenizer_root is not None and tokenizer_sha256_before is not None:
-        tokenizer_sha256_after = hash_tokenizer_directory(tokenizer_root)
+        try:
+            tokenizer_sha256_after = hash_tokenizer_directory(tokenizer_root)
+        except (DatasetTokenizationError, OSError) as exc:
+            raise TokenizedDatasetVerificationError(f"tokenizer verification failed: {exc}") from exc
         if tokenizer_sha256_after != tokenizer_sha256_before:
             raise TokenizedDatasetVerificationError("tokenizer assets changed during verification")
     output_sha256_after, output_size_after = _hash_file(output)
