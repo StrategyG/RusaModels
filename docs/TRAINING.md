@@ -14,7 +14,7 @@ The repository also does not yet contain the human-curated 800–1,200 prompt fr
 
 ## CPU inference versus GPU training
 
-The 16-GB Codespaces Model Server profile is for CPU inference only. The current QLoRA trainer explicitly requires CUDA and refuses CPU training. Run the optional training workflow in a dedicated, trusted CUDA environment (for example, a reviewed Colab T4 session or self-hosted GPU runner).
+The 16-GB Codespaces Model Server profile is for CPU inference only. The current QLoRA trainer explicitly requires CUDA and refuses CPU training. Run the optional training workflow in a dedicated, trusted CUDA environment (for example, a reviewed Colab T4 session or self-hosted GPU runner). Before training it pins the training config and train/evaluation file SHA-256 snapshots, rechecks them after the run, verifies the resolved model and tokenizer commit, and refuses to reuse an existing output directory. Use a new output path for each experiment.
 
 ## Install and validate
 
