@@ -74,26 +74,55 @@ def _assert_file_unchanged(snapshot: dict[str, Any], label: str) -> None:
         raise RuntimeError(f"{label} changed during evaluation")
 
 
-def _hash_adapter_directory(adapter_dir: Path) -> str:
+def _adapter_file_manifest(adapter_dir: Path) -> dict[str, Any]:
     if adapter_dir.is_symlink() or not adapter_dir.is_dir():
         raise ValueError("adapter directory must be a regular directory, not a symlink")
     digest = hashlib.sha256()
-    files = sorted(adapter_dir.rglob("*"), key=lambda item: item.relative_to(adapter_dir).as_posix())
-    file_count = 0
-    for path in files:
+    files: dict[str, dict[str, Any]] = {}
+    for path in sorted(adapter_dir.rglob("*"), key=lambda item: item.relative_to(adapter_dir).as_posix()):
         if path.is_symlink():
             raise ValueError(f"adapter directory contains a symlink: {path.relative_to(adapter_dir)}")
         if not path.is_file():
             continue
         relative = path.relative_to(adapter_dir).as_posix()
+        file_sha256 = sha256_file(path)
+        size_bytes = path.stat().st_size
+        files[relative] = {"sha256": file_sha256, "size_bytes": size_bytes}
         digest.update(relative.encode("utf-8"))
         digest.update(b"\0")
-        digest.update(sha256_file(path).encode("ascii"))
+        digest.update(file_sha256.encode("ascii"))
         digest.update(b"\n")
-        file_count += 1
-    if file_count == 0:
+    if not files:
         raise ValueError("adapter directory contains no regular files")
-    return digest.hexdigest()
+    return {"files": files, "adapter_sha256": digest.hexdigest()}
+
+
+def _hash_adapter_directory(adapter_dir: Path) -> str:
+    return _adapter_file_manifest(adapter_dir)["adapter_sha256"]
+
+
+def _validate_adapter_manifest(
+    value: Any,
+    actual: dict[str, Any],
+    model_id: str,
+    model_revision: str,
+) -> None:
+    required = {
+        "schema_version",
+        "artifact_type",
+        "model_id",
+        "model_revision",
+        "files",
+        "adapter_sha256",
+    }
+    if not isinstance(value, dict) or set(value) != required:
+        raise ValueError("adapter artifact manifest has unsupported or missing fields")
+    if value["schema_version"] != 1 or value["artifact_type"] != "peft_adapter":
+        raise ValueError("adapter artifact manifest schema or type is unsupported")
+    if value["model_id"] != model_id or value["model_revision"] != model_revision:
+        raise ValueError("adapter artifact manifest base model does not match provenance")
+    if value["files"] != actual["files"] or value["adapter_sha256"] != actual["adapter_sha256"]:
+        raise ValueError("adapter files do not match their immutable artifact manifest")
 
 
 def _validate_provenance(
@@ -224,7 +253,17 @@ def run_evaluation(
     provenance_path = adapter_root / "rusa-finetune-provenance.json"
     if provenance_path.is_symlink() or not provenance_path.is_file():
         raise ValueError("adapter directory must contain a regular rusa-finetune-provenance.json")
-    adapter_sha256_before = _hash_adapter_directory(adapter_root)
+    adapter_manifest_path = adapter_root.parent / "adapter-manifest.json"
+    if adapter_manifest_path.is_symlink() or not adapter_manifest_path.is_file():
+        raise ValueError("adapter output must contain its immutable adapter-manifest.json")
+    adapter_manifest_file, adapter_manifest_snapshot = _snapshot_file(
+        adapter_manifest_path, "adapter manifest", root=Path.cwd()
+    )
+    actual_adapter_manifest = _adapter_file_manifest(adapter_root)
+    adapter_sha256_before = actual_adapter_manifest["adapter_sha256"]
+    adapter_manifest_bytes = adapter_manifest_file.read_bytes()
+    adapter_manifest_sha256 = hashlib.sha256(adapter_manifest_bytes).hexdigest()
+    adapter_manifest = _parse_prediction(adapter_manifest_bytes.decode("utf-8"))
     provenance_bytes = provenance_path.read_bytes()
     provenance_sha256 = hashlib.sha256(provenance_bytes).hexdigest()
     provenance = json.loads(provenance_bytes.decode("utf-8"))
@@ -238,6 +277,7 @@ def run_evaluation(
         len(records),
         config_snapshot["sha256"],
     )
+    _validate_adapter_manifest(adapter_manifest, actual_adapter_manifest, model_id, revision)
     output = _safe_report_path(
         output_file,
         adapter_dir=adapter_root,
@@ -393,6 +433,7 @@ def run_evaluation(
     _assert_file_unchanged(eval_snapshot, "evaluation dataset")
     _assert_file_unchanged(config_snapshot, "evaluation config")
     adapter_sha256_after = _hash_adapter_directory(adapter_root)
+    _assert_file_unchanged(adapter_manifest_snapshot, "adapter manifest")
     if adapter_sha256_after != adapter_sha256_before:
         raise RuntimeError("adapter artifacts changed during evaluation")
 
@@ -401,6 +442,7 @@ def run_evaluation(
         "created_at": datetime.now(UTC).isoformat(),
         "model": {"id": model_id, "revision": revision},
         "adapter_sha256": adapter_sha256_before,
+        "adapter_manifest_sha256": adapter_manifest_sha256,
         "adapter_provenance_sha256": provenance_sha256,
         "training_dataset_sha256": provenance["dataset"]["train_sha256"],
         "evaluation_dataset_sha256": eval_snapshot["sha256"],
