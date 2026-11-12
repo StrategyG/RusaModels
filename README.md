@@ -28,7 +28,8 @@ RusaAi is an authenticated service consumer. It does not connect directly to the
 - Independent chat and embedding upstream configuration, allowing local LLM and embedding runtimes to use separate CPU services.
 - CPU-only Codespaces inference profile with private llama.cpp and local embedding containers, bounded CPU/RAM limits and no published runtime ports.
 - Migrated agent SFT dataset validation, QLoRA training, held-out evaluation, adapter merge, GGUF checksum verification and inference benchmark tools.
-- Experimental Carbon-Tiny from-scratch CPU trainer with random initialization, byte-level tokenization, GQA, RoPE, RMSNorm and SwiGLU.
+- Experimental Carbon-Tiny from-scratch CPU trainer plus a versioned 100M dense-decoder architecture blueprint and bounded model factory (GQA, RoPE, RMSNorm, SwiGLU).
+- Separate train-only ByteLevel BPE tokenizer training, integrity-checked tokenizer artifacts, special-token contract, and Indonesian/English/code/JSON round-trip diagnostics.
 - Verified model-version artifact download and pinned local embedding snapshot utilities.
 - Immutable Hugging Face commit pinning, upstream license verification, and artifact manifests with SHA-256 digests.
 - Separate Quant Worker with database leases, heartbeat renewal, stale-worker fencing, bounded retries for transient failures and cooperative cancellation.
@@ -70,5 +71,5 @@ Never commit model weights, API tokens or credentials. Production requires Postg
 - [RusaAi integration](docs/RUSAAI-INTEGRATION.md)
 - [CPU inference](docs/CPU_INFERENCE.md)
 - [Training](docs/TRAINING.md)
-- [Carbon-CPU from-scratch training](docs/CARBON_CPU.md)
+- [Carbon-CPU, architecture and tokenizer engine](docs/CARBON_CPU.md)
 - [Migration from RusaAi](docs/MIGRATION_FROM_RUSAAI.md)
