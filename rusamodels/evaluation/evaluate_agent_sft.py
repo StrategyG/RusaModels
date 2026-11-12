@@ -243,6 +243,8 @@ def run_evaluation(
     if resolved_model_revision != revision:
         raise RuntimeError("Resolved evaluation base-model revision differs from adapter provenance")
     model = PeftModel.from_pretrained(base, str(adapter_root), is_trainable=False)
+    if _hash_adapter_directory(adapter_root) != adapter_sha256_before:
+        raise RuntimeError("adapter artifacts changed while the evaluation model was loading")
     model.eval()
 
     json_valid = 0
@@ -266,6 +268,8 @@ def run_evaluation(
             prompt_ids = prompt_ids.tolist()
         if prompt_ids and isinstance(prompt_ids[0], list):
             prompt_ids = prompt_ids[0]
+        if not prompt_ids:
+            raise ValueError(f"evaluation record {_pseudonymize_record_id(record['id'])} has an empty prompt")
         input_ids = torch.tensor([prompt_ids], dtype=torch.long, device=device)
         attention_mask = torch.ones_like(input_ids)
         with torch.inference_mode():
