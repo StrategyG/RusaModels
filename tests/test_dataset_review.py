@@ -300,7 +300,10 @@ def test_review_gate_rejects_symlink_ledger(tmp_path: Path) -> None:
     ids = _record_ids(release)
     ledger = _write_ledger(tmp_path / "reviews.jsonl", ids)
     symlink = tmp_path / "reviews-link.jsonl"
-    symlink.symlink_to(ledger)
+    try:
+        symlink.symlink_to(ledger)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation is not supported in this environment")
 
     with pytest.raises(DatasetReviewError, match="symlink paths"):
         evaluate_dataset_reviews(release, symlink, tmp_path / "report.json")
