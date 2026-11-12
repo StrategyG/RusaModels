@@ -4,6 +4,7 @@ import pytest
 
 from rusamodels.evaluation.evaluate_agent_sft import (
     _hash_adapter_directory,
+    _parse_prediction,
     _safe_report_path,
     _validate_provenance,
     _write_new_file,
@@ -124,3 +125,10 @@ def test_evaluation_report_write_is_no_overwrite(tmp_path: Path) -> None:
         _write_new_file(output, b"replacement")
 
     assert output.read_text(encoding="utf-8") == "original"
+
+
+def test_model_output_json_rejects_duplicate_keys_and_nan() -> None:
+    with pytest.raises(ValueError, match="duplicate JSON object key"):
+        _parse_prediction('{"blocked":true,"blocked":false}')
+    with pytest.raises(ValueError, match="non-standard JSON constant"):
+        _parse_prediction('{"blocked":NaN}')
