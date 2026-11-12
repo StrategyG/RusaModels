@@ -70,3 +70,11 @@ Production schema changes use Alembic migrations. Application startup does not c
 Agent SFT dataset validation, QLoRA training, held-out evaluation, adapter merge, artifact manifest and model benchmarking live in RusaModels. The training contract is a versioned snapshot used only for dataset/evaluation validation. RUSA AI runtime authorization remains in its Tool Gateway and Policy Engine.
 
 The 4-vCPU/16-GB Codespaces profile is for CPU inference. QLoRA training is a separate CUDA-only workflow and must run on a trusted GPU environment.
+
+
+## Executable architecture and tokenizer contracts
+
+The Phase 3 reference implementation is deliberately narrower than a general model zoo. rusamodels.architecture validates versioned dense decoder blueprints for GQA, RoPE, RMSNorm and SwiGLU, computes exact parameter counts for tied embeddings and bias-free projections, and can construct the Carbon decoder only below an explicit parameter ceiling. The current 100M research blueprint is design-ready but not trained. Its 100,092,672 parameter count is calculated from the configuration, not measured model quality.
+
+rusamodels.tokenizers trains a separate ByteLevel BPE tokenizer from a verified Dataset Engine train-only text export. It records the tokenizer library version, corpus/export manifest digests, license IDs, vocabulary size, and stable special-token IDs. The training path rejects validation/test/frozen evaluation splits and refuses to replace an existing artifact. It is intended for the from-scratch research model; foundation-model tokenizers remain unchanged for ordinary adapter training.
+

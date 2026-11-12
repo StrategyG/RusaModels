@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0.0",
+  "model_id": "rusaai-research-100m",
+  "model_version": "0.1.0-design",
+  "status": "design_ready_training_not_started",
+  "architecture": {
+    "architecture_type": "dense_decoder_transformer",
+    "norm_layout": "pre_norm",
+    "vocab_size": 32000,
+    "layers": 12,
+    "hidden_size": 768,
+    "query_heads": 12,
+    "kv_heads": 4,
+    "intermediate_size": 2048,
+    "context_length": 4096,
+    "position_encoding": "rope",
+    "normalization": "rmsnorm",
+    "rms_norm_eps": 0.00001,
+    "activation": "swiglu",
+    "tied_embeddings": true,
+    "attention_bias": false,
+    "dropout": 0.0,
+    "rope_theta": 10000.0,
+    "eos_token_id": 2,
+    "expected_parameters": 100092672
+  }
+}

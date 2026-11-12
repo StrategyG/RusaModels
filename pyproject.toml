@@ -43,6 +43,7 @@ training = [
 carbon-cpu = [
   "numpy>=1.26,<3",
   "torch>=2.4,<3",
+  "tokenizers>=0.21,<1",
 ]
 embeddings = [
   "sentence-transformers>=3,<6",

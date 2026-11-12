@@ -24,6 +24,8 @@ class CarbonConfig:
     max_seq_len: int = 256
     dropout: float = 0.0
     rope_theta: float = 10000.0
+    rms_norm_eps: float = 1e-6
+    eos_token_id: int = EOS_TOKEN_ID
 
     def __post_init__(self) -> None:
         integer_fields = {
@@ -34,6 +36,7 @@ class CarbonConfig:
             "n_kv_heads": self.n_kv_heads,
             "intermediate_size": self.intermediate_size,
             "max_seq_len": self.max_seq_len,
+            "eos_token_id": self.eos_token_id,
         }
         for name, value in integer_fields.items():
             if type(value) is not int:
@@ -48,6 +51,8 @@ class CarbonConfig:
             raise ValueError("n_heads and n_kv_heads must be positive")
         if self.max_seq_len < 2:
             raise ValueError("max_seq_len must be at least 2")
+        if not 0 <= self.eos_token_id < self.vocab_size:
+            raise ValueError("eos_token_id must be inside the configured vocabulary")
         if self.d_model % self.n_heads != 0:
             raise ValueError("d_model must be divisible by n_heads")
         if self.n_heads % self.n_kv_heads != 0:
@@ -62,6 +67,13 @@ class CarbonConfig:
             raise ValueError("rope_theta must be a number")
         if not math.isfinite(float(self.rope_theta)) or self.rope_theta <= 0:
             raise ValueError("rope_theta must be finite and positive")
+        if (
+            isinstance(self.rms_norm_eps, bool)
+            or not isinstance(self.rms_norm_eps, (int, float))
+            or not math.isfinite(float(self.rms_norm_eps))
+            or self.rms_norm_eps <= 0
+        ):
+            raise ValueError("rms_norm_eps must be finite and positive")
 
     @classmethod
     def from_dict(cls, values: dict[str, Any]) -> CarbonConfig:
@@ -156,9 +168,9 @@ class SwiGLU(nn.Module):
 class TransformerBlock(nn.Module):
     def __init__(self, config: CarbonConfig) -> None:
         super().__init__()
-        self.attn_norm = RMSNorm(config.d_model)
+        self.attn_norm = RMSNorm(config.d_model, eps=float(config.rms_norm_eps))
         self.attention = CausalSelfAttention(config)
-        self.ffn_norm = RMSNorm(config.d_model)
+        self.ffn_norm = RMSNorm(config.d_model, eps=float(config.rms_norm_eps))
         self.mlp = SwiGLU(config)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -174,7 +186,7 @@ class CarbonTiny(nn.Module):
         self.config = config
         self.token_embeddings = nn.Embedding(config.vocab_size, config.d_model)
         self.layers = nn.ModuleList([TransformerBlock(config) for _ in range(config.n_layers)])
-        self.final_norm = RMSNorm(config.d_model)
+        self.final_norm = RMSNorm(config.d_model, eps=float(config.rms_norm_eps))
         self.dropout = nn.Dropout(float(config.dropout))
         self.apply(self._init_weights)
 
@@ -225,7 +237,7 @@ class CarbonTiny(nn.Module):
         max_new_tokens: int = 100,
         temperature: float = 0.8,
         top_k: int = 40,
-        eos_token_id: int = EOS_TOKEN_ID,
+        eos_token_id: int | None = None,
     ) -> torch.Tensor:
         if type(max_new_tokens) is not int or max_new_tokens < 0:
             raise ValueError("max_new_tokens must be a non-negative integer")
@@ -235,6 +247,8 @@ class CarbonTiny(nn.Module):
             raise ValueError("temperature must be a number")
         if not math.isfinite(float(temperature)) or temperature <= 0:
             raise ValueError("temperature must be finite and greater than zero")
+        if eos_token_id is None:
+            eos_token_id = self.config.eos_token_id
         if type(eos_token_id) is not int or not 0 <= eos_token_id < self.config.vocab_size:
             raise ValueError("eos_token_id is outside the configured vocabulary")
         if input_ids.ndim != 2 or input_ids.size(1) < 1:

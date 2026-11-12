@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rusamodels.local/schemas/architecture/decoder-transformer-blueprint.schema.json",
+  "title": "RusaModels Dense Decoder Transformer Blueprint v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "model_id", "model_version", "status", "architecture"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "model_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"},
+    "model_version": {"type": "string", "minLength": 1, "maxLength": 64},
+    "status": {
+      "type": "string",
+      "enum": ["design_only", "design_ready_training_not_started", "candidate"]
+    },
+    "architecture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "architecture_type", "norm_layout", "vocab_size", "layers", "hidden_size", "query_heads", "kv_heads",
+        "intermediate_size", "context_length", "position_encoding",
+        "normalization", "rms_norm_eps", "activation", "tied_embeddings",
+        "attention_bias", "dropout", "rope_theta", "expected_parameters"
+      ],
+      "properties": {
+        "architecture_type": {"const": "dense_decoder_transformer"},
+        "norm_layout": {"const": "pre_norm"},
+        "vocab_size": {"type": "integer", "minimum": 1},
+        "layers": {"type": "integer", "minimum": 1},
+        "hidden_size": {"type": "integer", "minimum": 1},
+        "query_heads": {"type": "integer", "minimum": 1},
+        "kv_heads": {"type": "integer", "minimum": 1},
+        "intermediate_size": {"type": "integer", "minimum": 1},
+        "context_length": {"type": "integer", "minimum": 2},
+        "position_encoding": {"const": "rope"},
+        "normalization": {"const": "rmsnorm"},
+        "rms_norm_eps": {"type": "number", "exclusiveMinimum": 0},
+        "activation": {"const": "swiglu"},
+        "tied_embeddings": {"const": true},
+        "attention_bias": {"const": false},
+        "dropout": {"type": "number", "minimum": 0, "exclusiveMaximum": 1},
+        "rope_theta": {"type": "number", "exclusiveMinimum": 0},
+        "eos_token_id": {"type": "integer", "minimum": 0},
+        "expected_parameters": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

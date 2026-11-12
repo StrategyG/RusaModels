@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0.0",
+  "tokenizer_id": "rusaai-research-100m-bpe-32k",
+  "tokenizer_version": "0.1.0",
+  "algorithm": "byte_level_bpe",
+  "vocab_size": 32000,
+  "min_frequency": 2,
+  "special_tokens": {
+    "unk": "[UNK]",
+    "bos": "[BOS]",
+    "eos": "[EOS]",
+    "pad": "[PAD]"
+  },
+  "training_split": "train",
+  "pre_tokenizer": "bytelevel",
+  "normalizer": "none",
+  "notes": [
+    "Train only from an approved Dataset Engine train text export and its SHA-256 sidecar manifest.",
+    "Do not train or adapt the tokenizer using validation, test, or frozen release-evaluation text.",
+    "This tokenizer is for the from-scratch RusaAi Research 100M track; preserve foundation tokenizers for ordinary adapter training."
+  ]
+}
