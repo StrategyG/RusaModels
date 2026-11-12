@@ -1,7 +1,7 @@
 name: RusaModels CI
 on:
   push:
-    branches: [main]
+    branches: [main, feat/phase3-neural-architecture-tokenizer]
   pull_request:
     branches: [main]
 permissions:
