@@ -74,3 +74,75 @@ def audit_tokenizer(
             "tokens_per_character": round(token_count / max(characters, 1), 6),
         }
     return {"round_trip_passed": True, "vocab_size": vocab_size, "categories": report}
+
+
+def validate_chat_template(
+    tokenizer: Any,
+    messages: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    """Validate a foundation tokenizer's chat template and generation-prompt path."""
+    template = getattr(tokenizer, "chat_template", None)
+    if not template:
+        raise ValueError("foundation tokenizer must define a non-empty chat_template")
+    sample_messages = messages or [
+        {"role": "system", "content": "You are RusaAi, a local-first technical assistant."},
+        {"role": "user", "content": "Jelaskan cara memvalidasi JSON API response."},
+    ]
+    if (
+        not isinstance(sample_messages, list)
+        or not sample_messages
+        or any(
+            not isinstance(message, dict)
+            or set(message) != {"role", "content"}
+            or not isinstance(message["role"], str)
+            or message["role"] not in {"system", "user", "assistant"}
+            or not isinstance(message["content"], str)
+            or not message["content"].strip()
+            for message in sample_messages
+        )
+        or not any(message["role"] == "user" for message in sample_messages)
+    ):
+        raise ValueError("chat-template validation messages must contain valid system/user/assistant turns")
+    try:
+        vocabulary_size = len(tokenizer)
+        eos_token_id = tokenizer.eos_token_id
+        token_ids = tokenizer.apply_chat_template(
+            sample_messages,
+            tokenize=True,
+            add_generation_prompt=True,
+        )
+        if hasattr(token_ids, "tolist"):
+            token_ids = token_ids.tolist()
+        if token_ids and isinstance(token_ids[0], list):
+            if len(token_ids) != 1:
+                raise ValueError("chat template returned more than one encoded conversation")
+            token_ids = token_ids[0]
+        decoded = tokenizer.decode(token_ids, skip_special_tokens=False)
+    except Exception as exc:
+        raise ValueError(f"foundation tokenizer chat-template execution failed: {exc}") from exc
+    if type(vocabulary_size) is not int or vocabulary_size < 1:
+        raise ValueError("foundation tokenizer vocabulary size is invalid")
+    if (
+        not isinstance(token_ids, (list, tuple))
+        or not token_ids
+        or any(type(token_id) is not int or not 0 <= token_id < vocabulary_size for token_id in token_ids)
+    ):
+        raise ValueError("chat template emitted empty or out-of-vocabulary token IDs")
+    if type(eos_token_id) is not int or not 0 <= eos_token_id < vocabulary_size:
+        raise ValueError("foundation tokenizer must define a valid eos_token_id")
+    pad_token_id = getattr(tokenizer, "pad_token_id", None)
+    if pad_token_id is not None and (
+        type(pad_token_id) is not int or not 0 <= pad_token_id < vocabulary_size
+    ):
+        raise ValueError("foundation tokenizer pad_token_id is invalid")
+    if not isinstance(decoded, str) or not decoded.strip():
+        raise ValueError("chat template decode returned empty text")
+    return {
+        "chat_template_present": True,
+        "vocab_size": vocabulary_size,
+        "eos_token_id": eos_token_id,
+        "pad_token_id": pad_token_id,
+        "prompt_tokens": len(token_ids),
+        "decoded_characters": len(decoded),
+        "generation_prompt_passed": True,
+    }
