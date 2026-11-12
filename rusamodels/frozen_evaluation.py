@@ -153,7 +153,7 @@ def _validate_record(value: Any, source: str) -> tuple[str, str]:
         raise FrozenEvaluationError(f"{source}: id must be a pseudonymized record ID")
     if not isinstance(value["domain"], str) or value["domain"] not in _DOMAIN_TARGETS:
         raise FrozenEvaluationError(f"{source}: unsupported evaluation domain")
-    if value["language"] not in {"id", "en", "mixed"}:
+    if not isinstance(value["language"], str) or value["language"] not in {"id", "en", "mixed"}:
         raise FrozenEvaluationError(f"{source}: language must be id, en, or mixed")
     if not isinstance(value["prompt"], str) or not value["prompt"].strip() or len(value["prompt"]) > 20000:
         raise FrozenEvaluationError(f"{source}: prompt must contain 1-20000 characters")
@@ -163,11 +163,11 @@ def _validate_record(value: Any, source: str) -> tuple[str, str]:
         or len(value["expected_outcome"]) > 8000
     ):
         raise FrozenEvaluationError(f"{source}: expected_outcome must contain 1-8000 characters")
-    if value["provenance"] not in {
+    if not isinstance(value["provenance"], str) or value["provenance"] not in {
         "project_owned", "licensed_source", "human_authored", "synthetic"
     }:
         raise FrozenEvaluationError(f"{source}: unsupported provenance")
-    if value["risk_class"] not in {"low", "medium", "high", "critical"}:
+    if not isinstance(value["risk_class"], str) or value["risk_class"] not in {"low", "medium", "high", "critical"}:
         raise FrozenEvaluationError(f"{source}: risk_class is invalid")
 
     rubric = value["rubric"]
@@ -288,11 +288,12 @@ def validate_frozen_evaluation_suite(
                 line = raw_line.decode("utf-8")
             except UnicodeDecodeError as exc:
                 raise FrozenEvaluationError(f"{evaluation.name}:{line_number}: file must be UTF-8") from exc
+            record = _load_json(line, f"{evaluation.name}:{line_number}")
             domain, prompt_digest = _validate_record(
-                _load_json(line, f"{evaluation.name}:{line_number}"),
+                record,
                 f"{evaluation.name}:{line_number}",
             )
-            record_id = _load_json(line, f"{evaluation.name}:{line_number}")["id"]
+            record_id = record["id"]
             if record_id in record_ids:
                 raise FrozenEvaluationError(f"{evaluation.name}:{line_number}: duplicate record ID")
             record_ids.add(record_id)
@@ -305,11 +306,13 @@ def validate_frozen_evaluation_suite(
     if records != frozen_manifest["records"]:
         raise FrozenEvaluationError("frozen evaluation record count does not match its manifest")
     evaluation_sha256_after, evaluation_size_after = _hash_file(evaluation)
+    manifest_sha256_after, _ = _hash_file(manifest)
     if (
         evaluation_sha256_after != evaluation_sha256
         or evaluation_size_after != frozen_manifest["size_bytes"]
+        or manifest_sha256_after != manifest_sha256
     ):
-        raise FrozenEvaluationError("frozen evaluation file changed during suite validation")
+        raise FrozenEvaluationError("frozen evaluation file or manifest changed during suite validation")
 
     missing_domains = sorted(domain for domain in _DOMAIN_TARGETS if domain_counts[domain] == 0)
     out_of_band: dict[str, dict[str, int]] = {}
