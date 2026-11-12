@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import json
+
 import pytest
 
 from rusamodels.architecture.config import (
@@ -151,3 +153,30 @@ def test_carbon_model_factory_constructs_expected_shapes() -> None:
     logits, loss = model(inputs, inputs)
     assert tuple(logits.shape) == (2, 16, config.vocab_size)
     assert loss is not None and torch.isfinite(loss)
+    assert model.config.eos_token_id == 2
+    assert model.final_norm.eps == pytest.approx(1e-5)
+
+
+def test_blueprint_requires_explicit_parameter_count(tmp_path: Path) -> None:
+    source = ROOT / "configs/architecture/rusaai-research-100m.json"
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    del payload["architecture"]["expected_parameters"]
+    path = tmp_path / "missing-count.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ArchitectureConfigError, match="missing required versioned fields"):
+        load_architecture_blueprint(path)
+
+
+def test_architecture_rejects_eos_outside_vocabulary() -> None:
+    with pytest.raises(ArchitectureConfigError, match="eos_token_id must be inside"):
+        DecoderArchitectureConfig(
+            vocab_size=258,
+            layers=1,
+            hidden_size=32,
+            query_heads=4,
+            kv_heads=2,
+            intermediate_size=64,
+            context_length=32,
+            eos_token_id=258,
+        )
