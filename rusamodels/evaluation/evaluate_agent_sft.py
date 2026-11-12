@@ -125,6 +125,8 @@ def _safe_report_path(
     output = path.parent.resolve() / path.name
     if output.exists():
         raise ValueError(f"evaluation report already exists: {output}")
+    if adapter_dir in eval_file.parents or adapter_dir in config_file.parents:
+        raise ValueError("evaluation inputs must be outside adapter artifacts")
     if (
         output in {eval_file, config_file}
         or output == adapter_dir
