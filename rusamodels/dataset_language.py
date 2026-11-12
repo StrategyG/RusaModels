@@ -200,6 +200,14 @@ def _analyze_record(
     }
 
 
+def _hash_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _write_new_file(path: Path, payload: bytes) -> str:
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
@@ -298,11 +306,11 @@ def analyze_dataset_languages(
             report_handle.flush()
             os.fsync(report_handle.fileno())
         for split in ("train", "validation", "test"):
-            actual_digest = hashlib.sha256((root / f"{split}.jsonl").read_bytes()).hexdigest()
+            actual_digest = _hash_file(root / f"{split}.jsonl")
             expected_digest = manifest["files"][f"{split}.jsonl"]["sha256"]
             if actual_digest != expected_digest:
                 raise DatasetLanguageError(f"{split}.jsonl changed during quality analysis")
-        actual_manifest_digest = hashlib.sha256((root / "manifest.json").read_bytes()).hexdigest()
+        actual_manifest_digest = _hash_file(root / "manifest.json")
         if actual_manifest_digest != release_manifest_sha256 or actual_manifest_digest != verification["manifest_sha256"]:
             raise DatasetLanguageError("release manifest changed during quality analysis")
         os.link(report_temporary, output)
