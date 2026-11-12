@@ -153,7 +153,7 @@ Each released record requires the latest approved event for all five review type
 - `independent_qa`: independent quality score, risk classification, and evidence status.
 - `publication_approval`: explicit `publication_authorized=true`.
 
-The independent QA reviewer must differ from the technical reviewer. The publication approver must differ from both and from the rights/security reviewers. Latest events supersede older events; a later rejection or revision request blocks publication. The default gate requires quality scores of at least 4/5 and a maximum risk class of medium.
+The independent QA reviewer must differ from the technical reviewer. The publication approver must differ from both and from the rights/security reviewers. Publication approval must be timestamped after the latest technical, rights, security, and independent-QA events; a later review invalidates an earlier publication approval until a new publication decision is recorded. Latest events supersede older events; a later rejection or revision request blocks publication. The default gate requires quality scores of at least 4/5 and a maximum risk class of medium.
 
 Reviewer identifiers must be pseudonymous. Do not put names, email addresses, free-text reviewer notes, or sensitive case details in the ledger. Keep identity mapping and detailed audit notes in an access-controlled review system.
 
@@ -223,7 +223,7 @@ python -m rusamodels.dataset_contamination \
 
 The gate checks exact normalized training-text matches and SimHash near-duplicates using the same byte-independent text rendering used by the text exporter. It writes only pseudonymous record IDs, split, match type, Hamming distance, and text hash; it does not copy evaluation prompt text into the report. Exit code 0 means no candidate match was found, 1 means one or more exact/near matches were found, and 2 means the scan could not be completed.
 
-The SimHash threshold is bounded to 0–7 bits by the eight-band LSH candidate guarantee. This is a lexical heuristic, not semantic equivalence detection; paraphrases may be missed. The frozen evaluation manifest is an integrity record, not a cryptographic signature. Keep the frozen set in access-controlled storage, restrict who can read it, and use an externally signed manifest for a production benchmark gate.
+The SimHash threshold is bounded to 0–7 bits by the eight-band LSH candidate guarantee. Candidate retrieval is capped per dataset record to bound memory use; exceeding the cap fails the scan rather than silently truncating candidates. This is a lexical heuristic, not semantic equivalence detection; paraphrases may be missed. The frozen evaluation manifest is an integrity record, not a cryptographic signature. Keep the frozen set in access-controlled storage, restrict who can read it, and use an externally signed manifest for a production benchmark gate.
 
 ## Language identification and quality screening
 
