@@ -77,6 +77,11 @@ def _fingerprint_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _pseudonymize_frozen_id(value: str) -> str:
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:24]
+    return f"frozen_{digest}"
+
+
 def _validate_frozen_manifest(
     evaluation_path: Path,
     manifest_path: Path,
@@ -364,7 +369,7 @@ def check_frozen_evaluation_contamination(
                                 item = {
                                     "dataset_record_id": record_id,
                                     "dataset_split": split,
-                                    "frozen_eval_record_id": candidate_id,
+                                    "frozen_eval_record_id": _pseudonymize_frozen_id(candidate_id),
                                     "match_type": match_type,
                                     "hamming_distance": distance,
                                     "text_sha256": fingerprint,
