@@ -92,7 +92,7 @@ def _validate_packing_inputs(
     *,
     tokenizer_id: str,
     tokenizer_revision: str,
-    tokenizer_sha256: str,
+    tokenizer_path: str | Path,
     sequence_length: int,
     add_bos: bool,
     add_eos: bool,
@@ -142,11 +142,12 @@ def pack_dataset_split(
     _validate_packing_inputs(
         tokenizer_id=tokenizer_id,
         tokenizer_revision=tokenizer_revision,
-        tokenizer_sha256=tokenizer_sha256,
+        tokenizer_sha256="0" * 64,
         sequence_length=sequence_length,
         add_bos=add_bos,
         add_eos=add_eos,
     )
+    tokenizer_sha256_before = hash_tokenizer_directory(tokenizer_path)
     eos_token_id, pad_token_id, bos_token_id, vocab_size = _tokenizer_properties(
         tokenizer, add_bos=add_bos
     )
@@ -283,11 +284,13 @@ def pack_dataset_split(
             raise DatasetTokenizationError("source split record count changed during tokenization")
         source_sha256_after, source_size_after = _hash_file(source_path)
         release_manifest_sha256_after, _ = _hash_file(release_manifest_path)
+        tokenizer_sha256_after = hash_tokenizer_directory(tokenizer_path)
         if (
             source_sha256_after != source_sha256_before
             or source_size_after != source_size_before
             or release_manifest_sha256_after != release_manifest_sha256
             or release_manifest_sha256_after != verification["manifest_sha256"]
+            or tokenizer_sha256_after != tokenizer_sha256_before
         ):
             raise DatasetTokenizationError("dataset release changed during tokenization")
         _publish_new_file(output, temporary_output)
@@ -394,7 +397,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-eos", action="store_true")
     args = parser.parse_args(argv)
     try:
-        tokenizer_sha256 = hash_tokenizer_directory(args.tokenizer_path)
         tokenizer = load_local_tokenizer(args.tokenizer_path)
         result = pack_dataset_split(
             args.release,
@@ -403,7 +405,7 @@ def main(argv: list[str] | None = None) -> int:
             tokenizer=tokenizer,
             tokenizer_id=args.tokenizer_id,
             tokenizer_revision=args.tokenizer_revision,
-            tokenizer_sha256=tokenizer_sha256,
+            tokenizer_path=args.tokenizer_path,
             sequence_length=args.sequence_length,
             add_bos=args.add_bos,
             add_eos=not args.no_eos,
