@@ -217,7 +217,6 @@ def run_training(config_path: Path, *, train_path: Path | None = None, eval_path
     output_value = output_path if output_path is not None else training_cfg["output_dir"]
     output_root = Path.cwd() if output_path is not None else ROOT
     output_dir = output_value
-    validate_dataset_splits(train_records, eval_records)
     minimum = int(dataset_cfg.get("min_train_examples", 100))
     minimum_eval = int(dataset_cfg.get("min_eval_examples", 30))
     if not allow_small_dataset and len(train_records) < minimum:
@@ -264,6 +263,7 @@ def run_training(config_path: Path, *, train_path: Path | None = None, eval_path
 
     if not torch.cuda.is_available():
         raise RuntimeError("QLoRA training requires a CUDA GPU; CPU training is intentionally disabled")
+    output_dir = _create_new_output_directory(output_dir, root=output_root)
 
     requested_dtype = str(qlora_cfg.get("compute_dtype", "bfloat16")).lower()
     if requested_dtype not in {"bfloat16", "float16"}:
@@ -319,7 +319,6 @@ def run_training(config_path: Path, *, train_path: Path | None = None, eval_path
     max_seq_length = int(dataset_cfg.get("max_seq_length", 4096))
     train_dataset = _build_torch_dataset(train_records, tokenizer, max_seq_length, torch)
     eval_dataset = _build_torch_dataset(eval_records, tokenizer, max_seq_length, torch)
-    output_dir = _create_new_output_directory(output_dir, root=output_root)
     checkpoint_dir = output_dir / "checkpoints"
     adapter_dir = output_dir / "adapter"
 
@@ -369,6 +368,9 @@ def run_training(config_path: Path, *, train_path: Path | None = None, eval_path
     eval_metrics = trainer.evaluate()
     trainer.save_metrics("eval", eval_metrics)
 
+    _assert_input_file_unchanged(train_snapshot, "training dataset")
+    _assert_input_file_unchanged(eval_snapshot, "evaluation dataset")
+    _assert_input_file_unchanged(config_snapshot, "training config")
     gpu = torch.cuda.get_device_properties(torch.cuda.current_device())
     provenance = {
         "schema_version": 1,
