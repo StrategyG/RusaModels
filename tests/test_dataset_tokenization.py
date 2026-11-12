@@ -271,12 +271,6 @@ def test_tokenized_verifier_detects_wrong_source_release(tmp_path: Path) -> None
 
 def test_tokenized_verifier_rejects_output_inside_source_release(tmp_path: Path) -> None:
     release = _release(tmp_path)
-    output = tmp_path / "packed.jsonl"
-    _pack(release, output)
-    manifest_path = output.with_suffix(output.suffix + ".manifest.json")
+    output = release / "packed.jsonl"
     with pytest.raises(TokenizedDatasetVerificationError, match="outside the immutable source release"):
-        verify_tokenized_split(
-            output,
-            manifest_path=release / "packed.manifest.json",
-            release_path=release,
-        )
+        verify_tokenized_split(output, release_path=release)
