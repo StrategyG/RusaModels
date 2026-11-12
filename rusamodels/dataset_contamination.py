@@ -337,8 +337,8 @@ def check_frozen_evaluation_contamination(
                             candidates = [
                                 row[0]
                                 for row in connection.execute(
-                                    f"SELECT DISTINCT record_id FROM buckets WHERE {clauses}",
-                                    parameters,
+                                    f"SELECT DISTINCT record_id FROM buckets WHERE {clauses} LIMIT ?",
+                                    parameters + (max_candidates_per_record + 1,),
                                 )
                             ]
                             if len(candidates) > max_candidates_per_record:
