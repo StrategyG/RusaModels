@@ -73,6 +73,20 @@ def _bands(simhash: int) -> tuple[int, ...]:
     )
 
 
+def simhash64_text(text: str) -> int:
+    """Return the stable 64-bit word-trigram SimHash for normalized text."""
+    if not isinstance(text, str):
+        raise DatasetQualityError("SimHash input must be text")
+    return _simhash64({"text": text})
+
+
+def simhash_bands(simhash: int) -> tuple[int, ...]:
+    """Expose the bounded LSH bands used by the quality and contamination gates."""
+    if type(simhash) is not int or not 0 <= simhash < (1 << 64):
+        raise DatasetQualityError("SimHash value must be an unsigned 64-bit integer")
+    return _bands(simhash)
+
+
 def _initialize(connection: sqlite3.Connection) -> None:
     connection.executescript(
         """
