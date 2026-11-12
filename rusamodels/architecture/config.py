@@ -39,8 +39,6 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 class DecoderArchitectureConfig:
     """Supported pre-norm dense decoder with GQA, RoPE, RMSNorm and SwiGLU."""
 
-    architecture_type: str = "dense_decoder_transformer"
-    norm_layout: str = "pre_norm"
     vocab_size: int
     layers: int
     hidden_size: int
@@ -48,6 +46,8 @@ class DecoderArchitectureConfig:
     kv_heads: int
     intermediate_size: int
     context_length: int
+    architecture_type: str = "dense_decoder_transformer"
+    norm_layout: str = "pre_norm"
     position_encoding: str = "rope"
     normalization: str = "rmsnorm"
     rms_norm_eps: float = 1e-5
