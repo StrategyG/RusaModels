@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rusamodels.local/schemas/dataset-text-export-manifest.schema.json",
+  "title": "RusaModels Dataset Text Export Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "exporter",
+    "dataset_id",
+    "dataset_version",
+    "split",
+    "license_ids",
+    "release_manifest_sha256",
+    "source_split_sha256",
+    "source_split_file",
+    "records",
+    "encoding",
+    "tokenizer",
+    "output_file",
+    "output_sha256",
+    "output_size_bytes"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "exporter": {"const": "rusamodels.dataset_text_export"},
+    "dataset_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "dataset_version": {"type": "string", "minLength": 1, "maxLength": 64},
+    "split": {"type": "string", "enum": ["train", "validation", "test"]},
+    "license_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "release_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "source_split_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "source_split_file": {"type": "string", "minLength": 1},
+    "records": {"type": "integer", "minimum": 1},
+    "encoding": {"const": "utf-8"},
+    "tokenizer": {"const": "byte-level-v1"},
+    "output_file": {"type": "string", "minLength": 1},
+    "output_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "output_size_bytes": {"type": "integer", "minimum": 1}
+  }
+}

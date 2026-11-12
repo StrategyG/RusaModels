@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rusamodels.local/schemas/llm/dataset-review-record.schema.json",
+  "title": "RusaModels Dataset Human Review Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "review_id",
+    "release_manifest_sha256",
+    "record_id",
+    "review_type",
+    "reviewer_id",
+    "decision",
+    "quality_score",
+    "risk_class",
+    "rights_status",
+    "evidence_status",
+    "language",
+    "task_type",
+    "publication_authorized",
+    "reviewed_at"
+  ],
+  "properties": {
+    "review_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "release_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "record_id": {"type": "string", "pattern": "^record_[0-9a-f]{24}$"},
+    "review_type": {
+      "type": "string",
+      "enum": ["technical", "rights", "security", "independent_qa", "publication_approval"]
+    },
+    "reviewer_id": {"type": "string", "pattern": "^reviewer_[A-Za-z0-9._-]{1,60}$"},
+    "decision": {"type": "string", "enum": ["approved", "rejected", "needs_revision"]},
+    "quality_score": {"type": ["integer", "null"], "minimum": 1, "maximum": 5},
+    "risk_class": {"type": ["string", "null"], "enum": ["low", "medium", "high", "critical", null]},
+    "rights_status": {"type": ["string", "null"], "enum": ["approved", "conditional", "rejected", null]},
+    "evidence_status": {
+      "type": ["string", "null"],
+      "enum": [
+        "source_assertion",
+        "implementation_observation",
+        "test_assertion",
+        "proposal",
+        "hypothesis",
+        "independently_verified_operational_evidence",
+        "synthetic",
+        null
+      ]
+    },
+    "language": {"type": ["string", "null"], "pattern": "^(?:[a-z]{2,3}|mixed|und)$"},
+    "task_type": {"type": ["string", "null"], "pattern": "^[a-z][a-z0-9_.-]{0,63}$"},
+    "publication_authorized": {"type": "boolean"},
+    "reviewed_at": {"type": "string", "format": "date-time"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"review_type": {"const": "technical"}}},
+      "then": {
+        "properties": {
+          "quality_score": {"type": "integer", "minimum": 1, "maximum": 5},
+          "evidence_status": {"type": "string"},
+          "language": {"type": "string"},
+          "task_type": {"type": "string"},
+          "risk_class": {"type": "null"},
+          "rights_status": {"type": "null"},
+          "publication_authorized": {"const": false}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"review_type": {"const": "rights"}}},
+      "then": {
+        "properties": {
+          "rights_status": {"type": "string", "enum": ["approved", "conditional", "rejected"]},
+          "quality_score": {"type": "null"},
+          "risk_class": {"type": "null"},
+          "evidence_status": {"type": "null"},
+          "language": {"type": "null"},
+          "task_type": {"type": "null"},
+          "publication_authorized": {"const": false}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"review_type": {"const": "security"}}},
+      "then": {
+        "properties": {
+          "risk_class": {"type": "string", "enum": ["low", "medium", "high", "critical"]},
+          "quality_score": {"type": "null"},
+          "rights_status": {"type": "null"},
+          "evidence_status": {"type": "null"},
+          "language": {"type": "null"},
+          "task_type": {"type": "null"},
+          "publication_authorized": {"const": false}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"review_type": {"const": "independent_qa"}}},
+      "then": {
+        "properties": {
+          "quality_score": {"type": "integer", "minimum": 1, "maximum": 5},
+          "risk_class": {"type": "string", "enum": ["low", "medium", "high", "critical"]},
+          "evidence_status": {"type": "string"},
+          "rights_status": {"type": "null"},
+          "language": {"type": "null"},
+          "task_type": {"type": "null"},
+          "publication_authorized": {"const": false}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"review_type": {"const": "publication_approval"}}},
+      "then": {
+        "properties": {
+          "publication_authorized": {"const": true},
+          "quality_score": {"type": "null"},
+          "risk_class": {"type": "null"},
+          "rights_status": {"type": "null"},
+          "evidence_status": {"type": "null"},
+          "language": {"type": "null"},
+          "task_type": {"type": "null"}
+        }
+      }
+    }
+  ]
+}

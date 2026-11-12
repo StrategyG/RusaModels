@@ -6,9 +6,15 @@ The initial RusaModels training package was migrated from RusaAi. It supports va
 
 The included 120-example training split and 36-example evaluation split are synthetic seed data. No trained RusaModels weights are included. Dataset availability is not evidence that training has run or that a model is production-ready.
 
+## Model-selection boundary
+
+The checked-in `agent-sft.yaml` and manual T4 workflow target Qwen3-4B and are an experimental GPU-only QLoRA track. They do not satisfy or replace the separate non-Qwen, CPU-first product-model decision in the RusaAi Training Engine v1.0 design. That design's provisional `BhinekaIntiLabs/bhineka-gpt` candidate remains pending architecture, provenance, license, tokenizer, custom-code, compatibility, and Indonesian/English evaluation audits. Do not promote the Qwen experiment or the provisional non-Qwen candidate as an approved production foundation model without a versioned checkpoint decision record.
+
+The repository also does not yet contain the human-curated 800–1,200 prompt frozen release evaluation suite. The frozen suite validator and manifest/contamination contracts are implemented in `rusamodels.frozen_evaluation` and `rusamodels.dataset_contamination`; they validate a future reviewed suite but do not generate or certify its contents.
+
 ## CPU inference versus GPU training
 
-The 16-GB Codespaces Model Server profile is for CPU inference only. The current QLoRA trainer explicitly requires CUDA and refuses CPU training. Run the optional training workflow in a dedicated, trusted CUDA environment (for example, a reviewed Colab T4 session or self-hosted GPU runner).
+The 16-GB Codespaces Model Server profile is for CPU inference only. The current QLoRA trainer explicitly requires CUDA and refuses CPU training. Run the optional training workflow in a dedicated, trusted CUDA environment (for example, a reviewed Colab T4 session or self-hosted GPU runner). Before training it pins the training config and train/evaluation file SHA-256 snapshots, rechecks them after the run, verifies the resolved model and tokenizer commit, and refuses to reuse an existing output directory. Use a new output path for each experiment.
 
 ## Install and validate
 
@@ -60,4 +66,4 @@ Keep adapters, merged weights, and private datasets out of Git. Register approve
 
 The versioned role/tool snapshot in `rusamodels/training/agent_contract.py` validates training examples and evaluation outputs only. It does not grant runtime permissions. RUSA AI's live Tool Gateway and Policy Engine remain the only runtime authorization boundary.
 
-Promotion requires dataset provenance/license review, held-out contract and safety gates, human quality review, prompt-injection testing, exact artifact checksum verification, serving benchmarks, rollback evidence and explicit operator approval.
+The evaluator binds the report to the exact evaluation-file SHA-256 and example count recorded by the training run, checks the adapter directory before/after loading, writes reports without raw predictions or absolute local paths, and refuses to overwrite an existing report. It evaluates the internal held-out split used by the training run; it is not a substitute for the separate frozen release benchmark.\n\nPromotion requires dataset provenance/license review, held-out contract and safety gates, human quality review, prompt-injection testing, exact artifact checksum verification, serving benchmarks, rollback evidence and explicit operator approval.

@@ -9,7 +9,7 @@ description = "Independent model infrastructure platform for the RUSA-AI ecosyst
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-  "alembic>=1.14,<2",
+  "alembic>=1.16,<2",
   "boto3>=1.35,<2",
   "fastapi>=0.115,<1",
   "huggingface_hub>=0.27,<1",
@@ -24,6 +24,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["httpx2>=2,<3", "pytest>=8.3,<9", "ruff>=0.11,<1", "PyYAML>=6,<7"]
+dataset = ["lingua-language-detector>=2.1,<3"]
+tokenization = ["transformers>=4.48,<6"]
 quantization = [
   "accelerate>=1,<2",
   "safetensors>=0.4,<1",

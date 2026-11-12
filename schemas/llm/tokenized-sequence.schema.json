@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rusamodels.local/schemas/llm/tokenized-sequence.schema.json",
+  "title": "RusaModels Fixed-Length Causal LM Sequence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["input_ids", "attention_mask", "labels", "record_ids"],
+  "properties": {
+    "input_ids": {
+      "type": "array",
+      "minItems": 2,
+      "items": {"type": "integer", "minimum": 0}
+    },
+    "attention_mask": {
+      "type": "array",
+      "minItems": 2,
+      "items": {"type": "integer", "enum": [0, 1]}
+    },
+    "labels": {
+      "type": "array",
+      "minItems": 2,
+      "items": {"type": "integer", "minimum": -100}
+    },
+    "record_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^record_[0-9a-f]{24}$"}
+    }
+  }
+}
