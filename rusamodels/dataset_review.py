@@ -237,8 +237,12 @@ def evaluate_dataset_reviews(
         raise DatasetReviewError("maximum_risk_class must be low, medium, high, or critical")
 
     root = Path(release_path).expanduser().resolve()
-    ledger = Path(review_ledger_path).expanduser().resolve()
-    output = Path(report_path).expanduser().resolve()
+    ledger_input = Path(review_ledger_path).expanduser()
+    output_input = Path(report_path).expanduser()
+    if ledger_input.is_symlink() or output_input.is_symlink():
+        raise DatasetReviewError("symlink paths are not allowed for review ledgers or reports")
+    ledger = ledger_input.parent.resolve() / ledger_input.name
+    output = output_input.parent.resolve() / output_input.name
     if root == output or root in output.parents:
         raise DatasetReviewError("review report must be outside the immutable dataset release")
     if not ledger.is_file():
