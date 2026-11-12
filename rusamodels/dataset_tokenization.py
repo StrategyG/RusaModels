@@ -101,8 +101,8 @@ def _validate_packing_inputs(
         raise DatasetTokenizationError("tokenizer_id must be a non-empty identifier")
     if not isinstance(tokenizer_revision, str) or not _TOKENIZER_REVISION.fullmatch(tokenizer_revision):
         raise DatasetTokenizationError("tokenizer_revision must be a pinned 40-character commit SHA")
-    if not isinstance(tokenizer_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", tokenizer_sha256):
-        raise DatasetTokenizationError("tokenizer_sha256 must be a lowercase SHA-256 digest")
+    if not isinstance(tokenizer_path, (str, Path)):
+        raise DatasetTokenizationError("tokenizer_path must be a local directory path")
     if type(sequence_length) is not int or not 2 <= sequence_length <= 65536:
         raise DatasetTokenizationError("sequence_length must be between 2 and 65536")
     if type(add_bos) is not bool or type(add_eos) is not bool:
@@ -131,7 +131,7 @@ def pack_dataset_split(
     tokenizer: Any,
     tokenizer_id: str,
     tokenizer_revision: str,
-    tokenizer_sha256: str,
+    tokenizer_path: str | Path,
     sequence_length: int,
     add_bos: bool = False,
     add_eos: bool = True,
@@ -142,7 +142,7 @@ def pack_dataset_split(
     _validate_packing_inputs(
         tokenizer_id=tokenizer_id,
         tokenizer_revision=tokenizer_revision,
-        tokenizer_sha256="0" * 64,
+        tokenizer_path=tokenizer_path,
         sequence_length=sequence_length,
         add_bos=add_bos,
         add_eos=add_eos,
