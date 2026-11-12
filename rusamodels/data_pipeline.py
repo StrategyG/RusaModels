@@ -316,7 +316,10 @@ def _ingest_source(
     config: DatasetReleaseConfig,
     redaction_counts: Counter[str],
 ) -> tuple[str, int, int]:
-    path = Path(source.path).expanduser()
+    source_input = Path(source.path).expanduser()
+    if source_input.is_symlink():
+        raise DatasetPipelineError("dataset source must not be a symlink")
+    path = source_input.resolve()
     if not path.is_file():
         raise DatasetPipelineError(f"dataset source is not a readable file: {path}")
     connection.execute(
