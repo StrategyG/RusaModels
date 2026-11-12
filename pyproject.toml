@@ -9,7 +9,7 @@ description = "Independent model infrastructure platform for the RUSA-AI ecosyst
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-  "alembic>=1.14,<2",
+  "alembic>=1.16,<2",
   "boto3>=1.35,<2",
   "fastapi>=0.115,<1",
   "huggingface_hub>=0.27,<1",
