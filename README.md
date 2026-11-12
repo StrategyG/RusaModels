@@ -27,7 +27,9 @@ RusaAi is an authenticated service consumer. It does not connect directly to the
 - Queued F32/F16/BF16 safetensors conversion, GGUF F32/F16/BF16 conversion and Q8/Q6/Q5/Q4 GGUF quantization adapters.
 - Independent chat and embedding upstream configuration, allowing local LLM and embedding runtimes to use separate CPU services.
 - CPU-only Codespaces inference profile with private llama.cpp and local embedding containers, bounded CPU/RAM limits and no published runtime ports.
-- Migrated agent SFT dataset validation, QLoRA training, held-out evaluation, adapter merge, GGUF checksum verification and inference benchmark tools.
+- Reproducible dataset release, provenance, verification, language/quality screening, pinned-tokenizer packing, human-review and frozen-evaluation contamination gates.
+- Frozen benchmark suite contract and domain-distribution validator; the actual human-curated 800–1,200 prompt release suite is not included.
+- Migrated agent SFT dataset validation, experimental QLoRA training, held-out contract evaluation, adapter merge, GGUF checksum verification and inference benchmark tools.
 - Reproducible JSONL dataset release builder with source provenance, configurable redaction, exact deduplication, deterministic group-aware splits, immutable manifests and SHA-256 verification. Includes a SimHash near-duplicate and cross-split leakage report. Includes verified train/validation/test text export for byte-level CPU training. Includes a human review/publication gate and exact/near-duplicate checks against separately frozen evaluation sets. Includes offline Indonesian/English language screening, lexical-quality reports, and deterministic sample inspection. Includes pinned local-tokenizer preprocessing and fixed-length causal-LM sequence packing. Includes independent tokenized-artifact verification against the source split and tokenizer digest.
 - Verified model-version artifact download and pinned local embedding snapshot utilities.
 - Immutable Hugging Face commit pinning, upstream license verification, and artifact manifests with SHA-256 digests.
