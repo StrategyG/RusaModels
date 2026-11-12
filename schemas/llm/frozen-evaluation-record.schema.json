@@ -60,12 +60,13 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["source_id", "revision", "locator", "sha256"],
+        "required": ["source_id", "revision", "locator", "sha256", "license_id"],
         "properties": {
           "source_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
           "revision": {"type": "string", "minLength": 1, "maxLength": 128},
           "locator": {"type": "string", "minLength": 1, "maxLength": 1024},
-          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "license_id": {"type": "string", "minLength": 1, "maxLength": 128}
         }
       }
     },
