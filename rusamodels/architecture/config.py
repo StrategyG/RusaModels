@@ -39,6 +39,8 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 class DecoderArchitectureConfig:
     """Supported pre-norm dense decoder with GQA, RoPE, RMSNorm and SwiGLU."""
 
+    architecture_type: str = "dense_decoder_transformer"
+    norm_layout: str = "pre_norm"
     vocab_size: int
     layers: int
     hidden_size: int
@@ -58,6 +60,10 @@ class DecoderArchitectureConfig:
     expected_parameters: int | None = None
 
     def __post_init__(self) -> None:
+        if self.architecture_type != "dense_decoder_transformer":
+            raise ArchitectureConfigError("architecture_type must be dense_decoder_transformer")
+        if self.norm_layout != "pre_norm":
+            raise ArchitectureConfigError("architecture v1 supports norm_layout=pre_norm only")
         integer_fields = {
             "vocab_size": self.vocab_size,
             "layers": self.layers,
@@ -78,11 +84,11 @@ class DecoderArchitectureConfig:
             raise ArchitectureConfigError("query_heads must be divisible by kv_heads")
         if self.head_dim % 2:
             raise ArchitectureConfigError("head_dim must be even for RoPE")
-        if self.position_encoding != "rope":
+        if not isinstance(self.position_encoding, str) or self.position_encoding != "rope":
             raise ArchitectureConfigError("architecture v1 supports position_encoding=rope only")
-        if self.normalization != "rmsnorm":
+        if not isinstance(self.normalization, str) or self.normalization != "rmsnorm":
             raise ArchitectureConfigError("architecture v1 supports normalization=rmsnorm only")
-        if self.activation != "swiglu":
+        if not isinstance(self.activation, str) or self.activation != "swiglu":
             raise ArchitectureConfigError("architecture v1 supports activation=swiglu only")
         if type(self.tied_embeddings) is not bool or not self.tied_embeddings:
             raise ArchitectureConfigError("architecture v1 requires tied_embeddings=true")
