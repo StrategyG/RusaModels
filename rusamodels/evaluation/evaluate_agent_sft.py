@@ -29,6 +29,27 @@ _COMMIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"non-standard JSON constant is prohibited: {value}")
+
+
+def _object_pairs_without_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON object key: {key}")
+        result[key] = value
+    return result
+
+
+def _parse_prediction(raw: str) -> Any:
+    return json.loads(
+        raw,
+        parse_constant=_reject_json_constant,
+        object_pairs_hook=_object_pairs_without_duplicates,
+    )
+
+
 def _snapshot_file(value: str | Path, label: str, *, root: Path = ROOT) -> tuple[Path, dict[str, Any]]:
     path = Path(value).expanduser()
     if not path.is_absolute():
@@ -303,9 +324,9 @@ def run_evaluation(
         parsed = None
         error_code = None
         try:
-            parsed = json.loads(raw)
+            parsed = _parse_prediction(raw)
             json_valid += 1
-        except json.JSONDecodeError:
+        except ValueError:
             error_code = "invalid_json"
 
         expected_blocked = bool(record["response"].get("blocked", False))
