@@ -51,6 +51,19 @@ _PROTECTED_WRITE_PREFIXES = (
 )
 
 
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"non-standard JSON constant is prohibited: {value}")
+
+
+def _object_pairs_without_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON object key: {key}")
+        result[key] = value
+    return result
+
+
 def _role(value: Any) -> WorkerRole:
     if not isinstance(value, str):
         raise DatasetValidationError("agent_role must be a string")
@@ -187,8 +200,12 @@ def load_jsonl(path: str | Path) -> list[dict[str, Any]]:
         if not line.strip():
             continue
         try:
-            record = validate_record(json.loads(line))
-        except (json.JSONDecodeError, DatasetValidationError) as exc:
+            record = validate_record(json.loads(
+                line,
+                parse_constant=_reject_json_constant,
+                object_pairs_hook=_object_pairs_without_duplicates,
+            ))
+        except (json.JSONDecodeError, ValueError) as exc:
             raise DatasetValidationError(f"{source}:{line_number}: {exc}") from exc
         if record["id"] in ids:
             raise DatasetValidationError(f"{source}:{line_number}: duplicate record id {record['id']}")
