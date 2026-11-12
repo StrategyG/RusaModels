@@ -5,6 +5,7 @@ import pytest
 from rusamodels.training.train_sft import (
     _assert_input_file_unchanged,
     _create_new_output_directory,
+    _provenance_path,
     _snapshot_input_file,
     _write_new_file,
 )
@@ -52,3 +53,26 @@ def test_training_provenance_file_write_does_not_overwrite(tmp_path: Path) -> No
         _write_new_file(destination, b"replacement")
 
     assert destination.read_text(encoding="utf-8") == "original"
+
+
+def test_training_provenance_paths_do_not_expose_external_absolute_paths(tmp_path: Path) -> None:
+    external = tmp_path / "private-home" / "customer-training-data.jsonl"
+    external.parent.mkdir()
+    external.write_text("private", encoding="utf-8")
+    _, snapshot = _snapshot_input_file(external, "training dataset")
+
+    value = _provenance_path(snapshot, root=tmp_path / "repository")
+
+    assert value == f"external/sha256/{snapshot['sha256']}"
+    assert "private-home" not in value
+    assert "customer-training-data" not in value
+
+
+def test_training_provenance_paths_keep_repository_relative_locator(tmp_path: Path) -> None:
+    repository = tmp_path / "repository"
+    dataset = repository / "data" / "train.jsonl"
+    dataset.parent.mkdir(parents=True)
+    dataset.write_text("data", encoding="utf-8")
+    _, snapshot = _snapshot_input_file(dataset, "training dataset")
+
+    assert _provenance_path(snapshot, root=repository) == "data/train.jsonl"
