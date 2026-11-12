@@ -74,11 +74,11 @@ def _hash_file(path: Path) -> tuple[str, int]:
 
 
 def _fingerprint_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return hashlib.sha256(text.encode()).hexdigest()
 
 
 def _pseudonymize_frozen_id(value: str) -> str:
-    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:24]
+    digest = hashlib.sha256(value.encode()).hexdigest()[:24]
     return f"frozen_{digest}"
 
 
@@ -374,7 +374,7 @@ def check_frozen_evaluation_contamination(
                                     "hamming_distance": distance,
                                     "text_sha256": fingerprint,
                                 }
-                                encoded = (json.dumps(item, sort_keys=True) + "\n").encode("utf-8")
+                                encoded = (json.dumps(item, sort_keys=True) + "\n").encode()
                                 report_handle.write(encoded)
                                 report_digest.update(encoded)
                             records_scanned += 1
@@ -431,7 +431,7 @@ def check_frozen_evaluation_contamination(
             }
             summary_bytes = (
                 json.dumps(summary, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
-            ).encode("utf-8")
+            ).encode()
             _write_new_file(summary_path, summary_bytes)
             summary_published = True
         finally:
