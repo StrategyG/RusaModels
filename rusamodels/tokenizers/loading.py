@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .validation import audit_tokenizer
 from .vocabulary import SPECIAL_TOKENS, resolve_special_token_ids
 
 
@@ -254,4 +255,19 @@ def load_tokenizer_artifact(directory: str | Path) -> TokenizerArtifact:
     expected = {name: special[name]["id"] for name in special}
     if resolved != expected:
         raise TokenizerArtifactError("loaded tokenizer special-token IDs do not match its manifest")
+    try:
+        tokenizer_config = json.loads(backend.to_str())
+    except (TypeError, ValueError) as exc:
+        raise TokenizerArtifactError("tokenizer configuration could not be inspected") from exc
+    if (
+        tokenizer_config.get("model", {}).get("type") != "BPE"
+        or tokenizer_config.get("pre_tokenizer", {}).get("type") != "ByteLevel"
+        or tokenizer_config.get("decoder", {}).get("type") != "ByteLevel"
+        or tokenizer_config.get("normalizer") is not None
+    ):
+        raise TokenizerArtifactError("tokenizer implementation does not match the ByteLevel BPE contract")
+    try:
+        audit_tokenizer(backend, resolved)
+    except ValueError as exc:
+        raise TokenizerArtifactError(f"tokenizer compatibility audit failed: {exc}") from exc
     return TokenizerArtifact(backend=backend, manifest=manifest)
