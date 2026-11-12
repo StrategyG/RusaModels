@@ -213,6 +213,14 @@ def verify_tokenized_split(
         if tokenizer_input.is_symlink():
             raise TokenizedDatasetVerificationError("tokenizer path must not be a symlink")
         tokenizer_root = tokenizer_input.resolve()
+        if (
+            tokenizer_root == output
+            or tokenizer_root in output.parents
+            or tokenizer_root in manifest_file.parents
+        ):
+            raise TokenizedDatasetVerificationError(
+                "tokenized outputs must be outside the tokenizer asset directory"
+            )
         try:
             tokenizer_sha256_before = hash_tokenizer_directory(tokenizer_root)
         except (DatasetTokenizationError, OSError) as exc:
