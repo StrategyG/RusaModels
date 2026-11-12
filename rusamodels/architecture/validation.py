@@ -62,7 +62,11 @@ def validate_model_shapes(model: Any, config: DecoderArchitectureConfig) -> dict
             or getattr(attention, "head_dim", None) != config.head_dim
         ):
             raise ValueError(f"decoder layer {index} attention head configuration is invalid")
-        if _shape(attention.rope_cos) != (config.context_length, config.head_dim):
+        expected_rope_shape = (config.context_length, config.head_dim)
+        if (
+            _shape(attention.rope_cos) != expected_rope_shape
+            or _shape(attention.rope_sin) != expected_rope_shape
+        ):
             raise ValueError(f"decoder layer {index} RoPE cache shape is invalid")
         for name in ("q_proj", "k_proj", "v_proj", "o_proj"):
             if _shape(getattr(attention, name).weight) != expected[name]:
