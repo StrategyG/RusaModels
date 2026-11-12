@@ -13,7 +13,8 @@ from rusamodels.dataset_contamination import (
     DatasetContaminationError,
     check_frozen_evaluation_contamination,
 )
-from rusamodels.dataset_quality import simhash64_text
+from rusamodels.dataset_quality import simhash64_text, simhash_bands
+from rusamodels.dataset_text_export import record_to_text
 
 
 def _write_jsonl(path: Path, records: list[dict]) -> Path:
@@ -207,4 +208,36 @@ def test_frozen_evaluation_manifest_must_be_locked(tmp_path: Path) -> None:
             evaluation,
             manifest_path,
             tmp_path / "report.jsonl",
+        )
+
+
+def test_lsh_candidate_cap_is_applied_before_loading_all_candidates(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    target = json.loads((release / "train.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    base_text = record_to_text(target)
+    base_bands = set(simhash_bands(simhash64_text(base_text)))
+    variants = []
+    for suffix in (
+        "alpha", "bravo", "charlie", "delta", "echo", "foxtrot",
+        "golf", "hotel", "india", "juliet", "kilo", "lima",
+        "mike", "november", "oscar", "papa", "quebec", "romeo",
+        "sierra", "tango", "uniform", "victor", "whiskey", "xray",
+        "yankee", "zulu",
+    ):
+        text = f"{base_text} {suffix}"
+        bands = set(simhash_bands(simhash64_text(text)))
+        if base_bands.intersection(bands):
+            variants.append({"id": f"frozen-{suffix}", "text": text})
+        if len(variants) == 2:
+            break
+    assert len(variants) == 2
+    evaluation, manifest = _frozen_set(tmp_path, variants)
+
+    with pytest.raises(DatasetContaminationError, match="candidate set exceeds"):
+        check_frozen_evaluation_contamination(
+            release,
+            evaluation,
+            manifest,
+            tmp_path / "candidate-cap.jsonl",
+            max_candidates_per_record=1,
         )
