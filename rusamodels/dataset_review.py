@@ -94,23 +94,29 @@ def _parse_review(raw: str, source: str) -> dict[str, Any]:
         raise DatasetReviewError(f"{source}: review_id is invalid")
     if not isinstance(value["record_id"], str) or not _RECORD_ID.fullmatch(value["record_id"]):
         raise DatasetReviewError(f"{source}: record_id must be a pseudonymized dataset record ID")
-    if value["review_type"] not in _REQUIRED_REVIEW_TYPES:
+    if not isinstance(value["review_type"], str) or value["review_type"] not in _REQUIRED_REVIEW_TYPES:
         raise DatasetReviewError(f"{source}: unsupported review_type")
     if not isinstance(value["reviewer_id"], str) or not _REVIEWER_ID.fullmatch(value["reviewer_id"]):
         raise DatasetReviewError(f"{source}: reviewer_id must be a pseudonymous reviewer identifier")
-    if value["decision"] not in _DECISIONS:
+    if not isinstance(value["decision"], str) or value["decision"] not in _DECISIONS:
         raise DatasetReviewError(f"{source}: unsupported review decision")
     if value["quality_score"] is not None and (
         type(value["quality_score"]) is not int or not 1 <= value["quality_score"] <= 5
     ):
         raise DatasetReviewError(f"{source}: quality_score must be null or an integer from 1 to 5")
-    if value["risk_class"] is not None and value["risk_class"] not in _RISK_ORDER:
+    if value["risk_class"] is not None and (
+        not isinstance(value["risk_class"], str) or value["risk_class"] not in _RISK_ORDER
+    ):
         raise DatasetReviewError(f"{source}: risk_class is invalid")
-    if value["rights_status"] is not None and value["rights_status"] not in {
-        "approved", "conditional", "rejected"
-    }:
+    if value["rights_status"] is not None and (
+        not isinstance(value["rights_status"], str)
+        or value["rights_status"] not in {"approved", "conditional", "rejected"}
+    ):
         raise DatasetReviewError(f"{source}: rights_status is invalid")
-    if value["evidence_status"] is not None and value["evidence_status"] not in _EVIDENCE_STATUSES:
+    if value["evidence_status"] is not None and (
+        not isinstance(value["evidence_status"], str)
+        or value["evidence_status"] not in _EVIDENCE_STATUSES
+    ):
         raise DatasetReviewError(f"{source}: evidence_status is invalid")
     if value["language"] is not None and (
         not isinstance(value["language"], str) or not _LANGUAGE.fullmatch(value["language"])
@@ -227,7 +233,7 @@ def evaluate_dataset_reviews(
     """
     if type(minimum_quality_score) is not int or not 1 <= minimum_quality_score <= 5:
         raise DatasetReviewError("minimum_quality_score must be an integer from 1 to 5")
-    if maximum_risk_class not in _RISK_ORDER:
+    if not isinstance(maximum_risk_class, str) or maximum_risk_class not in _RISK_ORDER:
         raise DatasetReviewError("maximum_risk_class must be low, medium, high, or critical")
 
     root = Path(release_path).expanduser().resolve()
@@ -458,10 +464,10 @@ def evaluate_dataset_reviews(
     finally:
         temporary_directory.cleanup()
 
-    report["report_sha256"] = hashlib.sha256(
+    report["report_payload_sha256"] = hashlib.sha256(
         json.dumps(report, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
-    _write_report(output, report)
+    report_file_sha256 = _write_report(output, report)
     return {
         "dataset_id": report["dataset_id"],
         "dataset_version": report["dataset_version"],
@@ -470,7 +476,7 @@ def evaluate_dataset_reviews(
         "blocked_records": report["blocked_records"],
         "approved_for_release": report["approved_for_release"],
         "report_path": str(output),
-        "report_sha256": report["report_sha256"],
+        "report_sha256": report_file_sha256,
     }
 
 
