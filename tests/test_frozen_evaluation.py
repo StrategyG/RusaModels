@@ -202,3 +202,49 @@ def test_frozen_suite_rejects_duplicate_record_ids(tmp_path: Path) -> None:
             tmp_path / "duplicate-id-report.json",
             policy=_policy(),
         )
+
+
+def test_project_owned_prompt_requires_a_pinned_source_and_license(tmp_path: Path) -> None:
+    records = _records()
+    records[0]["provenance"] = "project_owned"
+    records[0]["source_refs"] = [
+        {
+            "source_id": "rusa-models",
+            "revision": "a" * 40,
+            "locator": "docs/architecture.md#L10-L20",
+            "sha256": "b" * 64,
+            "license_id": "LicenseRef-Project-Owned",
+        }
+    ]
+    evaluation, manifest = _write_suite(tmp_path, records)
+
+    result = validate_frozen_evaluation_suite(
+        evaluation,
+        manifest,
+        tmp_path / "valid-source-report.json",
+        policy=_policy(),
+    )
+
+    assert result["suite_valid"] is True
+
+
+def test_source_reference_without_license_id_is_rejected(tmp_path: Path) -> None:
+    records = _records()
+    records[0]["provenance"] = "licensed_source"
+    records[0]["source_refs"] = [
+        {
+            "source_id": "public-docs",
+            "revision": "v1.2.3",
+            "locator": "guide/section-1",
+            "sha256": "c" * 64,
+        }
+    ]
+    evaluation, manifest = _write_suite(tmp_path, records)
+
+    with pytest.raises(FrozenEvaluationError, match="unsupported or missing fields"):
+        validate_frozen_evaluation_suite(
+            evaluation,
+            manifest,
+            tmp_path / "missing-license-report.json",
+            policy=_policy(),
+        )
