@@ -293,3 +293,118 @@ def test_admin_can_request_running_job_cancellation_idempotently(api_client):
         item["action"] == "model_job.cancel_requested"
         for item in audit.json()["items"]
     ) == 1
+
+def test_upload_mutations_lock_the_upload_session_row(api_client, monkeypatch):
+    """PostgreSQL row locks serialize concurrent part, complete and abort requests."""
+    from sqlalchemy.dialects import postgresql
+    from sqlalchemy.orm import Session
+
+    model_id, version_id = create_model_version(api_client)
+    payload = b"multipart-lock"
+    digest = hashlib.sha256(payload).hexdigest()
+
+    def start_upload():
+        response = api_client.post(
+            f"/v1/models/{model_id}/versions/{version_id}/uploads",
+            json={
+                "filename": "locked.bin",
+                "expected_size": len(payload),
+                "expected_sha256": digest,
+            },
+            headers=auth("manager-test-token"),
+        )
+        assert response.status_code == 201
+        return response.json()["id"]
+
+    statements = []
+    original_scalar = Session.scalar
+
+    def capture_scalar(session, statement, *args, **kwargs):
+        statements.append(statement)
+        return original_scalar(session, statement, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "scalar", capture_scalar)
+
+    def assert_upload_row_lock():
+        compiled = [
+            str(statement.compile(dialect=postgresql.dialect())).upper()
+            for statement in statements
+        ]
+        assert any(
+            "FROM UPLOAD_SESSIONS" in statement and "FOR UPDATE" in statement
+            for statement in compiled
+        ), "upload mutation must acquire a PostgreSQL row lock"
+
+    upload_id = start_upload()
+    part = api_client.put(
+        f"/v1/uploads/{upload_id}/parts/1",
+        content=payload,
+        headers=auth("manager-test-token"),
+    )
+    assert part.status_code == 200
+    assert_upload_row_lock()
+
+    statements.clear()
+    completed = api_client.post(
+        f"/v1/uploads/{upload_id}/complete",
+        headers=auth("manager-test-token"),
+    )
+    assert completed.status_code == 200
+    assert_upload_row_lock()
+
+    statements.clear()
+    abort_id = start_upload()
+    aborted = api_client.delete(
+        f"/v1/uploads/{abort_id}",
+        headers=auth("admin-test-token"),
+    )
+    assert aborted.status_code == 204
+    assert_upload_row_lock()
+
+
+def test_postgres_upload_session_row_lock_blocks_competing_transaction(postgres_api_client):
+    """A real PostgreSQL transaction must hold the upload row lock until commit."""
+    import pytest
+    from sqlalchemy import select
+    from sqlalchemy.exc import OperationalError
+    from rusamodels.models import UploadSession
+
+    model_id, version_id = create_model_version(postgres_api_client)
+    payload = b"postgres-row-lock"
+    started = postgres_api_client.post(
+        f"/v1/models/{model_id}/versions/{version_id}/uploads",
+        json={
+            "filename": "postgres-lock.bin",
+            "expected_size": len(payload),
+            "expected_sha256": hashlib.sha256(payload).hexdigest(),
+        },
+        headers=auth("manager-test-token"),
+    )
+    assert started.status_code == 201
+    upload_id = started.json()["id"]
+
+    sessions = postgres_api_client.app.state.sessions
+    locker = sessions()
+    contender = sessions()
+    statement = select(UploadSession).where(UploadSession.id == upload_id)
+    try:
+        locker.begin()
+        locked = locker.scalar(statement.with_for_update())
+        assert locked is not None and locked.status == "open"
+
+        contender.begin()
+        with pytest.raises(OperationalError) as error:
+            contender.scalar(statement.with_for_update(nowait=True))
+        assert getattr(error.value.orig, "sqlstate", None) == "55P03"
+        contender.rollback()
+
+        locker.commit()
+        contender.begin()
+        released = contender.scalar(statement.with_for_update(nowait=True))
+        assert released is not None and released.status == "open"
+        contender.commit()
+    finally:
+        locker.rollback()
+        contender.rollback()
+        locker.close()
+        contender.close()
