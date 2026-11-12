@@ -46,6 +46,7 @@ _TRAINER_KEYS = {
     "min_frequency",
     "pre_tokenizer",
     "normalizer",
+    "library_version",
 }
 
 
@@ -224,6 +225,8 @@ def load_tokenizer_artifact(directory: str | Path) -> TokenizerArtifact:
         or trainer["min_frequency"] < 1
         or trainer["pre_tokenizer"] != "bytelevel"
         or trainer["normalizer"] != "none"
+        or not isinstance(trainer["library_version"], str)
+        or not trainer["library_version"].strip()
     ):
         raise TokenizerArtifactError("tokenizer trainer settings are invalid")
     try:
