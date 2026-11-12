@@ -201,7 +201,7 @@ def _initialize(connection: sqlite3.Connection) -> None:
 
 
 def _write_report(path: Path, report: dict[str, Any]) -> str:
-    payload = (json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
+    payload = (json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
     )
@@ -469,7 +469,7 @@ def evaluate_dataset_reviews(
         temporary_directory.cleanup()
 
     report["report_payload_sha256"] = hashlib.sha256(
-        json.dumps(report, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        json.dumps(report, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
     report_file_sha256 = _write_report(output, report)
     return {
