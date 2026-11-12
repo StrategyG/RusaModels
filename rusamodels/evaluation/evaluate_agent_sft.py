@@ -80,6 +80,7 @@ def _validate_provenance(
     model_cfg: dict[str, Any],
     eval_sha256: str,
     eval_examples: int,
+    config_sha256: str,
 ) -> tuple[str, str]:
     if not isinstance(provenance, dict) or provenance.get("schema_version") != 1:
         raise ValueError("adapter provenance schema is unsupported")
@@ -88,13 +89,25 @@ def _validate_provenance(
     if not isinstance(model, dict) or not isinstance(dataset, dict):
         raise ValueError("adapter provenance must contain model and dataset objects")
     model_id = model.get("id")
-    revision = model.get("resolved_revision") or model.get("configured_revision")
+    configured_revision = model.get("configured_revision")
+    revision = model.get("resolved_revision")
     if not isinstance(model_id, str) or not model_id.strip():
         raise ValueError("adapter provenance model ID is invalid")
-    if not isinstance(revision, str) or not _COMMIT_SHA.fullmatch(revision):
-        raise ValueError("adapter provenance model revision must be a pinned commit SHA")
-    if model_id != model_cfg.get("id") or revision != model_cfg.get("revision"):
+    if (
+        not isinstance(configured_revision, str)
+        or not _COMMIT_SHA.fullmatch(configured_revision)
+        or not isinstance(revision, str)
+        or not _COMMIT_SHA.fullmatch(revision)
+    ):
+        raise ValueError("adapter provenance model revisions must be pinned commit SHAs")
+    if (
+        model_id != model_cfg.get("id")
+        or configured_revision != model_cfg.get("revision")
+        or revision != model_cfg.get("revision")
+    ):
         raise ValueError("adapter provenance base model does not match the configured model")
+    if model.get("license") != model_cfg.get("license"):
+        raise ValueError("adapter provenance model license does not match the configured model")
     if not isinstance(dataset.get("train_sha256"), str) or not _SHA256.fullmatch(
         dataset["train_sha256"]
     ):
@@ -103,6 +116,8 @@ def _validate_provenance(
         raise ValueError("adapter provenance uses identical training and evaluation files")
     if dataset.get("eval_sha256") != eval_sha256:
         raise ValueError("evaluation file SHA-256 does not match the adapter training provenance")
+    if dataset.get("training_config_sha256") != config_sha256:
+        raise ValueError("evaluation config SHA-256 does not match the adapter training provenance")
     if type(dataset.get("eval_examples")) is not int or dataset["eval_examples"] != eval_examples:
         raise ValueError("evaluation record count does not match the adapter training provenance")
     tokenizer = provenance.get("tokenizer")
@@ -204,6 +219,7 @@ def run_evaluation(
         model_cfg,
         eval_snapshot["sha256"],
         len(records),
+        config_snapshot["sha256"],
     )
     output = _safe_report_path(
         output_file,
