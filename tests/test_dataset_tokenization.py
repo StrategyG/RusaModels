@@ -71,6 +71,13 @@ def _release(tmp_path: Path) -> Path:
     )
 
 
+def _tokenizer_dir(release: Path) -> Path:
+    tokenizer_dir = release.parent / "tokenizer-assets"
+    tokenizer_dir.mkdir(parents=True, exist_ok=True)
+    (tokenizer_dir / "tokenizer.json").write_text('{"vocab":"test"}', encoding="utf-8")
+    return tokenizer_dir
+
+
 def _pack(release: Path, output: Path, **kwargs):
     return pack_dataset_split(
         release,
@@ -79,7 +86,7 @@ def _pack(release: Path, output: Path, **kwargs):
         tokenizer=kwargs.pop("tokenizer", FakeTokenizer()),
         tokenizer_id="example/tokenizer",
         tokenizer_revision="a" * 40,
-        tokenizer_sha256="b" * 64,
+        tokenizer_path=_tokenizer_dir(release),
         sequence_length=16,
         **kwargs,
     )
@@ -111,7 +118,7 @@ def test_pack_verified_split_into_fixed_length_sequences(tmp_path: Path) -> None
         assert 0 in sequences[-1]["attention_mask"]
     assert manifest["split"] == "train"
     assert manifest["tokenizer_revision"] == "a" * 40
-    assert manifest["tokenizer_sha256"] == "b" * 64
+    assert manifest["tokenizer_sha256"] == hash_tokenizer_directory(_tokenizer_dir(release))
     assert manifest["source_split_sha256"]
     assert manifest["output_sha256"] == hashlib.sha256(output.read_bytes()).hexdigest()
 
@@ -134,7 +141,7 @@ def test_packer_rejects_sequence_length_above_tokenizer_limit(tmp_path: Path) ->
             tokenizer=tokenizer,
             tokenizer_id="example/tokenizer",
             tokenizer_revision="a" * 40,
-            tokenizer_sha256="b" * 64,
+            tokenizer_path=_tokenizer_dir(release),
             sequence_length=16,
         )
 
@@ -149,7 +156,7 @@ def test_packer_rejects_unpinned_tokenizer_revision(tmp_path: Path) -> None:
             tokenizer=FakeTokenizer(),
             tokenizer_id="example/tokenizer",
             tokenizer_revision="main",
-            tokenizer_sha256="b" * 64,
+            tokenizer_path=_tokenizer_dir(release),
             sequence_length=16,
         )
 
