@@ -286,3 +286,15 @@ def test_disk_backed_verifier_handles_a_larger_dataset_release(tmp_path: Path) -
     assert summary["unique_records"] == 1000
     assert summary["raw_records"] == 1000
     assert sum(summary["split_counts"].values()) == 1000
+
+
+def test_dataset_source_symlink_is_rejected(tmp_path: Path) -> None:
+    source = _write_jsonl(tmp_path / "records.jsonl", [_record(i) for i in range(1, 5)])
+    symlink = tmp_path / "records-link.jsonl"
+    try:
+        symlink.symlink_to(source)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation is not supported in this environment")
+
+    with pytest.raises(DatasetPipelineError, match="must not be a symlink"):
+        build_dataset_release(_config(tmp_path, symlink))
