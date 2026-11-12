@@ -55,12 +55,13 @@
     "trainer": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["requested_vocab_size", "min_frequency", "pre_tokenizer", "normalizer"],
+      "required": ["requested_vocab_size", "min_frequency", "pre_tokenizer", "normalizer", "library_version"],
       "properties": {
         "requested_vocab_size": {"type": "integer", "minimum": 260},
         "min_frequency": {"type": "integer", "minimum": 1},
         "pre_tokenizer": {"const": "bytelevel"},
-        "normalizer": {"const": "none"}
+        "normalizer": {"const": "none"},
+        "library_version": {"type": "string", "minLength": 1, "maxLength": 32}
       }
     },
     "created_at": {"type": "string", "format": "date-time"}
