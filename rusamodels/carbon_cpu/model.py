@@ -188,6 +188,7 @@ class CarbonTiny(nn.Module):
         self.layers = nn.ModuleList([TransformerBlock(config) for _ in range(config.n_layers)])
         self.final_norm = RMSNorm(config.d_model, eps=float(config.rms_norm_eps))
         self.dropout = nn.Dropout(float(config.dropout))
+        self.gradient_checkpointing = False
         self.apply(self._init_weights)
 
     @staticmethod
@@ -220,7 +221,12 @@ class CarbonTiny(nn.Module):
 
         x = self.dropout(self.token_embeddings(input_ids))
         for layer in self.layers:
-            x = layer(x)
+            if self.gradient_checkpointing and self.training:
+                from torch.utils.checkpoint import checkpoint
+
+                x = checkpoint(layer, x, use_reentrant=False)
+            else:
+                x = layer(x)
         x = self.final_norm(x)
         logits = F.linear(x, self.token_embeddings.weight)
         loss = None
