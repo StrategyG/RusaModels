@@ -6,6 +6,7 @@
   "additionalProperties": false,
   "required": [
     "review_id",
+    "release_manifest_sha256",
     "record_id",
     "review_type",
     "reviewer_id",
@@ -21,6 +22,7 @@
   ],
   "properties": {
     "review_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "release_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "record_id": {"type": "string", "pattern": "^record_[0-9a-f]{24}$"},
     "review_type": {
       "type": "string",
