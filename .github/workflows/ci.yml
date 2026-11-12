@@ -94,8 +94,8 @@ jobs:
           python -m pip install "numpy>=1.26,<3" "tokenizers>=0.21,<1"
           python -m pip install --index-url https://download.pytorch.org/whl/cpu "torch>=2.4,<3"
       - name: Lint Carbon CPU implementation
-        run: ruff check rusamodels/carbon_cpu rusamodels/architecture rusamodels/tokenizers scripts/train_carbon_cpu.py scripts/train_rusa_tokenizer.py tests/test_carbon_cpu_*.py tests/test_architecture_engine.py tests/test_tokenizer_engine.py
+        run: ruff check rusamodels/carbon_cpu rusamodels/architecture rusamodels/tokenizers scripts/train_carbon_cpu.py scripts/train_rusa_tokenizer.py scripts/validate_architecture.py tests/test_carbon_cpu_*.py tests/test_architecture_engine.py tests/test_tokenizer_engine.py
       - name: Compile Carbon CPU implementation
-        run: python -m compileall -q rusamodels/carbon_cpu rusamodels/architecture rusamodels/tokenizers scripts/train_carbon_cpu.py scripts/train_rusa_tokenizer.py tests/test_carbon_cpu_*.py tests/test_architecture_engine.py tests/test_tokenizer_engine.py
+        run: python -m compileall -q rusamodels/carbon_cpu rusamodels/architecture rusamodels/tokenizers scripts/train_carbon_cpu.py scripts/train_rusa_tokenizer.py scripts/validate_architecture.py tests/test_carbon_cpu_*.py tests/test_architecture_engine.py tests/test_tokenizer_engine.py
       - name: Test Carbon CPU model, tokenizer, and deterministic training
         run: pytest -q tests/test_carbon_cpu_model.py tests/test_carbon_cpu_tokenizer.py tests/test_carbon_cpu_training.py tests/test_architecture_engine.py tests/test_tokenizer_engine.py
