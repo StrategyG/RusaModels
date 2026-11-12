@@ -34,6 +34,7 @@ RusaAi is an authenticated service consumer. It does not connect directly to the
 - Container-aware RAM/disk preflight and cancellable conversion subprocesses outside API request processes.
 - Append-only audit events enforced by database triggers.
 - Docker Compose, separate Codespaces profiles and GitHub Actions CI.
+- Evidence-based production readiness gate for release identity, model provenance, evaluation, CPU runtime, security, sandboxing, recovery, rollback and deployment controls.
 
 ## Not yet implemented
 
@@ -67,6 +68,7 @@ Never commit model weights, API tokens or credentials. Production requires Postg
 - [Codespaces setup](docs/CODESPACES.md)
 - [Operations runbook](docs/OPERATIONS.md)
 - [Production deployment](docs/PRODUCTION_DEPLOYMENT.md)
+- [Production readiness evidence gate](docs/PRODUCTION_READINESS.md)
 - [RusaAi integration](docs/RUSAAI-INTEGRATION.md)
 - [CPU inference](docs/CPU_INFERENCE.md)
 - [Training](docs/TRAINING.md)
