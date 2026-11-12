@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import os
@@ -92,6 +93,34 @@ def _write_new_file(path: Path, payload: bytes) -> None:
         os.link(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def _build_adapter_manifest(adapter_dir: Path, model_id: str, model_revision: str) -> dict[str, Any]:
+    files: dict[str, dict[str, Any]] = {}
+    aggregate = hashlib.sha256()
+    for path in sorted(adapter_dir.rglob("*"), key=lambda item: item.relative_to(adapter_dir).as_posix()):
+        if path.is_symlink():
+            raise ValueError(f"adapter artifact contains a symlink: {path.relative_to(adapter_dir)}")
+        if not path.is_file():
+            continue
+        relative = path.relative_to(adapter_dir).as_posix()
+        file_sha256 = sha256_file(path)
+        size_bytes = path.stat().st_size
+        files[relative] = {"sha256": file_sha256, "size_bytes": size_bytes}
+        aggregate.update(relative.encode("utf-8"))
+        aggregate.update(b"\0")
+        aggregate.update(file_sha256.encode("ascii"))
+        aggregate.update(b"\n")
+    if not files:
+        raise ValueError("adapter directory contains no files to manifest")
+    return {
+        "schema_version": 1,
+        "artifact_type": "peft_adapter",
+        "model_id": model_id,
+        "model_revision": model_revision,
+        "files": files,
+        "adapter_sha256": aggregate.hexdigest(),
+    }
 
 
 def _provenance_path(snapshot: dict[str, Any], *, root: Path = ROOT) -> str:
@@ -442,6 +471,11 @@ def run_training(config_path: Path, *, train_path: Path | None = None, eval_path
         (json.dumps(provenance, ensure_ascii=False, indent=2, default=str) + "\n").encode("utf-8"),
     )
     _write_new_file(output_dir / "training-config.yaml", config_bytes)
+    adapter_manifest = _build_adapter_manifest(adapter_dir, model_id, resolved_model_revision)
+    adapter_manifest_bytes = (
+        json.dumps(adapter_manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    ).encode("utf-8")
+    _write_new_file(output_dir / "adapter-manifest.json", adapter_manifest_bytes)
     LOGGER.info("QLoRA adapter saved to %s", adapter_dir)
     return adapter_dir
 
