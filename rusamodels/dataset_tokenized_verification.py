@@ -176,6 +176,20 @@ def verify_tokenized_split(
         raise TokenizedDatasetVerificationError("symlink paths are not allowed for tokenized artifacts")
     output = output_input.parent.resolve() / output_input.name
     manifest_file = manifest_input.parent.resolve() / manifest_input.name
+    release_root = (
+        Path(release_path).expanduser().resolve()
+        if release_path is not None
+        else None
+    )
+    if release_root is not None and (
+        release_root == output
+        or release_root in output.parents
+        or release_root == manifest_file
+        or release_root in manifest_file.parents
+    ):
+        raise TokenizedDatasetVerificationError(
+            "tokenized artifacts must be outside the immutable source release"
+        )
     if output == manifest_file:
         raise TokenizedDatasetVerificationError("tokenized output and manifest paths must be different")
     if not output.is_file() or not manifest_file.is_file():
@@ -206,16 +220,12 @@ def verify_tokenized_split(
         if not hmac.compare_digest(tokenizer_sha256_before, manifest["tokenizer_sha256"]):
             raise TokenizedDatasetVerificationError("tokenizer assets do not match tokenization manifest")
 
-    release_root: Path | None = None
     source_path: Path | None = None
     source_sha256_before: str | None = None
     source_size_before: int | None = None
     release_manifest_path: Path | None = None
     release_manifest_sha256_before: str | None = None
-    if release_path is not None:
-        release_root = Path(release_path).expanduser().resolve()
-        if release_root == output or release_root in output.parents or release_root == manifest_file or release_root in manifest_file.parents:
-            raise TokenizedDatasetVerificationError("tokenized artifacts must be outside the immutable source release")
+    if release_root is not None:
         if tokenizer_root is not None and (tokenizer_root == release_root or release_root in tokenizer_root.parents):
             raise TokenizedDatasetVerificationError("tokenizer assets must be outside the immutable source release")
         try:
