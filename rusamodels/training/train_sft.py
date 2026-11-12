@@ -275,8 +275,16 @@ def run_training(config_path: Path, *, train_path: Path | None = None, eval_path
     compute_dtype = torch.bfloat16 if use_bf16 else torch.float16
 
     tokenizer = AutoTokenizer.from_pretrained(
-        model_cfg["id"], revision=model_cfg["revision"], trust_remote_code=False
+        model_cfg["id"], revision=model_revision, trust_remote_code=False
     )
+    tokenizer_kwargs = getattr(tokenizer, "init_kwargs", {})
+    resolved_tokenizer_revision = (
+        tokenizer_kwargs.get("_commit_hash", model_revision)
+        if isinstance(tokenizer_kwargs, dict)
+        else model_revision
+    )
+    if resolved_tokenizer_revision != model_revision:
+        raise RuntimeError("Resolved tokenizer revision does not match the pinned model revision")
     if not getattr(tokenizer, "chat_template", None):
         raise RuntimeError("Base tokenizer must provide a chat_template")
     if tokenizer.eos_token_id is None:
@@ -292,7 +300,7 @@ def run_training(config_path: Path, *, train_path: Path | None = None, eval_path
     )
     model = AutoModelForCausalLM.from_pretrained(
         model_cfg["id"],
-        revision=model_cfg["revision"],
+        revision=model_revision,
         quantization_config=quantization,
         torch_dtype=compute_dtype,
         device_map={"": torch.cuda.current_device()},
@@ -300,6 +308,9 @@ def run_training(config_path: Path, *, train_path: Path | None = None, eval_path
         trust_remote_code=False,
         use_safetensors=True,
     )
+    resolved_model_revision = getattr(model.config, "_commit_hash", None) or model_revision
+    if resolved_model_revision != model_revision:
+        raise RuntimeError("Resolved base-model revision does not match the pinned model revision")
     model.config.use_cache = False
     model = prepare_model_for_kbit_training(
         model,
@@ -377,9 +388,14 @@ def run_training(config_path: Path, *, train_path: Path | None = None, eval_path
         "created_at": datetime.now(UTC).isoformat(),
         "model": {
             "id": model_cfg["id"],
-            "configured_revision": model_cfg["revision"],
-            "resolved_revision": getattr(model.config, "_commit_hash", None) or model_cfg["revision"],
+            "configured_revision": model_revision,
+            "resolved_revision": resolved_model_revision,
             "license": model_cfg["license"],
+        },
+        "tokenizer": {
+            "id": model_id,
+            "configured_revision": model_revision,
+            "resolved_revision": resolved_tokenizer_revision,
         },
         "method": "QLoRA",
         "dataset": {
