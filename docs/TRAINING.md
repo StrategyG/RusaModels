@@ -6,6 +6,12 @@ The initial RusaModels training package was migrated from RusaAi. It supports va
 
 The included 120-example training split and 36-example evaluation split are synthetic seed data. No trained RusaModels weights are included. Dataset availability is not evidence that training has run or that a model is production-ready.
 
+## Model-selection boundary
+
+The checked-in `agent-sft.yaml` and manual T4 workflow target Qwen3-4B and are an experimental GPU-only QLoRA track. They do not satisfy or replace the separate non-Qwen, CPU-first product-model decision in the RusaAi Training Engine v1.0 design. That design's provisional `BhinekaIntiLabs/bhineka-gpt` candidate remains pending architecture, provenance, license, tokenizer, custom-code, compatibility, and Indonesian/English evaluation audits. Do not promote the Qwen experiment or the provisional non-Qwen candidate as an approved production foundation model without a versioned checkpoint decision record.
+
+The repository also does not yet contain the human-curated 800–1,200 prompt frozen release evaluation suite. The frozen suite validator and manifest/contamination contracts are implemented in `rusamodels.frozen_evaluation` and `rusamodels.dataset_contamination`; they validate a future reviewed suite but do not generate or certify its contents.
+
 ## CPU inference versus GPU training
 
 The 16-GB Codespaces Model Server profile is for CPU inference only. The current QLoRA trainer explicitly requires CUDA and refuses CPU training. Run the optional training workflow in a dedicated, trusted CUDA environment (for example, a reviewed Colab T4 session or self-hosted GPU runner).
