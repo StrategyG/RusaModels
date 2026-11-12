@@ -85,13 +85,11 @@ def test_offline_language_and_quality_report_covers_every_split(tmp_path: Path) 
     summary = json.loads(
         report_path.with_suffix(report_path.suffix + ".summary.json").read_text(encoding="utf-8")
     )
-    by_id = {row["record_id"]: row for row in rows}
-
     assert result["records"] == 3
     assert result["rejected_records"] >= 1
-    assert by_id["record_" + "0" * 24]["language"] == "und" if False else True
     assert any(row["language"] == "id" for row in rows)
     assert any(row["language"] == "en" for row in rows)
+    assert any(row["language"] == "und" for row in rows)
     assert any("text_too_short" in row["reasons"] for row in rows)
     assert all("text" not in row for row in rows)
     assert summary["report_sha256"] == hashlib.sha256(report_path.read_bytes()).hexdigest()
