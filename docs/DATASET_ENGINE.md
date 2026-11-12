@@ -225,6 +225,45 @@ The gate checks exact normalized training-text matches and SimHash near-duplicat
 
 The SimHash threshold is bounded to 0–7 bits by the eight-band LSH candidate guarantee. This is a lexical heuristic, not semantic equivalence detection; paraphrases may be missed. The frozen evaluation manifest is an integrity record, not a cryptographic signature. Keep the frozen set in access-controlled storage, restrict who can read it, and use an externally signed manifest for a production benchmark gate.
 
+## Language identification and quality screening
+
+Install the optional offline language detector:
+
+~~~bash
+python -m pip install -e ".[dataset]"
+~~~
+
+Analyze the verified release without modifying its immutable JSONL files:
+
+~~~bash
+python -m rusamodels.dataset_language \
+  --release artifacts/datasets/rusaai-agent-sft-curated/0.1.0 \
+  --report artifacts/reports/rusaai-agent-sft-curated-0.1.0-language.jsonl \
+  --languages id,en \
+  --allowed-languages id,en,mixed \
+  --fail-on-rejected
+~~~
+
+The analyzer uses the preloaded Lingua language models for offline Indonesian/English identification. It reports language confidence, runner-up language, text length, word count, unique-word ratio, repeated-character ratio, and eligibility reasons for every pseudonymized record ID. The JSONL record contract is defined by `schemas/llm/dataset-language-quality-record.schema.json`; a summary sidecar contains split and language distributions.
+
+The default screening policy requires at least 40 normalized characters, six words, 0.20 unique-word ratio, no more than 0.25 repeated-character ratio, and language confidence of at least 0.65. Tune these thresholds on a human-reviewed sample before using them as a release gate. Short or ambiguous text is labeled `und`; close Indonesian/English confidence values may be labeled `mixed`.
+
+This tool produces eligibility evidence only. It does not delete or rewrite rejected records, identify semantic quality, classify toxicity, detect all unsafe content, or certify that a record is suitable for training. Use its report to drive a reviewed filtering decision, then build a new immutable dataset version. High-risk and unsafe content must remain quarantined through the human security-review gate.
+
+## Dataset inspection and sampling
+
+Inspect split sizes, text-length distributions, task/language/role/risk labels, and deterministic content samples:
+
+~~~bash
+python -m rusamodels.dataset_inspect \
+  --release artifacts/datasets/rusaai-agent-sft-curated/0.1.0 \
+  --sample-per-split 3 \
+  --seed 42 \
+  --preview-characters 300
+~~~
+
+Sampling uses a bounded reservoir per split, so the tool does not load the entire corpus into memory. The seed makes the sample repeatable. Set `--sample-per-split 0` to emit statistics without text previews. Preview text is still dataset content; protect terminal logs and redirected output with the same access controls as the source release.
+
 ## Redaction and privacy limits
 
 Email and common credential patterns are redacted by default. Phone-number redaction is disabled by default because numeric sequences can be legitimate model content. These regex rules are a defensive preprocessing layer, not a comprehensive PII detector or privacy certification.
@@ -242,8 +281,8 @@ The dataset release pipeline preserves the existing SFT record shape (including 
 The following roadmap items are not implemented by this initial release builder:
 
 - Capacity-tested near-duplicate detection at representative dataset scale (the initial SimHash/LSH checker is implemented; threshold calibration and large-corpus benchmarks remain).
-- Language identification and language-aware quality metrics.
-- Configurable quality classifiers, toxicity/unsafe-content handling, and filtering reports.
+- Offline Indonesian/English language identification, lexical-quality metrics, eligibility reports, and deterministic sample inspection are implemented; language coverage and thresholds still require human calibration on representative corpora.
+- Semantic quality classifiers, toxicity/unsafe-content classifiers, and a reviewed filter-to-new-release workflow remain open.
 - Human review ledger and publication gate are implemented as an initial workflow; integration with an authenticated annotation UI and signed reviewer attestations remains open.
 - Frozen evaluation contamination gate is implemented for exact text and SimHash near-duplicates; semantic contamination detection and capacity calibration remain open.
 - Tokenizer-aware preprocessing and sequence packing.
