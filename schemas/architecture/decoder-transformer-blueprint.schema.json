@@ -17,12 +17,14 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "vocab_size", "layers", "hidden_size", "query_heads", "kv_heads",
+        "architecture_type", "norm_layout", "vocab_size", "layers", "hidden_size", "query_heads", "kv_heads",
         "intermediate_size", "context_length", "position_encoding",
         "normalization", "rms_norm_eps", "activation", "tied_embeddings",
         "attention_bias", "dropout", "rope_theta", "expected_parameters"
       ],
       "properties": {
+        "architecture_type": {"const": "dense_decoder_transformer"},
+        "norm_layout": {"const": "pre_norm"},
         "vocab_size": {"type": "integer", "minimum": 1},
         "layers": {"type": "integer", "minimum": 1},
         "hidden_size": {"type": "integer", "minimum": 1},
