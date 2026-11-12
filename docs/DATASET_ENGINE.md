@@ -191,7 +191,7 @@ Exit code 0 means every record passed the configured review gate; exit code 1 me
 
 ## Frozen evaluation contamination gate
 
-Keep the frozen release evaluation set separate from training, validation, and internal test sources. The frozen set must have a manifest with `purpose=frozen_evaluation`, `locked=true`, a pinned file name, SHA-256, byte size, record count, dataset ID/version, and timezone-aware creation timestamp. The manifest contract is defined by `schemas/llm/frozen-evaluation-manifest.schema.json`.
+Keep the frozen release evaluation set separate from training, validation, and internal test sources. Every evaluation record must use a pseudonymized ID matching `record_[0-9a-f]{24}`; do not place email addresses, usernames, customer IDs, or other direct identifiers in record IDs. The frozen set must have a manifest with `purpose=frozen_evaluation`, `locked=true`, a pinned file name, SHA-256, byte size, record count, dataset ID/version, and timezone-aware creation timestamp. The manifest contract is defined by `schemas/llm/frozen-evaluation-manifest.schema.json`.
 
 Example manifest shape (replace the identity, digest, size, and count with the actual frozen file values):
 
