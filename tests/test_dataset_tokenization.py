@@ -14,6 +14,10 @@ from rusamodels.dataset_tokenization import (
     hash_tokenizer_directory,
     pack_dataset_split,
 )
+from rusamodels.dataset_tokenized_verification import (
+    TokenizedDatasetVerificationError,
+    verify_tokenized_split,
+)
 
 
 class FakeTokenizer:
@@ -122,6 +126,15 @@ def test_pack_verified_split_into_fixed_length_sequences(tmp_path: Path) -> None
     assert manifest["source_split_sha256"]
     assert manifest["output_sha256"] == hashlib.sha256(output.read_bytes()).hexdigest()
 
+    verified = verify_tokenized_split(
+        output,
+        release_path=release,
+        tokenizer_path=_tokenizer_dir(release),
+    )
+    assert verified["valid"] is True
+    assert verified["source_verified"] is True
+    assert verified["tokenizer_verified"] is True
+
 
 def test_packer_rejects_tokenizer_ids_outside_vocabulary(tmp_path: Path) -> None:
     release = _release(tmp_path)
@@ -199,3 +212,71 @@ def test_tokenizer_directory_rejects_symlink_assets(tmp_path: Path) -> None:
         pytest.skip("symlink creation is not supported in this environment")
     with pytest.raises(DatasetTokenizationError, match="symlink"):
         hash_tokenizer_directory(tokenizer_dir)
+
+
+def test_tokenized_verifier_detects_output_tampering(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    output = tmp_path / "packed.jsonl"
+    _pack(release, output)
+    with output.open("a", encoding="utf-8") as handle:
+        handle.write("\n")
+
+    with pytest.raises(TokenizedDatasetVerificationError, match="SHA-256"):
+        verify_tokenized_split(output)
+
+
+def test_tokenized_verifier_checks_sequence_semantics_even_with_updated_digest(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    output = tmp_path / "packed.jsonl"
+    _pack(release, output)
+    rows = [
+        json.loads(line)
+        for line in output.read_text(encoding="utf-8").splitlines()
+    ]
+    rows[0]["labels"][0] = -100
+    output.write_text(
+        "".join(json.dumps(row, separators=(",", ":"), sort_keys=True) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+    manifest_path = output.with_suffix(output.suffix + ".manifest.json")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["output_sha256"] = hashlib.sha256(output.read_bytes()).hexdigest()
+    manifest["output_size_bytes"] = output.stat().st_size
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(TokenizedDatasetVerificationError, match="non-padding labels"):
+        verify_tokenized_split(output)
+
+
+def test_tokenized_verifier_detects_changed_tokenizer_assets(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    output = tmp_path / "packed.jsonl"
+    _pack(release, output)
+    tokenizer_dir = _tokenizer_dir(release)
+    (tokenizer_dir / "tokenizer.json").write_text('{"vocab":"changed"}', encoding="utf-8")
+
+    with pytest.raises(TokenizedDatasetVerificationError, match="do not match"):
+        verify_tokenized_split(output, tokenizer_path=tokenizer_dir)
+
+
+def test_tokenized_verifier_detects_wrong_source_release(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    output = tmp_path / "packed.jsonl"
+    _pack(release, output)
+    other_release = _release(tmp_path / "other")
+
+    with pytest.raises(TokenizedDatasetVerificationError, match="different dataset release"):
+        verify_tokenized_split(output, release_path=other_release)
+
+
+def test_tokenized_verifier_rejects_output_inside_source_release(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    output = tmp_path / "packed.jsonl"
+    _pack(release, output)
+    manifest_path = output.with_suffix(output.suffix + ".manifest.json")
+    with pytest.raises(TokenizedDatasetVerificationError, match="outside the immutable source release"):
+        verify_tokenized_split(
+            output,
+            manifest_path=release / "packed.manifest.json",
+            release_path=release,
+        )
