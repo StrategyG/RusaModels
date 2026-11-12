@@ -1,0 +1,108 @@
+# Include this file from the Nginx http{} context after replacing hostnames,
+# certificate paths, and the management VPN CIDR ranges.
+limit_req_zone $binary_remote_addr zone=rusa_inference_per_ip:10m rate=10r/s;
+limit_req_zone $binary_remote_addr zone=rusa_admin_per_ip:10m rate=2r/s;
+limit_conn_zone $binary_remote_addr zone=rusa_connections_per_ip:10m;
+limit_req_status 429;
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name models.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/models.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/models.example.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:RusaTLS:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "no-referrer" always;
+
+    client_header_timeout 15s;
+    client_body_timeout 30s;
+    send_timeout 360s;
+
+    # Public inference surface only. Management routes are not exposed here.
+    location /openai/v1/ {
+        limit_req zone=rusa_inference_per_ip burst=20 nodelay;
+        limit_conn rusa_connections_per_ip 20;
+        client_max_body_size 16m;
+
+        proxy_pass http://127.0.0.1:8000/openai/v1/;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_read_timeout 360s;
+        proxy_send_timeout 360s;
+        proxy_set_header Host $host;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+    }
+
+    location = /health/ready {
+        allow 127.0.0.1;
+        deny all;
+        proxy_pass http://127.0.0.1:8000/health/ready;
+        proxy_set_header Host $host;
+    }
+
+    location / {
+        return 404;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name admin.models.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/admin.models.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/admin.models.example.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:RusaAdminTLS:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    # Replace these examples with the actual VPN or management subnet.
+    allow 10.0.0.0/8;
+    allow 192.168.0.0/16;
+    deny all;
+
+    client_header_timeout 15s;
+    client_body_timeout 60s;
+    send_timeout 120s;
+
+    location /v1/ {
+        limit_req zone=rusa_admin_per_ip burst=5 nodelay;
+        limit_conn rusa_connections_per_ip 10;
+        client_max_body_size 70m;
+
+        proxy_pass http://127.0.0.1:8001;
+        proxy_http_version 1.1;
+        proxy_request_buffering off;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+        proxy_set_header Host $host;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location = /health/ready {
+        proxy_pass http://127.0.0.1:8001/health/ready;
+        proxy_set_header Host $host;
+    }
+
+    location / {
+        return 404;
+    }
+}

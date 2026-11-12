@@ -137,51 +137,68 @@ class S3ArtifactStorage:
 
     def __init__(self, settings):
         self.bucket = settings.s3_bucket
-        self.client = boto3.client(
-            "s3", endpoint_url=settings.s3_endpoint_url, region_name=settings.s3_region,
-            aws_access_key_id=settings.s3_access_key_id,
-            aws_secret_access_key=settings.s3_secret_access_key.get_secret_value() if settings.s3_secret_access_key else None,
+        def make_client(access_key_id, secret_access_key):
+            return boto3.client(
+                "s3",
+                endpoint_url=settings.s3_endpoint_url,
+                region_name=settings.s3_region,
+                aws_access_key_id=access_key_id,
+                aws_secret_access_key=(
+                    secret_access_key.get_secret_value() if secret_access_key else None
+                ),
+            )
+
+        self.read_client = make_client(
+            settings.s3_access_key_id, settings.s3_secret_access_key
         )
+        if settings.s3_write_access_key_id or settings.s3_write_secret_access_key:
+            self.write_client = make_client(
+                settings.s3_write_access_key_id, settings.s3_write_secret_access_key
+            )
+        else:
+            # IAM workload identity or the legacy development key may provide both.
+            self.write_client = self.read_client
+        self.client = self.read_client
 
     def check_ready(self):
-        self.client.head_bucket(Bucket=self.bucket)
+        self.read_client.head_bucket(Bucket=self.bucket)
 
     def write_bytes(self, key: str, payload: bytes, expected_sha256: str | None = None) -> StorageWriteResult:
         safe = validate_storage_key(key)
         digest = hashlib.sha256(payload).hexdigest()
         if expected_sha256 and not hmac.compare_digest(digest, expected_sha256.lower()):
             raise ValueError("SHA-256 mismatch")
-        self.client.put_object(Bucket=self.bucket, Key=safe, Body=payload,
+        self.write_client.put_object(Bucket=self.bucket, Key=safe, Body=payload,
                                ContentLength=len(payload), Metadata={"sha256": digest}, IfNoneMatch="*")
         return StorageWriteResult(safe, digest, len(payload))
 
     def create_multipart(self, key: str, content_type: str, metadata: dict[str, str]) -> str:
         safe = validate_storage_key(key)
-        result = self.client.create_multipart_upload(
+        result = self.write_client.create_multipart_upload(
             Bucket=self.bucket, Key=safe, ContentType=content_type, Metadata=metadata
         )
         return result["UploadId"]
 
     def upload_part(self, key: str, upload_id: str, part_number: int, payload: bytes) -> str:
-        result = self.client.upload_part(
+        result = self.write_client.upload_part(
             Bucket=self.bucket, Key=validate_storage_key(key), UploadId=upload_id,
             PartNumber=part_number, Body=payload,
         )
         return result["ETag"]
 
     def complete_multipart(self, key: str, upload_id: str, parts: list[dict]) -> None:
-        self.client.complete_multipart_upload(
+        self.write_client.complete_multipart_upload(
             Bucket=self.bucket, Key=validate_storage_key(key), UploadId=upload_id,
             MultipartUpload={"Parts": parts},
         )
 
     def abort_multipart(self, key: str, upload_id: str) -> None:
-        self.client.abort_multipart_upload(
+        self.write_client.abort_multipart_upload(
             Bucket=self.bucket, Key=validate_storage_key(key), UploadId=upload_id
         )
 
     def read_bytes(self, key: str) -> bytes:
-        body = self.client.get_object(
+        body = self.read_client.get_object(
             Bucket=self.bucket, Key=validate_storage_key(key)
         )["Body"]
         try:
@@ -198,7 +215,7 @@ class S3ArtifactStorage:
             body.close()
 
     def delete(self, key: str) -> None:
-        self.client.delete_object(Bucket=self.bucket, Key=validate_storage_key(key))
+        self.write_client.delete_object(Bucket=self.bucket, Key=validate_storage_key(key))
 
 
 def create_storage(settings):

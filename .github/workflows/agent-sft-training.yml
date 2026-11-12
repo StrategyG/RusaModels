@@ -25,10 +25,10 @@ jobs:
     timeout-minutes: 360
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, immutable commit
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0, immutable commit
         with:
           python-version: "3.11"
           cache: pip
@@ -37,7 +37,8 @@ jobs:
       - name: Install dedicated training dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements-train.txt
+          python -m pip install -r requirements-training.txt
+          python -m pip check
 
       - name: Verify NVIDIA T4 and CUDA capacity
         run: |
@@ -98,7 +99,7 @@ jobs:
 
       - name: Upload unpromoted T4 adapter and evaluation report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0, immutable commit
         with:
           name: rusa-agent-sft-t4-candidate-${{ github.run_id }}
           path: |

@@ -44,8 +44,13 @@ def parse_principals(raw: str) -> dict[str, Principal]:
     for digest, item in data.items():
         if not isinstance(digest, str) or not _DIGEST.fullmatch(digest):
             raise RuntimeError("API principal keys must be lowercase SHA-256 digests")
-        if not isinstance(item, dict) or not isinstance(item.get("subject"), str):
-            raise RuntimeError("Each API principal needs a subject and role")
+        if (
+            not isinstance(item, dict)
+            or not isinstance(item.get("subject"), str)
+            or not item["subject"].strip()
+            or len(item["subject"]) > 128
+        ):
+            raise RuntimeError("Each API principal needs a bounded, non-empty subject and role")
         if item.get("role") not in ROLE_PERMISSIONS:
             raise RuntimeError("Role must be viewer, inference, manager or administrator")
         result[digest] = Principal(item["subject"], item["role"])
@@ -99,3 +104,19 @@ def require_service_token(
     if not token or not hmac.compare_digest(sha256_hex(token), expected):
         raise HTTPException(401, "Invalid service credential")
     return "authenticated-service"
+
+
+
+def validate_production_service_credentials(settings, *, require_inference: bool = False) -> None:
+    """Fail closed before serving production API traffic."""
+    if not settings.service_token_sha256 or not _DIGEST.fullmatch(settings.service_token_sha256):
+        raise RuntimeError("RUSAMODELS_SERVICE_TOKEN_SHA256 must be a lowercase SHA-256 digest")
+    principals = parse_principals(settings.api_principals_json)
+    if not principals:
+        raise RuntimeError("RUSAMODELS_API_PRINCIPALS must contain at least one principal")
+    if require_inference and not any(
+        principal.role == "inference" for principal in principals.values()
+    ):
+        raise RuntimeError(
+            "The Model Server inference gateway requires a dedicated role=inference principal"
+        )

@@ -1,0 +1,22 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/StrategyG/RusaModels/.trivy/vex/setuptools-70.3.0-cve-2025-47273",
+  "author": "StrategyG RusaModels maintainers",
+  "timestamp": "2026-11-11T03:56:00Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2025-47273"
+      },
+      "products": [
+        {
+          "@id": "pkg:pypi/setuptools@70.3.0"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "component_not_present",
+      "impact_statement": "This statement is narrowly scoped to the stale setuptools@70.3.0 SBOM component reported by Trivy. On the final image filesystem, the Python package scanner identifies setuptools 84.2.1 at /usr/local/lib/python3.12/site-packages/setuptools-84.2.1.dist-info/METADATA, and the Dockerfile asserts the installed runtime setuptools version is at least 78.1.1. The Trivy JSON report shows the vulnerable 70.3.0 entry only as an SBOM-analyzed package, while the filesystem package entry is 84.2.1. The vulnerable 70.3.0 component is therefore not present in the shipped runtime filesystem. CI separately asserts the runtime version and checks for residual 70.3.0 metadata before applying this VEX statement. Reassess this statement if the base image, build process, or Trivy package evidence changes."
+    }
+  ]
+}

@@ -79,3 +79,29 @@ def test_conversion_subprocess_honors_preexisting_cancel_request(tmp_path):
     cancelled.set()
     with pytest.raises(InterruptedError, match="cancelled"):
         _run(["python", "-c", "print('should not run')"], tmp_path, 10, cancelled)
+
+
+@pytest.mark.parametrize("filename", ["pytorch_model.bin", "checkpoint.pt"])
+def test_inspect_rejects_pickle_based_weights(tmp_path, filename):
+    (tmp_path / "config.json").write_text(json.dumps({
+        "model_type": "qwen2",
+        "architectures": ["Qwen2ForCausalLM"],
+    }))
+    (tmp_path / filename).write_bytes(b"pickle-based-test-weight")
+
+    with pytest.raises(ValueError, match="Safetensors"):
+        inspect_model_directory(tmp_path)
+
+
+def test_inspect_prefers_safetensors_when_legacy_weights_are_also_present(tmp_path):
+    (tmp_path / "config.json").write_text(json.dumps({
+        "model_type": "qwen2",
+        "architectures": ["Qwen2ForCausalLM"],
+    }))
+    (tmp_path / "model.safetensors").write_bytes(b"safe-weight")
+    (tmp_path / "pytorch_model.bin").write_bytes(b"ignored-pickle-weight")
+
+    result = inspect_model_directory(tmp_path)
+
+    assert [path.name for path in result.weight_files] == ["model.safetensors"]
+    assert result.total_weight_bytes == len(b"safe-weight")

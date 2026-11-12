@@ -53,7 +53,10 @@ def run_evaluation(adapter_dir: Path, eval_file: Path, config_path: Path, output
         bnb_4bit_use_double_quant=bool(qlora_cfg.get("double_quant", True)),
         bnb_4bit_compute_dtype=compute_dtype,
     )
-    tokenizer = AutoTokenizer.from_pretrained(str(adapter_dir), trust_remote_code=False)
+    # The adapter directory is a local, provenance-checked artifact, never a Hub identifier.
+    tokenizer = AutoTokenizer.from_pretrained(  # nosec B615
+        str(adapter_dir), trust_remote_code=False, local_files_only=True
+    )
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
     base = AutoModelForCausalLM.from_pretrained(

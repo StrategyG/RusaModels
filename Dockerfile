@@ -1,13 +1,24 @@
 FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 WORKDIR /app
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && if [ "$(dpkg-query -W -f='${db:Status-Status}' python3-setuptools 2>/dev/null || true)" = "installed" ]; then apt-get purge -y --no-install-recommends python3-setuptools; fi \
+    && rm -rf /var/lib/apt/lists/*
 RUN groupadd --gid 1000 vscode && useradd --uid 1000 --gid vscode --create-home --shell /bin/bash vscode
 COPY pyproject.toml README.md ./
 COPY rusamodels ./rusamodels
 COPY services ./services
 COPY migrations ./migrations
 COPY alembic.ini ./
-RUN pip install --no-cache-dir . && chown -R vscode:vscode /app
+RUN python -m pip install --no-cache-dir --upgrade "pip>=25.3" "setuptools>=84.1.0" "wheel>=0.46.2" \
+    && python -m pip install --no-cache-dir . \
+    && python -m pip check \
+    && python -c "import setuptools; from packaging.version import Version; assert Version(setuptools.__version__) >= Version('78.1.1'), setuptools.__version__" \
+    && find /usr/local/lib/python3.12/site-packages -maxdepth 1 -type d \
+        \( -name 'setuptools-70.3.0.dist-info' -o -name 'setuptools-70.3.0.egg-info' \) \
+        -prune -exec rm -rf {} + \
+    && chown -R vscode:vscode /app
 ENV HOME=/home/vscode PATH=/home/vscode/.local/bin:$PATH
 USER vscode
 EXPOSE 8000

@@ -29,8 +29,9 @@ class FakeAsyncClient:
     last_stream = None
     fail_with_timeout = False
 
-    def __init__(self, timeout):
+    def __init__(self, timeout, trust_env=False):
         self.timeout = timeout
+        self.trust_env = trust_env
 
     def build_request(self, method, url, json, headers):
         return {"method": method, "url": url, "json": json, "headers": headers}
@@ -161,7 +162,11 @@ def test_openai_proxy_maps_runtime_timeout_to_gateway_timeout(api_client, monkey
                 json={"model": "qwen-local", "prompt": "hello"},
                 headers=auth("manager-test-token"),
             )
+            audit = client.get("/v1/platform/audit-events", headers=auth("admin-test-token"))
         assert response.status_code == 504
+        event = next(item for item in audit.json()["items"] if item["action"] == "inference.requested")
+        assert event["outcome"] == "failed"
+        assert event["metadata"]["status_code"] == 504
     finally:
         FakeAsyncClient.fail_with_timeout = False
 
@@ -268,8 +273,9 @@ def test_inference_service_role_can_call_only_openai_compatible_routes(api_clien
             return None
 
     class FakeClient:
-        def __init__(self, timeout):
+        def __init__(self, timeout, trust_env=False):
             self.timeout = timeout
+            self.trust_env = trust_env
 
         def build_request(self, method, url, json, headers):
             return {"method": method, "url": url, "json": json, "headers": headers}
@@ -300,3 +306,137 @@ def test_inference_service_role_can_call_only_openai_compatible_routes(api_clien
         assert client.get(
             "/v1/platform/audit-events", headers=inference_headers
         ).status_code == 403
+
+
+def test_inference_audit_records_upstream_http_failure(api_client, monkeypatch):
+    settings = api_client.app.state.settings
+    settings.inference_base_url = "http://runtime.internal:8088"
+    settings.inference_model_id = "qwen-local"
+
+    class UpstreamErrorResponse(FakeResponse):
+        status_code = 503
+
+    class UpstreamErrorClient(FakeAsyncClient):
+        async def send(self, request, stream=False):
+            type(self).last_request = request
+            type(self).last_stream = stream
+            return UpstreamErrorResponse()
+
+    monkeypatch.setattr("rusamodels.inference.httpx.AsyncClient", UpstreamErrorClient)
+    with _model_client(api_client, settings) as client:
+        response = client.post(
+            "/openai/v1/chat/completions",
+            json={"model": "qwen-local", "messages": [{"role": "user", "content": "hello"}]},
+            headers=auth("manager-test-token"),
+        )
+        audit = client.get("/v1/platform/audit-events", headers=auth("admin-test-token"))
+
+    assert response.status_code == 503
+    event = next(item for item in audit.json()["items"] if item["action"] == "inference.requested")
+    assert event["outcome"] == "upstream_error"
+    assert event["metadata"]["status_code"] == 503
+    assert event["metadata"]["latency_ms"] >= 0
+
+
+def test_inference_readiness_checks_upstream_model_catalog(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    from rusamodels.inference import check_runtime_readiness
+
+    class ModelListResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"data": [{"id": "qwen-local"}]}
+
+    class ModelListClient:
+        def __init__(self, timeout, trust_env=False):
+            assert trust_env is False
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, url, headers):
+            assert url == "https://runtime.example/v1/models"
+            assert headers["Authorization"] == "Bearer runtime-secret"
+            return ModelListResponse()
+
+    monkeypatch.setattr("rusamodels.inference.httpx.AsyncClient", ModelListClient)
+    settings = SimpleNamespace(
+        inference_base_url="https://runtime.example",
+        inference_model_id="qwen-local",
+        inference_api_key=SecretStr("runtime-secret"),
+        inference_timeout_seconds=30,
+        embedding_base_url=None,
+        embedding_model_id=None,
+    )
+
+    asyncio.run(check_runtime_readiness(settings, "chat/completions"))
+
+
+def test_inference_readiness_rejects_missing_configured_model(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    import pytest
+
+    from rusamodels.inference import check_runtime_readiness
+
+    class ModelListResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"data": [{"id": "different-model"}]}
+
+    class ModelListClient:
+        def __init__(self, timeout, trust_env=False):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, url, headers):
+            return ModelListResponse()
+
+    monkeypatch.setattr("rusamodels.inference.httpx.AsyncClient", ModelListClient)
+    settings = SimpleNamespace(
+        inference_base_url="https://runtime.example",
+        inference_model_id="qwen-local",
+        inference_api_key=SecretStr("runtime-secret"),
+        inference_timeout_seconds=30,
+        embedding_base_url=None,
+        embedding_model_id=None,
+    )
+
+    with pytest.raises(RuntimeError, match="not exposed"):
+        asyncio.run(check_runtime_readiness(settings, "chat/completions"))
+
+
+def test_model_server_readiness_checks_configured_chat_and_embedding_models(api_client, monkeypatch):
+    settings = api_client.app.state.settings
+    settings.inference_base_url = "https://chat-runtime.example"
+    settings.inference_model_id = "rusa-general-4b"
+    settings.embedding_base_url = "https://embedding-runtime.example"
+    settings.embedding_model_id = "rusa-embedding-small"
+    checked = []
+
+    async def ready(_settings, endpoint):
+        checked.append(endpoint)
+
+    monkeypatch.setattr("rusamodels.api.check_runtime_readiness", ready)
+    with _model_client(api_client, settings) as client:
+        response = client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert checked == ["chat/completions", "embeddings"]
+    assert response.json()["inference_runtime"] == "ready"
+    assert response.json()["embedding_runtime"] == "ready"

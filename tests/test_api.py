@@ -201,12 +201,24 @@ def test_conversion_job_queue_and_admin_cancel(api_client):
     )
     assert queued.status_code == 202
     job_id = queued.json()["id"]
+    output_version_id = queued.json()["output_version_id"]
     assert queued.json()["job_type"] == "convert"
     assert queued.json()["status"] == "queued"
     assert api_client.get(f"/v1/jobs/{job_id}", headers=auth("viewer-test-token")).status_code == 200
     cancelled = api_client.post(f"/v1/jobs/{job_id}/cancel", headers=auth("admin-test-token"))
     assert cancelled.status_code == 200
     assert cancelled.json()["status"] == "cancelled"
+
+    # A queued job and its output model version must reach the same terminal state.
+    from rusamodels.models import ModelVersion
+
+    db = api_client.app.state.sessions()
+    try:
+        output_version = db.get(ModelVersion, output_version_id)
+        assert output_version is not None
+        assert output_version.status == "cancelled"
+    finally:
+        db.close()
 
 
 def test_model_server_hub_search_and_artifact_write_boundary(api_client, monkeypatch):

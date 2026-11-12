@@ -1,0 +1,10 @@
+# Require repository-owner review for all source and deployment changes.
+* @StrategyG
+
+# Keep CI, security, and production deployment controls under explicit review.
+/.github/ @StrategyG
+/docker-compose.production.yml @StrategyG
+/Dockerfile @StrategyG
+/Dockerfile.quant-worker @StrategyG
+/docs/PRODUCTION_DEPLOYMENT.md @StrategyG
+/deploy/ @StrategyG

@@ -129,11 +129,13 @@ class ConversionEngine:
 
         inspect_model_directory(source_dir)
         dtype = getattr(torch, TORCH_DTYPES[precision])
-        model = AutoModelForCausalLM.from_pretrained(
+        # source_dir is a locally downloaded snapshot pinned to its immutable Hub commit.
+        model = AutoModelForCausalLM.from_pretrained(  # nosec B615
             source_dir,
             torch_dtype=dtype,
             low_cpu_mem_usage=True,
             trust_remote_code=False,
+            use_safetensors=True,
             local_files_only=True,
         )
         model.save_pretrained(output_dir, safe_serialization=True)
@@ -141,7 +143,8 @@ class ConversionEngine:
             del model
             raise InterruptedError("Conversion was cancelled")
         try:
-            tokenizer = AutoTokenizer.from_pretrained(
+            # source_dir is local and local_files_only prevents any Hub fallback.
+            tokenizer = AutoTokenizer.from_pretrained(  # nosec B615
                 source_dir, trust_remote_code=False, local_files_only=True
             )
             tokenizer.save_pretrained(output_dir)

@@ -1,6 +1,7 @@
 """Shared API factory for Model Server and Quant Server."""
 import hashlib
 import re
+import time
 import uuid
 from datetime import UTC, datetime
 from collections.abc import Generator
@@ -33,8 +34,14 @@ from rusamodels.schemas import (
     VersionOut,
 )
 from rusamodels.hub import search_models
-from rusamodels.inference import openai_model_list, proxy_openai_request
-from rusamodels.security import Principal, authenticate, record_audit, require_service_token
+from rusamodels.inference import check_runtime_readiness, openai_model_list, proxy_openai_request
+from rusamodels.security import (
+    Principal,
+    authenticate,
+    record_audit,
+    require_service_token,
+    validate_production_service_credentials,
+)
 from rusamodels.storage import create_storage
 
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
@@ -56,6 +63,19 @@ def create_service_app(
     storage=None,
 ) -> FastAPI:
     runtime = settings or get_settings()
+    if runtime.environment in {"staging", "production"}:
+        validate_production_service_credentials(
+            runtime,
+            require_inference=(service_name == "model-server" and bool(runtime.inference_base_url)),
+        )
+        if (
+            service_name == "quant-server"
+            and runtime.s3_access_key_id
+            and not runtime.s3_write_access_key_id
+        ):
+            raise RuntimeError(
+                "Quant Server requires distinct S3 write credentials when static read credentials are used"
+            )
     db_engine = engine or build_engine(runtime.database_url)
     sessions = build_session_factory(db_engine)
     artifact_storage = storage or create_storage(runtime)
@@ -63,6 +83,9 @@ def create_service_app(
         title=f"RusaModels {service_name}",
         version="0.2.0",
         description="Independent RUSA-AI model infrastructure control plane.",
+        docs_url=None if runtime.environment in {"staging", "production"} else "/docs",
+        redoc_url=None if runtime.environment in {"staging", "production"} else "/redoc",
+        openapi_url=None if runtime.environment in {"staging", "production"} else "/openapi.json",
     )
     app.state.settings = runtime
     app.state.engine = db_engine
@@ -119,6 +142,67 @@ def create_service_app(
     ):
         record_audit(db, request, principal, action, resource, outcome, metadata)
 
+    async def audited_inference_request(
+        payload: dict[str, Any],
+        request: Request,
+        principal: Principal,
+        db: Session,
+        endpoint: str,
+        resource: str,
+    ):
+        started = time.perf_counter()
+        requested_model = payload.get("model")
+        metadata = {
+            "model": requested_model[:128] if isinstance(requested_model, str) else None,
+        }
+        streaming = bool(payload.get("stream"))
+        if endpoint != "embeddings":
+            metadata["stream"] = streaming
+
+        try:
+            response = await proxy_openai_request(
+                runtime, payload, endpoint, request.state.request_id
+            )
+        except HTTPException as exc:
+            audit(
+                db, request, principal, "inference.requested", resource,
+                {
+                    **metadata,
+                    "status_code": exc.status_code,
+                    "latency_ms": round((time.perf_counter() - started) * 1000, 2),
+                },
+                outcome="failed",
+            )
+            raise
+        except Exception as exc:
+            audit(
+                db, request, principal, "inference.requested", resource,
+                {
+                    **metadata,
+                    "error_type": type(exc).__name__,
+                    "latency_ms": round((time.perf_counter() - started) * 1000, 2),
+                },
+                outcome="failed",
+            )
+            raise
+
+        status_code = response.status_code
+        outcome = (
+            "upstream_error" if status_code >= 400
+            else "stream_opened" if streaming
+            else "success"
+        )
+        audit(
+            db, request, principal, "inference.requested", resource,
+            {
+                **metadata,
+                "status_code": status_code,
+                "latency_ms": round((time.perf_counter() - started) * 1000, 2),
+            },
+            outcome=outcome,
+        )
+        return response
+
     def get_upload(db: Session, upload_id: str) -> UploadSession:
         upload = db.get(UploadSession, upload_id)
         if upload is None:
@@ -138,7 +222,8 @@ def create_service_app(
         return {"status": "alive", "service": service_name}
 
     @app.get("/health/ready", tags=["health"])
-    def ready():
+    async def ready():
+        dependencies = {"database": "ready", "artifact_storage": "ready"}
         try:
             with db_engine.connect() as connection:
                 connection.execute(text("SELECT 1"))
@@ -146,12 +231,15 @@ def create_service_app(
             if missing:
                 raise RuntimeError("Database migrations are not applied")
             artifact_storage.check_ready()
+            if service_name == "model-server" and runtime.inference_base_url:
+                await check_runtime_readiness(runtime, "chat/completions")
+                dependencies["inference_runtime"] = "ready"
+            if service_name == "model-server" and runtime.embedding_base_url:
+                await check_runtime_readiness(runtime, "embeddings")
+                dependencies["embedding_runtime"] = "ready"
         except Exception as exc:
             raise HTTPException(503, "Platform dependencies are not ready") from exc
-        return {
-            "status": "ready", "service": service_name,
-            "database": "ready", "artifact_storage": "ready",
-        }
+        return {"status": "ready", "service": service_name, **dependencies}
 
     @app.get("/v1/platform/identity", tags=["platform"])
     def identity(
@@ -573,13 +661,9 @@ def create_service_app(
             principal: Principal = Depends(roles("inference", "manager", "administrator")),
             db: Session = Depends(get_db),
         ):
-            audit(
-                db, request, principal, "inference.requested",
-                "/openai/v1/chat/completions",
-                {"model": payload.get("model"), "stream": bool(payload.get("stream"))},
-            )
-            return await proxy_openai_request(
-                runtime, payload, "chat/completions", request.state.request_id
+            return await audited_inference_request(
+                payload, request, principal, db,
+                "chat/completions", "/openai/v1/chat/completions",
             )
 
         @app.post("/openai/v1/completions", tags=["inference"])
@@ -589,13 +673,9 @@ def create_service_app(
             principal: Principal = Depends(roles("inference", "manager", "administrator")),
             db: Session = Depends(get_db),
         ):
-            audit(
-                db, request, principal, "inference.requested",
-                "/openai/v1/completions",
-                {"model": payload.get("model"), "stream": bool(payload.get("stream"))},
-            )
-            return await proxy_openai_request(
-                runtime, payload, "completions", request.state.request_id
+            return await audited_inference_request(
+                payload, request, principal, db,
+                "completions", "/openai/v1/completions",
             )
 
         @app.post("/openai/v1/embeddings", tags=["inference"])
@@ -605,13 +685,9 @@ def create_service_app(
             principal: Principal = Depends(roles("inference", "manager", "administrator")),
             db: Session = Depends(get_db),
         ):
-            audit(
-                db, request, principal, "inference.requested",
-                "/openai/v1/embeddings",
-                {"model": payload.get("model")},
-            )
-            return await proxy_openai_request(
-                runtime, payload, "embeddings", request.state.request_id
+            return await audited_inference_request(
+                payload, request, principal, db,
+                "embeddings", "/openai/v1/embeddings",
             )
 
     if service_name == "quant-server":
@@ -750,7 +826,11 @@ def create_service_app(
         principal: Principal = Depends(roles("administrator")),
         db: Session = Depends(get_db),
     ):
-        job = db.get(ModelJob, job_id)
+        # Serialize cancellation with worker claims. The worker locks the same
+        # ModelJob row before transitioning queued jobs to running.
+        job = db.scalar(
+            select(ModelJob).where(ModelJob.id == job_id).with_for_update()
+        )
         if job is None:
             raise HTTPException(404, "Model job not found")
         if job.status == "cancelled":
@@ -759,13 +839,21 @@ def create_service_app(
             job.status = "cancelled"
             job.finished_at = datetime.now(UTC)
             job.next_attempt_at = None
-            db.commit()
-            audit(db, request, principal, "model_job.cancelled", f"job:{job_id}")
+            job.lease_owner = None
+            job.lease_expires_at = None
+            if job.output_version_id:
+                output_version = db.get(ModelVersion, job.output_version_id)
+                if output_version is not None and output_version.status == "queued":
+                    output_version.status = "cancelled"
+            # record_audit commits the job, version and audit event together.
+            audit(
+                db, request, principal, "model_job.cancelled", f"job:{job_id}",
+                {"output_version_id": job.output_version_id},
+            )
             return job
         if job.status == "running":
             if not job.cancel_requested:
                 job.cancel_requested = True
-                db.commit()
                 audit(
                     db, request, principal, "model_job.cancel_requested",
                     f"job:{job_id}", {"lease_epoch": job.lease_epoch},
