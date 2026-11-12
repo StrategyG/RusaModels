@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rusamodels.local/schemas/training/research-100m-cpu-config.schema.json",
+  "title": "RusaAi Research 100M CPU Pilot Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "run", "architecture_config", "tokenizer_artifact_dir",
+    "data", "output_dir", "training", "dataloader", "cpu", "safety"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "seed", "device", "precision", "deterministic"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 96},
+        "seed": {"type": "integer", "minimum": 0},
+        "device": {"const": "cpu"},
+        "precision": {"const": "fp32"},
+        "deterministic": {"const": "best_effort"}
+      }
+    },
+    "architecture_config": {"type": "string", "minLength": 1},
+    "tokenizer_artifact_dir": {"type": "string", "minLength": 1},
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["train_corpus", "train_manifest", "validation_corpus", "validation_manifest"],
+      "properties": {
+        "train_corpus": {"type": "string", "minLength": 1},
+        "train_manifest": {"type": "string", "minLength": 1},
+        "validation_corpus": {"type": "string", "minLength": 1},
+        "validation_manifest": {"type": "string", "minLength": 1}
+      }
+    },
+    "output_dir": {"type": "string", "minLength": 1},
+    "training": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "micro_batch_size", "sequence_length", "gradient_accumulation_steps",
+        "gradient_checkpointing", "max_steps", "optimizer", "learning_rate",
+        "weight_decay", "warmup_ratio", "scheduler", "gradient_clip_norm",
+        "evaluation_interval_steps", "save_interval_steps", "max_checkpoints"
+      ],
+      "properties": {
+        "micro_batch_size": {"const": 1},
+        "sequence_length": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "gradient_accumulation_steps": {"type": "integer", "minimum": 1},
+        "gradient_checkpointing": {"type": "boolean"},
+        "max_steps": {"type": "integer", "minimum": 1, "maximum": 500},
+        "optimizer": {"const": "adamw"},
+        "learning_rate": {"type": "number", "exclusiveMinimum": 0},
+        "weight_decay": {"type": "number", "minimum": 0},
+        "warmup_ratio": {"type": "number", "minimum": 0, "maximum": 0.5},
+        "scheduler": {"const": "cosine"},
+        "gradient_clip_norm": {"type": "number", "exclusiveMinimum": 0},
+        "evaluation_interval_steps": {"type": "integer", "minimum": 1},
+        "save_interval_steps": {"type": "integer", "minimum": 1},
+        "max_checkpoints": {"type": "integer", "minimum": 1, "maximum": 3}
+      }
+    },
+    "dataloader": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["streaming", "num_workers", "pin_memory", "prefetch_factor"],
+      "properties": {
+        "streaming": {"const": true},
+        "num_workers": {"const": 0},
+        "pin_memory": {"const": false},
+        "prefetch_factor": {"const": 1}
+      }
+    },
+    "cpu": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["threads", "interop_threads", "gpu_offload"],
+      "properties": {
+        "threads": {"type": "integer", "minimum": 1, "maximum": 4},
+        "interop_threads": {"const": 1},
+        "gpu_offload": {"const": false}
+      }
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_training_process_ram_gb", "minimum_system_free_ram_gb",
+        "stop_on_oom", "stop_on_uncontrolled_swap", "max_swap_growth_gb"
+      ],
+      "properties": {
+        "max_training_process_ram_gb": {"type": "number", "exclusiveMinimum": 0, "maximum": 4},
+        "minimum_system_free_ram_gb": {"type": "number", "minimum": 1},
+        "stop_on_oom": {"const": true},
+        "stop_on_uncontrolled_swap": {"const": true},
+        "max_swap_growth_gb": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    }
+  }
+}
