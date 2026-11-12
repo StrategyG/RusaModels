@@ -203,8 +203,15 @@ def create_service_app(
         )
         return response
 
-    def get_upload(db: Session, upload_id: str) -> UploadSession:
-        upload = db.get(UploadSession, upload_id)
+    def get_upload(
+        db: Session, upload_id: str, *, for_update: bool = False
+    ) -> UploadSession:
+        statement = select(UploadSession).where(UploadSession.id == upload_id)
+        if for_update:
+            # Serialize part writes, completion and abort against the same session.
+            # PostgreSQL enforces this row lock until the request transaction commits.
+            statement = statement.with_for_update()
+        upload = db.scalar(statement)
         if upload is None:
             raise HTTPException(404, "Upload session not found")
         return upload
@@ -436,7 +443,7 @@ def create_service_app(
             raise HTTPException(404, "Artifact writes are available only on Quant Server")
         if part_number < 1 or part_number > 10000:
             raise HTTPException(422, "part_number must be between 1 and 10000")
-        upload = get_upload(db, upload_id)
+        upload = get_upload(db, upload_id, for_update=True)
         if upload.status != "open":
             raise HTTPException(409, "Upload session is not open")
         content_length = request.headers.get("content-length")
@@ -506,7 +513,7 @@ def create_service_app(
 
         if service_name != "quant-server":
             raise HTTPException(404, "Artifact writes are available only on Quant Server")
-        upload = get_upload(db, upload_id)
+        upload = get_upload(db, upload_id, for_update=True)
         if upload.status != "open":
             raise HTTPException(409, "Upload session is not open")
         parts = db.scalars(
@@ -614,7 +621,7 @@ def create_service_app(
 
         if service_name != "quant-server":
             raise HTTPException(404, "Artifact writes are available only on Quant Server")
-        upload = get_upload(db, upload_id)
+        upload = get_upload(db, upload_id, for_update=True)
         if upload.status != "open":
             raise HTTPException(409, "Only open uploads can be aborted")
         artifact_storage.abort_multipart(upload.storage_key, upload.storage_upload_id)
