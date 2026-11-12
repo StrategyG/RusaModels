@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -58,9 +59,17 @@ def _record_ids(release: Path) -> list[str]:
     return ids
 
 
-def _event(record_id: str, review_type: str, *, decision: str = "approved", reviewer_id: str | None = None) -> dict:
+def _event(
+    release: Path,
+    record_id: str,
+    review_type: str,
+    *,
+    decision: str = "approved",
+    reviewer_id: str | None = None,
+) -> dict:
     event = {
         "review_id": f"review-{record_id}-{review_type}-{decision}",
+        "release_manifest_sha256": hashlib.sha256((release / "manifest.json").read_bytes()).hexdigest(),
         "record_id": record_id,
         "review_type": review_type,
         "reviewer_id": reviewer_id or {
@@ -108,7 +117,13 @@ def _event(record_id: str, review_type: str, *, decision: str = "approved", revi
     return event
 
 
-def _write_ledger(path: Path, record_ids: list[str], *, omit: tuple[str, str] | None = None) -> Path:
+def _write_ledger(
+    path: Path,
+    release: Path,
+    record_ids: list[str],
+    *,
+    omit: tuple[str, str] | None = None,
+) -> Path:
     events = []
     for record_id in record_ids:
         for review_type in (
@@ -120,14 +135,14 @@ def _write_ledger(path: Path, record_ids: list[str], *, omit: tuple[str, str] | 
         ):
             if omit == (record_id, review_type):
                 continue
-            events.append(_event(record_id, review_type))
+            events.append(_event(release, record_id, review_type))
     return _write_jsonl(path, events)
 
 
 def test_complete_independent_review_and_publication_approval_passes(tmp_path: Path) -> None:
     release = _release(tmp_path)
     ids = _record_ids(release)
-    ledger = _write_ledger(tmp_path / "reviews.jsonl", ids)
+    ledger = _write_ledger(tmp_path / "reviews.jsonl", release, ids)
     report_path = tmp_path / "reports" / "review-report.json"
 
     result = evaluate_dataset_reviews(release, ledger, report_path)
@@ -151,6 +166,7 @@ def test_missing_review_type_blocks_publication(tmp_path: Path) -> None:
     ids = _record_ids(release)
     ledger = _write_ledger(
         tmp_path / "reviews.jsonl",
+        release,
         ids,
         omit=(ids[0], "rights"),
     )
@@ -164,9 +180,9 @@ def test_missing_review_type_blocks_publication(tmp_path: Path) -> None:
 def test_latest_rejected_review_overrides_earlier_approval(tmp_path: Path) -> None:
     release = _release(tmp_path)
     ids = _record_ids(release)
-    ledger = _write_ledger(tmp_path / "reviews.jsonl", ids)
+    ledger = _write_ledger(tmp_path / "reviews.jsonl", release, ids)
     with ledger.open("a", encoding="utf-8") as handle:
-        event = _event(ids[0], "security", decision="rejected")
+        event = _event(release, ids[0], "security", decision="rejected")
         event["review_id"] = "review-latest-security-rejection"
         event["reviewed_at"] = "2026-01-02T00:00:00Z"
         handle.write(json.dumps(event) + "\n")
@@ -180,9 +196,9 @@ def test_latest_rejected_review_overrides_earlier_approval(tmp_path: Path) -> No
 def test_independent_qa_reviewer_must_differ_from_technical_reviewer(tmp_path: Path) -> None:
     release = _release(tmp_path)
     ids = _record_ids(release)
-    ledger = _write_ledger(tmp_path / "reviews.jsonl", ids)
+    ledger = _write_ledger(tmp_path / "reviews.jsonl", release, ids)
     with ledger.open("a", encoding="utf-8") as handle:
-        event = _event(ids[0], "independent_qa", reviewer_id="reviewer_technical")
+        event = _event(release, ids[0], "independent_qa", reviewer_id="reviewer_technical")
         event["review_id"] = "review-conflicted-independent-qa"
         event["reviewed_at"] = "2026-01-02T00:00:00Z"
         handle.write(json.dumps(event) + "\n")
@@ -195,9 +211,9 @@ def test_independent_qa_reviewer_must_differ_from_technical_reviewer(tmp_path: P
 def test_publication_approver_must_be_independent(tmp_path: Path) -> None:
     release = _release(tmp_path)
     ids = _record_ids(release)
-    ledger = _write_ledger(tmp_path / "reviews.jsonl", ids)
+    ledger = _write_ledger(tmp_path / "reviews.jsonl", release, ids)
     with ledger.open("a", encoding="utf-8") as handle:
-        event = _event(ids[0], "publication_approval", reviewer_id="reviewer_independent_qa")
+        event = _event(release, ids[0], "publication_approval", reviewer_id="reviewer_independent_qa")
         event["review_id"] = "review-conflicted-publication"
         event["reviewed_at"] = "2026-01-02T00:00:00Z"
         handle.write(json.dumps(event) + "\n")
@@ -210,13 +226,13 @@ def test_publication_approver_must_be_independent(tmp_path: Path) -> None:
 def test_low_quality_and_high_risk_reviews_block_publication(tmp_path: Path) -> None:
     release = _release(tmp_path)
     ids = _record_ids(release)
-    ledger = _write_ledger(tmp_path / "reviews.jsonl", ids)
+    ledger = _write_ledger(tmp_path / "reviews.jsonl", release, ids)
     with ledger.open("a", encoding="utf-8") as handle:
-        technical = _event(ids[0], "technical")
+        technical = _event(release, ids[0], "technical")
         technical["review_id"] = "review-low-quality"
         technical["quality_score"] = 2
         technical["reviewed_at"] = "2026-01-02T00:00:00Z"
-        security = _event(ids[0], "security")
+        security = _event(release, ids[0], "security")
         security["review_id"] = "review-high-risk"
         security["risk_class"] = "critical"
         security["reviewed_at"] = "2026-01-02T00:01:00Z"
@@ -234,9 +250,9 @@ def test_low_quality_and_high_risk_reviews_block_publication(tmp_path: Path) -> 
 def test_review_ledger_rejects_unknown_records_and_duplicate_review_ids(tmp_path: Path) -> None:
     release = _release(tmp_path)
     ids = _record_ids(release)
-    ledger = _write_ledger(tmp_path / "reviews.jsonl", ids)
+    ledger = _write_ledger(tmp_path / "reviews.jsonl", release, ids)
     with ledger.open("a", encoding="utf-8") as handle:
-        event = _event("record_" + "0" * 24, "technical")
+        event = _event(release, "record_" + "0" * 24, "technical")
         event["review_id"] = "review-unknown-record"
         handle.write(json.dumps(event) + "\n")
 
@@ -247,7 +263,7 @@ def test_review_ledger_rejects_unknown_records_and_duplicate_review_ids(tmp_path
 def test_review_report_cannot_be_written_inside_immutable_release(tmp_path: Path) -> None:
     release = _release(tmp_path)
     ids = _record_ids(release)
-    ledger = _write_ledger(tmp_path / "reviews.jsonl", ids)
+    ledger = _write_ledger(tmp_path / "reviews.jsonl", release, ids)
 
     with pytest.raises(DatasetReviewError, match="outside the immutable dataset release"):
         evaluate_dataset_reviews(release, ledger, release / "review-report.json")
@@ -256,7 +272,7 @@ def test_review_report_cannot_be_written_inside_immutable_release(tmp_path: Path
 def test_review_events_require_timezone_and_pseudonymous_reviewer_ids(tmp_path: Path) -> None:
     release = _release(tmp_path)
     ids = _record_ids(release)
-    ledger = _write_ledger(tmp_path / "reviews.jsonl", ids)
+    ledger = _write_ledger(tmp_path / "reviews.jsonl", release, ids)
     lines = ledger.read_text(encoding="utf-8").splitlines()
     event = json.loads(lines[0])
     event["reviewed_at"] = "2026-01-01T00:00:00"
@@ -270,7 +286,7 @@ def test_review_events_require_timezone_and_pseudonymous_reviewer_ids(tmp_path: 
 def test_duplicate_review_event_ids_are_rejected(tmp_path: Path) -> None:
     release = _release(tmp_path)
     ids = _record_ids(release)
-    ledger = _write_ledger(tmp_path / "reviews.jsonl", ids)
+    ledger = _write_ledger(tmp_path / "reviews.jsonl", release, ids)
     events = ledger.read_text(encoding="utf-8").splitlines()
     duplicate = json.loads(events[0])
     duplicate["record_id"] = ids[1]
@@ -284,7 +300,7 @@ def test_duplicate_review_event_ids_are_rejected(tmp_path: Path) -> None:
 def test_malformed_review_types_fail_closed_without_type_errors(tmp_path: Path) -> None:
     release = _release(tmp_path)
     ids = _record_ids(release)
-    ledger = _write_ledger(tmp_path / "reviews.jsonl", ids)
+    ledger = _write_ledger(tmp_path / "reviews.jsonl", release, ids)
     events = ledger.read_text(encoding="utf-8").splitlines()
     event = json.loads(events[0])
     event["decision"] = ["approved"]
@@ -298,7 +314,7 @@ def test_malformed_review_types_fail_closed_without_type_errors(tmp_path: Path) 
 def test_review_gate_rejects_symlink_ledger(tmp_path: Path) -> None:
     release = _release(tmp_path)
     ids = _record_ids(release)
-    ledger = _write_ledger(tmp_path / "reviews.jsonl", ids)
+    ledger = _write_ledger(tmp_path / "reviews.jsonl", release, ids)
     symlink = tmp_path / "reviews-link.jsonl"
     try:
         symlink.symlink_to(ledger)
@@ -312,9 +328,9 @@ def test_review_gate_rejects_symlink_ledger(tmp_path: Path) -> None:
 def test_publication_approval_must_follow_the_latest_review(tmp_path: Path) -> None:
     release = _release(tmp_path)
     ids = _record_ids(release)
-    ledger = _write_ledger(tmp_path / "reviews.jsonl", ids)
+    ledger = _write_ledger(tmp_path / "reviews.jsonl", release, ids)
     with ledger.open("a", encoding="utf-8") as handle:
-        event = _event(ids[0], "technical")
+        event = _event(release, ids[0], "technical")
         event["review_id"] = "review-technical-after-publication"
         event["reviewed_at"] = "2026-01-02T00:00:00Z"
         handle.write(json.dumps(event) + "\n")
@@ -324,3 +340,17 @@ def test_publication_approval_must_follow_the_latest_review(tmp_path: Path) -> N
 
     assert result["approved_for_release"] is False
     assert report["blocker_counts"]["publication_approval_stale"] == 1
+
+
+def test_review_events_from_another_release_are_rejected(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    ids = _record_ids(release)
+    ledger = _write_ledger(tmp_path / "reviews.jsonl", release, ids)
+    events = ledger.read_text(encoding="utf-8").splitlines()
+    event = json.loads(events[0])
+    event["release_manifest_sha256"] = "0" * 64
+    events[0] = json.dumps(event)
+    ledger.write_text("\n".join(events) + "\n", encoding="utf-8")
+
+    with pytest.raises(DatasetReviewError, match="release manifest SHA-256 does not match"):
+        evaluate_dataset_reviews(release, ledger, tmp_path / "report.json")
