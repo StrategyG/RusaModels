@@ -143,7 +143,7 @@ Use the train export as the Carbon trainer's training corpus and the validation 
 
 ## Human review and publication gate
 
-A dataset release is immutable after it is built. Human review evidence is therefore kept in a separate append-only JSONL ledger and evaluated against the exact release manifest digest.
+A dataset release is immutable after it is built. Human review evidence is therefore kept in a separate append-only JSONL ledger. Every review event must include the exact `release_manifest_sha256`; the gate rejects events created for another dataset release, even when a pseudonymous record ID happens to be reused.
 
 Each released record requires the latest approved event for all five review types:
 
@@ -162,6 +162,7 @@ The event contract is defined by `schemas/llm/dataset-review-record.schema.json`
 ~~~json
 {
   "review_id": "review-example-technical-001",
+  "release_manifest_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
   "record_id": "record_0123456789abcdef01234567",
   "review_type": "technical",
   "reviewer_id": "reviewer_technical_01",
@@ -186,7 +187,7 @@ python -m rusamodels.dataset_review \
   --report artifacts/reports/rusaai-agent-sft-curated-0.1.0-review.json
 ~~~
 
-Exit code 0 means every record passed the configured review gate; exit code 1 means the report was generated but one or more records are blocked; exit code 2 means the release or ledger could not be evaluated. The report binds the review ledger digest to the exact dataset manifest digest. This tool validates reviewer identifiers and separation rules; it does not authenticate real-world reviewer identity or cryptographically sign approvals. Production publication must add identity-provider verification, controlled authorization, and an externally managed signature/attestation.
+Exit code 0 means every record passed the configured review gate; exit code 1 means the report was generated but one or more records are blocked; exit code 2 means the release or ledger could not be evaluated. The report binds the review ledger digest to the exact dataset manifest digest, and each individual event is required to carry that same digest. This tool validates reviewer identifiers and separation rules; it does not authenticate real-world reviewer identity or cryptographically sign approvals. Production publication must add identity-provider verification, controlled authorization, and an externally managed signature/attestation.
 
 ## Frozen evaluation contamination gate
 
