@@ -81,3 +81,76 @@ Do not commit corpora, token caches, or weights to Git. Back up checkpoints sepa
 ## Training claims and limitations
 
 A successful run proves that this small architecture completed an optimization loop; it does not establish general reasoning, safety, instruction-following, or production quality. The existing repository's 120/36 synthetic agent-SFT examples are not a substitute for a pretraining corpus. Carbon-MoE, expert routing, PRM/value head, long-context training, quantization-aware training, and agent tools are not implemented by this Tiny trainer and must be developed and evaluated as separate stages.
+
+
+## Neural Architecture Engine v1 and the 100M research blueprint
+
+The Phase 3 architecture engine currently supports one explicit architecture family: a pre-norm, dense decoder-only Transformer with GQA, RoPE, RMSNorm, SwiGLU, tied embeddings, and bias-free projections. Unsupported architecture fields fail closed rather than being silently ignored.
+
+The separate configs/architecture/rusaai-research-100m.json blueprint preserves the Training Engine v1.0 research target:
+
+| Component | Research 100M target |
+|---|---:|
+| Layers | 12 |
+| Hidden size | 768 |
+| Query heads / KV heads | 12 / 4 |
+| Head dimension | 64 |
+| SwiGLU intermediate | 2,048 |
+| Vocabulary | 32,000 |
+| Context design target | 4,096 |
+| Calculated trainable parameters | 100,092,672 |
+| EOS token ID | 2 |
+
+Validate the blueprint without allocating model weights:
+
+~~~bash
+python scripts/validate_architecture.py \\
+  --config configs/architecture/rusaai-research-100m.json
+~~~
+
+Optionally instantiate it after installing the CPU model dependencies. The model factory has a default 120-million-parameter construction ceiling and validates every layer's projection shapes, RoPE cache, normalization dimensions/epsilon, and exact parameter count:
+
+~~~bash
+python scripts/validate_architecture.py \\
+  --config configs/architecture/rusaai-research-100m.json \\
+  --instantiate
+~~~
+
+Instantiation is not training. The blueprint remains design_ready_training_not_started; no 100M checkpoint or capability claim is implied. The existing Carbon-Tiny v0.1 model remains a separate 3.2M-parameter byte-level smoke/research model.
+
+## Learned tokenizer for the 100M scratch track
+
+Carbon-Tiny's reversible UTF-8 byte tokenizer is not a learned subword tokenizer. The new tokenizer manager trains a separate ByteLevel BPE artifact for the from-scratch 100M research model. It must not replace a selected foundation model's tokenizer during ordinary LoRA/adaptation.
+
+Install the CPU research extra (includes PyTorch, NumPy, and Hugging Face Tokenizers):
+
+~~~bash
+python -m pip install -e ".[carbon-cpu]"
+~~~
+
+First export the verified Dataset Engine train split to plain text. The exporter creates a SHA-256 sidecar manifest:
+
+~~~bash
+python scripts/export_dataset_text.py \\
+  --release /path/to/verified-dataset-release \\
+  --split train \\
+  --output /path/to/rusaai-train.txt
+~~~
+
+Train and publish the immutable tokenizer artifact:
+
+~~~bash
+python scripts/train_rusa_tokenizer.py \\
+  --corpus /path/to/rusaai-train.txt \\
+  --corpus-manifest /path/to/rusaai-train.txt.manifest.json \\
+  --output-dir artifacts/tokenizers/rusaai-research-100m-bpe-32k \\
+  --vocab-size 32000 \\
+  --min-frequency 2
+~~~
+
+The trainer accepts only a verified Dataset Engine text-export sidecar with split=train, non-placeholder license identifiers, matching corpus digest/size, and a pinned release-manifest digest. It rejects validation, test, and frozen evaluation exports. The output contains tokenizer.json and rusa-tokenizer-manifest.json, including the tokenizer/library version, exact special-token IDs, vocabulary size, training corpus hashes, source dataset identity, and license declarations. The default special-token order is [UNK]=0, [BOS]=1, [EOS]=2, [PAD]=3, matching the 100M architecture blueprint.
+
+The trainer requires the corpus to produce the requested vocabulary size; it does not pad an undersized vocabulary with synthetic entries. Its Indonesian, English, code, and JSON round-trip probes are compatibility smoke tests, not a morphology benchmark or evidence of language quality. Review segmentation quality on a representative, human-approved corpus before using the tokenizer for a research run.
+
+The tokenizer artifact loader verifies the manifest, vocabulary, special-token IDs, file size, and SHA-256 before use. Keep the corpus, tokenizer, and resulting model artifacts outside Git. Declared license IDs are provenance metadata, not legal validation.
+
