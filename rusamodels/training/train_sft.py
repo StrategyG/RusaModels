@@ -94,6 +94,14 @@ def _write_new_file(path: Path, payload: bytes) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def _provenance_path(snapshot: dict[str, Any], *, root: Path = ROOT) -> str:
+    path = Path(snapshot["path"])
+    try:
+        return path.relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return f"external/sha256/{snapshot['sha256']}"
+
+
 def _build_torch_dataset(records: list[dict[str, Any]], tokenizer: Any, max_seq_length: int, torch: Any):
     class AgentSFTDataset(torch.utils.data.Dataset):
         def __init__(self) -> None:
@@ -399,11 +407,11 @@ def run_training(config_path: Path, *, train_path: Path | None = None, eval_path
         },
         "method": "QLoRA",
         "dataset": {
-            "train_path": train_snapshot["path"],
+            "train_path": _provenance_path(train_snapshot),
             "train_sha256": train_snapshot["sha256"],
             "train_size_bytes": train_snapshot["size_bytes"],
             "train_examples": len(train_records),
-            "eval_path": eval_snapshot["path"],
+            "eval_path": _provenance_path(eval_snapshot),
             "eval_sha256": eval_snapshot["sha256"],
             "eval_size_bytes": eval_snapshot["size_bytes"],
             "eval_examples": len(eval_records),
