@@ -3,9 +3,11 @@ from pathlib import Path
 import pytest
 
 from rusamodels.evaluation.evaluate_agent_sft import (
+    _adapter_file_manifest,
     _hash_adapter_directory,
     _parse_prediction,
     _safe_report_path,
+    _validate_adapter_manifest,
     _validate_provenance,
     _write_new_file,
 )
@@ -132,3 +134,25 @@ def test_model_output_json_rejects_duplicate_keys_and_nan() -> None:
         _parse_prediction('{"blocked":true,"blocked":false}')
     with pytest.raises(ValueError, match="non-standard JSON constant"):
         _parse_prediction('{"blocked":NaN}')
+
+
+def test_adapter_manifest_binds_every_file_to_model_revision(tmp_path: Path) -> None:
+    adapter = tmp_path / "adapter"
+    adapter.mkdir()
+    (adapter / "adapter_config.json").write_text('{"r":8}', encoding="utf-8")
+    actual = _adapter_file_manifest(adapter)
+    manifest = {
+        "schema_version": 1,
+        "artifact_type": "peft_adapter",
+        "model_id": "organization/model",
+        "model_revision": "a" * 40,
+        "files": actual["files"],
+        "adapter_sha256": actual["adapter_sha256"],
+    }
+
+    _validate_adapter_manifest(manifest, actual, "organization/model", "a" * 40)
+
+    (adapter / "adapter_config.json").write_text('{"r":16}', encoding="utf-8")
+    changed = _adapter_file_manifest(adapter)
+    with pytest.raises(ValueError, match="do not match"):
+        _validate_adapter_manifest(manifest, changed, "organization/model", "a" * 40)
