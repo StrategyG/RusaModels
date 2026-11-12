@@ -126,14 +126,14 @@ The verifier cannot recalculate source-file digests unless the original source f
 Carbon-Tiny consumes UTF-8 text corpora, while the Dataset Engine releases JSONL. Export each split independently; never combine train and validation/test splits.
 
 ~~~bash
-python scripts/export_dataset_text.py \\
-  --release artifacts/datasets/rusaai-agent-sft-curated/0.1.0 \\
-  --split train \\
+python scripts/export_dataset_text.py \
+  --release artifacts/datasets/rusaai-agent-sft-curated/0.1.0 \
+  --split train \
   --output artifacts/corpora/rusaai-agent-sft-curated-0.1.0-train.txt
 
-python scripts/export_dataset_text.py \\
-  --release artifacts/datasets/rusaai-agent-sft-curated/0.1.0 \\
-  --split validation \\
+python scripts/export_dataset_text.py \
+  --release artifacts/datasets/rusaai-agent-sft-curated/0.1.0 \
+  --split validation \
   --output artifacts/corpora/rusaai-agent-sft-curated-0.1.0-validation.txt
 ~~~
 
@@ -180,9 +180,9 @@ The event contract is defined by `schemas/llm/dataset-review-record.schema.json`
 Run the gate after review events are recorded:
 
 ~~~bash
-python -m rusamodels.dataset_review \\
-  --release artifacts/datasets/rusaai-agent-sft-curated/0.1.0 \\
-  --ledger artifacts/reviews/rusaai-agent-sft-curated-0.1.0.jsonl \\
+python -m rusamodels.dataset_review \
+  --release artifacts/datasets/rusaai-agent-sft-curated/0.1.0 \
+  --ledger artifacts/reviews/rusaai-agent-sft-curated-0.1.0.jsonl \
   --report artifacts/reports/rusaai-agent-sft-curated-0.1.0-review.json
 ~~~
 
@@ -192,13 +192,32 @@ Exit code 0 means every record passed the configured review gate; exit code 1 me
 
 Keep the frozen release evaluation set separate from training, validation, and internal test sources. The frozen set must have a manifest with `purpose=frozen_evaluation`, `locked=true`, a pinned file name, SHA-256, byte size, record count, dataset ID/version, and timezone-aware creation timestamp. The manifest contract is defined by `schemas/llm/frozen-evaluation-manifest.schema.json`.
 
+Example manifest shape (replace the identity, digest, size, and count with the actual frozen file values):
+
+~~~json
+{
+  "schema_version": "1.0.0",
+  "purpose": "frozen_evaluation",
+  "dataset_id": "rusaai-frozen-eval",
+  "dataset_version": "1.0.0",
+  "locked": true,
+  "file": "release-eval.jsonl",
+  "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "size_bytes": 123456,
+  "records": 1000,
+  "created_at": "2026-01-01T00:00:00Z"
+}
+~~~
+
+The `locked` field is an operator attestation; it does not make a filesystem or object-store object immutable. Store the evaluation file in access-controlled, versioned storage and protect the manifest with an external signature or approval record.
+
 Compare all three dataset splits against the frozen evaluation set:
 
 ~~~bash
-python -m rusamodels.dataset_contamination \\
-  --release artifacts/datasets/rusaai-agent-sft-curated/0.1.0 \\
-  --frozen-evaluation data/frozen_eval/release-eval.jsonl \\
-  --frozen-manifest data/frozen_eval/release-eval.manifest.json \\
+python -m rusamodels.dataset_contamination \
+  --release artifacts/datasets/rusaai-agent-sft-curated/0.1.0 \
+  --frozen-evaluation data/frozen_eval/release-eval.jsonl \
+  --frozen-manifest data/frozen_eval/release-eval.manifest.json \
   --report artifacts/reports/rusaai-agent-sft-curated-0.1.0-contamination.jsonl
 ~~~
 
