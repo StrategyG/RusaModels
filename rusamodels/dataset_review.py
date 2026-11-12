@@ -380,11 +380,13 @@ def evaluate_dataset_reviews(
                         "risk_class": row[4],
                         "rights_status": row[5],
                         "publication_authorized": bool(row[6]),
+                        "reviewed_epoch": row[7],
                     }
                     for row in connection.execute(
                         """
                         SELECT review_type, reviewer_id, decision, quality_score,
-                               risk_class, rights_status, publication_authorized
+                               risk_class, rights_status, publication_authorized,
+                               reviewed_epoch
                         FROM latest_reviews
                         WHERE record_id = ?
                         """,
@@ -421,6 +423,13 @@ def evaluate_dataset_reviews(
                         blockers.append("rights_not_approved")
                     if not publication["publication_authorized"]:
                         blockers.append("publication_not_authorized")
+                    latest_review_epoch = max(
+                        review["reviewed_epoch"]
+                        for review_type, review in reviews.items()
+                        if review_type != "publication_approval"
+                    )
+                    if publication["reviewed_epoch"] < latest_review_epoch:
+                        blockers.append("publication_approval_stale")
                     if technical["reviewer_id"] == independent_qa["reviewer_id"]:
                         blockers.append("independent_qa_reviewer_conflict")
                     if publication["reviewer_id"] in {
