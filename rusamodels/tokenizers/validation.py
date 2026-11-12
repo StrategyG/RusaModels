@@ -141,6 +141,11 @@ def validate_chat_template(
         raise ValueError("foundation tokenizer pad_token_id is invalid")
     if not isinstance(decoded, str) or not decoded.strip():
         raise ValueError("chat template decode returned empty text")
+    user_content = next(
+        message["content"] for message in sample_messages if message["role"] == "user"
+    )
+    if user_content not in decoded:
+        raise ValueError("chat template decode did not preserve the user message content")
     return {
         "chat_template_present": True,
         "vocab_size": vocabulary_size,
