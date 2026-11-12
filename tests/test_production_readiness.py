@@ -40,6 +40,11 @@ def _valid_evidence() -> dict:
             "artifact_sha256": artifact,
             "manifest_sha256": "e" * 64,
             "lifecycle_status": "approved",
+            "model_track": "product",
+            "base_checkpoint_revision": "vendor/model@0123456789abcdef",
+            "license_approved": True,
+            "tokenizer_sha256": "1" * 64,
+            "model_card_sha256": "2" * 64,
         },
         "evaluation": {
             "model_id": "rusaai-edge",
@@ -49,6 +54,16 @@ def _valid_evidence() -> dict:
             "safety_gate_passed": True,
             "regression_gate_passed": True,
             "report_sha256": "f" * 64,
+            "evaluation_dataset_manifest_sha256": "3" * 64,
+            "json_schema_validity_percent": 99.0,
+            "tool_permission_compliance_percent": 100.0,
+            "unauthorized_destructive_tool_executions": 0,
+            "citation_attribution_percent": 96.0,
+            "critical_safety_pass_percent": 100.0,
+            "indonesian_human_mean_score": 4.2,
+            "quantization_regression_passed": True,
+            "runtime_stability_minutes": 45,
+            "artifact_integrity_percent": 100.0,
         },
         "runtime": {
             "model_artifact_sha256": artifact,
@@ -92,6 +107,20 @@ def _valid_evidence() -> dict:
             "monitoring_enabled": True,
             "alerting_enabled": True,
             "deployment_profile": "cpu-production-16gb",
+            "conversion_sandbox_verified": True,
+            "worker_egress_restricted": True,
+            "ingress_rate_limits_enforced": True,
+            "waf_enabled": True,
+            "management_api_restricted": True,
+            "database_least_privilege_verified": True,
+            "s3_least_privilege_verified": True,
+            "audit_append_only_verified": True,
+            "container_hardening_verified": True,
+            "branch_protection_enabled": True,
+            "codeowners_review_enabled": True,
+            "secret_scanning_enabled": True,
+            "signed_images_verified": True,
+            "sbom_provenance_verified": True,
         },
     }
 
@@ -148,3 +177,41 @@ def test_production_gate_reports_missing_evidence_instead_of_certifying() -> Non
     report = check_production_evidence({"schema_version": "1.0.0"}, "1" * 64)
     assert report["status"] == "not_ready"
     assert report["summary"]["failed_gates"]
+
+
+
+def test_production_gate_rejects_missing_conversion_sandbox_and_worker_egress():
+    evidence = _valid_evidence()
+    evidence["deployment"]["conversion_sandbox_verified"] = False
+    evidence["deployment"]["worker_egress_restricted"] = False
+    report = check_production_evidence(evidence, "1" * 64)
+    assert report["status"] == "not_ready"
+    assert "deployment" in report["summary"]["failed_gates"]
+
+
+def test_production_gate_requires_product_model_lineage_and_tokenizer():
+    evidence = _valid_evidence()
+    evidence["model"]["model_track"] = "research"
+    evidence["model"]["tokenizer_sha256"] = "invalid"
+    report = check_production_evidence(evidence, "1" * 64)
+    assert report["status"] == "not_ready"
+    assert "model_release" in report["summary"]["failed_gates"]
+
+
+def test_production_gate_enforces_training_engine_release_thresholds():
+    evidence = _valid_evidence()
+    evidence["evaluation"]["json_schema_validity_percent"] = 97.9
+    evidence["evaluation"]["tool_permission_compliance_percent"] = 99.9
+    evidence["evaluation"]["indonesian_human_mean_score"] = 3.9
+    report = check_production_evidence(evidence, "1" * 64)
+    assert report["status"] == "not_ready"
+    assert "evaluation" in report["summary"]["failed_gates"]
+
+
+def test_production_gate_requires_repository_and_supply_chain_governance():
+    evidence = _valid_evidence()
+    evidence["deployment"]["branch_protection_enabled"] = False
+    evidence["deployment"]["signed_images_verified"] = False
+    report = check_production_evidence(evidence, "1" * 64)
+    assert report["status"] == "not_ready"
+    assert "deployment" in report["summary"]["failed_gates"]

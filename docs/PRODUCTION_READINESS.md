@@ -15,13 +15,13 @@ Create one UTF-8 JSON file following `schemas/production/production-evidence.sch
 | `release` | Git commit, immutable container digest, deployment-config digest, model ID/version/artifact digest |
 | `ci` | Successful required checks on the exact release commit and CI run URL |
 | `security` | Passed security scan, zero critical/high/secret findings, report URL |
-| `model` | Approved lifecycle state, model manifest digest, exact artifact digest |
-| `evaluation` | Benchmark, safety, and regression gates passed for the exact model artifact |
+| `model` | Approved product-model track, checkpoint lineage/revision, license approval, tokenizer/model-card/manifest digests, exact artifact digest |
+| `evaluation` | Frozen dataset manifest; benchmark, safety, regression, quantization, schema, tool-permission, citation, Indonesian human-evaluation, runtime-stability, and artifact-integrity thresholds from the Training Engine |
 | `runtime` | CPU-only health check, named hardware, RAM reserve, TTFT, tokens/second, zero OOM |
 | `soak` | At least 24 hours, at least 100 requests, error rate at most 0.1%, zero crashes/OOM |
 | `backup_restore` | Verified database and object-storage backups, successful restore, backup no older than 24 hours |
 | `rollback` | Successful software and model rollback tests |
-| `deployment` | HTTPS, PostgreSQL `sslmode=verify-full`, secret manager, external object storage, persistence, monitoring, alerting |
+| `deployment` | HTTPS, PostgreSQL `sslmode=verify-full`, secret manager, isolated conversion sandbox, restricted worker egress, WAF/rate limits, restricted management API, least-privilege database/S3 identities, append-only audit, hardened containers, branch/CODEOWNERS protection, secret scanning, signed images/SBOM provenance, persistence, monitoring, and alerting |
 
 The model artifact SHA-256 must match across the release, registry, evaluation report, and runtime evidence. The CI commit must equal the release Git commit.
 

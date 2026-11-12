@@ -18,7 +18,9 @@
     "deployment"
   ],
   "properties": {
-    "schema_version": {"const": "1.0.0"},
+    "schema_version": {
+      "const": "1.0.0"
+    },
     "release": {
       "type": "object",
       "additionalProperties": false,
@@ -32,130 +34,487 @@
         "model_artifact_sha256"
       ],
       "properties": {
-        "release_id": {"type": "string", "minLength": 1},
-        "git_commit_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-        "container_image_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-        "deployment_config_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "model_id": {"type": "string", "minLength": 1},
-        "model_version": {"type": "string", "minLength": 1},
-        "model_artifact_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        "release_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "git_commit_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "container_image_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "deployment_config_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "model_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_artifact_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
       }
     },
     "ci": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["commit_sha", "conclusion", "required_checks_passed", "run_url"],
+      "required": [
+        "commit_sha",
+        "conclusion",
+        "required_checks_passed",
+        "run_url"
+      ],
       "properties": {
-        "commit_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-        "conclusion": {"const": "success"},
-        "required_checks_passed": {"const": true},
-        "run_url": {"type": "string", "format": "uri"}
+        "commit_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "conclusion": {
+          "const": "success"
+        },
+        "required_checks_passed": {
+          "const": true
+        },
+        "run_url": {
+          "type": "string",
+          "format": "uri"
+        }
       }
     },
     "security": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status", "critical_findings", "high_findings", "secret_findings", "report_url"],
+      "required": [
+        "status",
+        "critical_findings",
+        "high_findings",
+        "secret_findings",
+        "report_url"
+      ],
       "properties": {
-        "status": {"const": "passed"},
-        "critical_findings": {"type": "integer", "const": 0},
-        "high_findings": {"type": "integer", "const": 0},
-        "secret_findings": {"type": "integer", "const": 0},
-        "report_url": {"type": "string", "format": "uri"}
+        "status": {
+          "const": "passed"
+        },
+        "critical_findings": {
+          "type": "integer",
+          "const": 0
+        },
+        "high_findings": {
+          "type": "integer",
+          "const": 0
+        },
+        "secret_findings": {
+          "type": "integer",
+          "const": 0
+        },
+        "report_url": {
+          "type": "string",
+          "format": "uri"
+        }
       }
     },
     "model": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["model_id", "model_version", "artifact_sha256", "manifest_sha256", "lifecycle_status"],
+      "required": [
+        "model_id",
+        "model_version",
+        "artifact_sha256",
+        "manifest_sha256",
+        "lifecycle_status",
+        "model_track",
+        "base_checkpoint_revision",
+        "license_approved",
+        "tokenizer_sha256",
+        "model_card_sha256"
+      ],
       "properties": {
-        "model_id": {"type": "string", "minLength": 1},
-        "model_version": {"type": "string", "minLength": 1},
-        "artifact_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "lifecycle_status": {"const": "approved"}
+        "model_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifact_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "manifest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "lifecycle_status": {
+          "const": "approved"
+        },
+        "model_track": {
+          "const": "product"
+        },
+        "base_checkpoint_revision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "license_approved": {
+          "const": true
+        },
+        "tokenizer_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "model_card_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
       }
     },
     "evaluation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["model_id", "model_version", "artifact_sha256", "benchmark_gate_passed", "safety_gate_passed", "regression_gate_passed", "report_sha256"],
+      "required": [
+        "model_id",
+        "model_version",
+        "artifact_sha256",
+        "benchmark_gate_passed",
+        "safety_gate_passed",
+        "regression_gate_passed",
+        "report_sha256",
+        "evaluation_dataset_manifest_sha256",
+        "json_schema_validity_percent",
+        "tool_permission_compliance_percent",
+        "unauthorized_destructive_tool_executions",
+        "citation_attribution_percent",
+        "critical_safety_pass_percent",
+        "indonesian_human_mean_score",
+        "quantization_regression_passed",
+        "runtime_stability_minutes",
+        "artifact_integrity_percent"
+      ],
       "properties": {
-        "model_id": {"type": "string", "minLength": 1},
-        "model_version": {"type": "string", "minLength": 1},
-        "artifact_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "benchmark_gate_passed": {"const": true},
-        "safety_gate_passed": {"const": true},
-        "regression_gate_passed": {"const": true},
-        "report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        "model_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifact_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "benchmark_gate_passed": {
+          "const": true
+        },
+        "safety_gate_passed": {
+          "const": true
+        },
+        "regression_gate_passed": {
+          "const": true
+        },
+        "report_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "evaluation_dataset_manifest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "json_schema_validity_percent": {
+          "type": "number",
+          "minimum": 98,
+          "maximum": 100
+        },
+        "tool_permission_compliance_percent": {
+          "type": "number",
+          "const": 100
+        },
+        "unauthorized_destructive_tool_executions": {
+          "type": "integer",
+          "const": 0
+        },
+        "citation_attribution_percent": {
+          "type": "number",
+          "minimum": 95,
+          "maximum": 100
+        },
+        "critical_safety_pass_percent": {
+          "type": "number",
+          "const": 100
+        },
+        "indonesian_human_mean_score": {
+          "type": "number",
+          "minimum": 4,
+          "maximum": 5
+        },
+        "quantization_regression_passed": {
+          "const": true
+        },
+        "runtime_stability_minutes": {
+          "type": "number",
+          "minimum": 30
+        },
+        "artifact_integrity_percent": {
+          "type": "number",
+          "const": 100
+        }
       }
     },
     "runtime": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["model_artifact_sha256", "health_check_passed", "cpu_only", "oom_events", "hardware_profile", "peak_ram_mb", "free_ram_reserve_mb", "ttft_ms", "tokens_per_second", "benchmark_report_url"],
+      "required": [
+        "model_artifact_sha256",
+        "health_check_passed",
+        "cpu_only",
+        "oom_events",
+        "hardware_profile",
+        "peak_ram_mb",
+        "free_ram_reserve_mb",
+        "ttft_ms",
+        "tokens_per_second",
+        "benchmark_report_url"
+      ],
       "properties": {
-        "model_artifact_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "health_check_passed": {"const": true},
-        "cpu_only": {"const": true},
-        "oom_events": {"type": "integer", "const": 0},
-        "hardware_profile": {"type": "string", "minLength": 1},
-        "peak_ram_mb": {"type": "number", "exclusiveMinimum": 0},
-        "free_ram_reserve_mb": {"type": "number", "exclusiveMinimum": 0},
-        "ttft_ms": {"type": "number", "minimum": 0},
-        "tokens_per_second": {"type": "number", "exclusiveMinimum": 0},
-        "benchmark_report_url": {"type": "string", "format": "uri"}
+        "model_artifact_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "health_check_passed": {
+          "const": true
+        },
+        "cpu_only": {
+          "const": true
+        },
+        "oom_events": {
+          "type": "integer",
+          "const": 0
+        },
+        "hardware_profile": {
+          "type": "string",
+          "minLength": 1
+        },
+        "peak_ram_mb": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "free_ram_reserve_mb": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "ttft_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "tokens_per_second": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "benchmark_report_url": {
+          "type": "string",
+          "format": "uri"
+        }
       }
     },
     "soak": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["duration_hours", "requests", "error_rate", "oom_events", "crash_count", "p95_latency_ms", "report_url"],
+      "required": [
+        "duration_hours",
+        "requests",
+        "error_rate",
+        "oom_events",
+        "crash_count",
+        "p95_latency_ms",
+        "report_url"
+      ],
       "properties": {
-        "duration_hours": {"type": "number", "exclusiveMinimum": 0},
-        "requests": {"type": "integer", "minimum": 1},
-        "error_rate": {"type": "number", "minimum": 0, "maximum": 1},
-        "oom_events": {"type": "integer", "const": 0},
-        "crash_count": {"type": "integer", "const": 0},
-        "p95_latency_ms": {"type": "number", "exclusiveMinimum": 0},
-        "report_url": {"type": "string", "format": "uri"}
+        "duration_hours": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "requests": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "error_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "oom_events": {
+          "type": "integer",
+          "const": 0
+        },
+        "crash_count": {
+          "type": "integer",
+          "const": 0
+        },
+        "p95_latency_ms": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "report_url": {
+          "type": "string",
+          "format": "uri"
+        }
       }
     },
     "backup_restore": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["database_backup_verified", "object_storage_backup_verified", "restore_test_passed", "backup_age_hours", "report_url"],
+      "required": [
+        "database_backup_verified",
+        "object_storage_backup_verified",
+        "restore_test_passed",
+        "backup_age_hours",
+        "report_url"
+      ],
       "properties": {
-        "database_backup_verified": {"const": true},
-        "object_storage_backup_verified": {"const": true},
-        "restore_test_passed": {"const": true},
-        "backup_age_hours": {"type": "number", "minimum": 0},
-        "report_url": {"type": "string", "format": "uri"}
+        "database_backup_verified": {
+          "const": true
+        },
+        "object_storage_backup_verified": {
+          "const": true
+        },
+        "restore_test_passed": {
+          "const": true
+        },
+        "backup_age_hours": {
+          "type": "number",
+          "minimum": 0
+        },
+        "report_url": {
+          "type": "string",
+          "format": "uri"
+        }
       }
     },
     "rollback": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["software_rollback_test_passed", "model_rollback_test_passed", "report_url"],
+      "required": [
+        "software_rollback_test_passed",
+        "model_rollback_test_passed",
+        "report_url"
+      ],
       "properties": {
-        "software_rollback_test_passed": {"const": true},
-        "model_rollback_test_passed": {"const": true},
-        "report_url": {"type": "string", "format": "uri"}
+        "software_rollback_test_passed": {
+          "const": true
+        },
+        "model_rollback_test_passed": {
+          "const": true
+        },
+        "report_url": {
+          "type": "string",
+          "format": "uri"
+        }
       }
     },
     "deployment": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["https_enforced", "postgres_sslmode", "secrets_from_secret_manager", "object_storage_external", "persistent_storage", "monitoring_enabled", "alerting_enabled", "deployment_profile"],
+      "required": [
+        "https_enforced",
+        "postgres_sslmode",
+        "secrets_from_secret_manager",
+        "object_storage_external",
+        "persistent_storage",
+        "monitoring_enabled",
+        "alerting_enabled",
+        "deployment_profile",
+        "conversion_sandbox_verified",
+        "worker_egress_restricted",
+        "ingress_rate_limits_enforced",
+        "waf_enabled",
+        "management_api_restricted",
+        "database_least_privilege_verified",
+        "s3_least_privilege_verified",
+        "audit_append_only_verified",
+        "container_hardening_verified",
+        "branch_protection_enabled",
+        "codeowners_review_enabled",
+        "secret_scanning_enabled",
+        "signed_images_verified",
+        "sbom_provenance_verified"
+      ],
       "properties": {
-        "https_enforced": {"const": true},
-        "postgres_sslmode": {"const": "verify-full"},
-        "secrets_from_secret_manager": {"const": true},
-        "object_storage_external": {"const": true},
-        "persistent_storage": {"const": true},
-        "monitoring_enabled": {"const": true},
-        "alerting_enabled": {"const": true},
-        "deployment_profile": {"type": "string", "minLength": 1}
+        "https_enforced": {
+          "const": true
+        },
+        "postgres_sslmode": {
+          "const": "verify-full"
+        },
+        "secrets_from_secret_manager": {
+          "const": true
+        },
+        "object_storage_external": {
+          "const": true
+        },
+        "persistent_storage": {
+          "const": true
+        },
+        "monitoring_enabled": {
+          "const": true
+        },
+        "alerting_enabled": {
+          "const": true
+        },
+        "deployment_profile": {
+          "type": "string",
+          "minLength": 1
+        },
+        "conversion_sandbox_verified": {
+          "const": true
+        },
+        "worker_egress_restricted": {
+          "const": true
+        },
+        "ingress_rate_limits_enforced": {
+          "const": true
+        },
+        "waf_enabled": {
+          "const": true
+        },
+        "management_api_restricted": {
+          "const": true
+        },
+        "database_least_privilege_verified": {
+          "const": true
+        },
+        "s3_least_privilege_verified": {
+          "const": true
+        },
+        "audit_append_only_verified": {
+          "const": true
+        },
+        "container_hardening_verified": {
+          "const": true
+        },
+        "branch_protection_enabled": {
+          "const": true
+        },
+        "codeowners_review_enabled": {
+          "const": true
+        },
+        "secret_scanning_enabled": {
+          "const": true
+        },
+        "signed_images_verified": {
+          "const": true
+        },
+        "sbom_provenance_verified": {
+          "const": true
+        }
       }
     }
   }
