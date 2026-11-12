@@ -354,3 +354,20 @@ def test_review_events_from_another_release_are_rejected(tmp_path: Path) -> None
 
     with pytest.raises(DatasetReviewError, match="release manifest SHA-256 does not match"):
         evaluate_dataset_reviews(release, ledger, tmp_path / "report.json")
+
+
+def test_publication_approval_timestamp_tie_fails_closed(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    ids = _record_ids(release)
+    ledger = _write_ledger(tmp_path / "reviews.jsonl", release, ids)
+    with ledger.open("a", encoding="utf-8") as handle:
+        event = _event(release, ids[0], "technical")
+        event["review_id"] = "review-technical-tied-with-publication"
+        event["reviewed_at"] = "2026-01-01T00:04:00Z"
+        handle.write(json.dumps(event) + "\n")
+
+    result = evaluate_dataset_reviews(release, ledger, tmp_path / "report.json")
+    report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
+
+    assert result["approved_for_release"] is False
+    assert report["blocker_counts"]["publication_approval_stale"] == 1
