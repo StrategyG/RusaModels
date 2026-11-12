@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rusamodels.local/schemas/llm/dataset-language-quality-record.schema.json",
+  "title": "RusaModels Dataset Language and Quality Analysis Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "record_id",
+    "split",
+    "language",
+    "confidence",
+    "runner_up_language",
+    "runner_up_confidence",
+    "metrics",
+    "eligible",
+    "reasons"
+  ],
+  "properties": {
+    "record_id": {"type": "string", "pattern": "^record_[0-9a-f]{24}$"},
+    "split": {"type": "string", "enum": ["train", "validation", "test"]},
+    "language": {"type": "string", "pattern": "^(?:[a-z]{2,3}|mixed|und)$"},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "runner_up_language": {"type": ["string", "null"], "pattern": "^(?:[a-z]{2,3}|und)$"},
+    "runner_up_confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text_characters",
+        "word_count",
+        "unique_word_ratio",
+        "repeated_character_ratio"
+      ],
+      "properties": {
+        "text_characters": {"type": "integer", "minimum": 0},
+        "word_count": {"type": "integer", "minimum": 0},
+        "unique_word_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+        "repeated_character_ratio": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "eligible": {"type": "boolean"},
+    "reasons": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "text_too_short",
+          "too_few_words",
+          "low_unique_word_ratio",
+          "excessive_repeated_characters",
+          "language_confidence_below_threshold",
+          "language_not_allowed"
+        ]
+      }
+    }
+  }
+}
