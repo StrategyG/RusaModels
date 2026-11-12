@@ -187,7 +187,7 @@ python -m rusamodels.dataset_review \
   --report artifacts/reports/rusaai-agent-sft-curated-0.1.0-review.json
 ~~~
 
-Exit code 0 means every record passed the configured review gate; exit code 1 means the report was generated but one or more records are blocked; exit code 2 means the release or ledger could not be evaluated. The report binds the review ledger digest to the exact dataset manifest digest, and each individual event is required to carry that same digest. This tool validates reviewer identifiers and separation rules; it does not authenticate real-world reviewer identity or cryptographically sign approvals. Production publication must add identity-provider verification, controlled authorization, and an externally managed signature/attestation.
+Exit code 0 means every record passed the configured review gate; exit code 1 means the report was generated but one or more records are blocked; exit code 2 means the release or ledger could not be evaluated. The report binds the review ledger digest to the exact dataset manifest digest, and each individual event is required to carry that same digest. This tool validates reviewer identifiers and separation rules; it does not authenticate real-world reviewer identity, enforce storage-level append-only/WORM behavior for the ledger, or cryptographically sign approvals. The report records the exact ledger digest observed during evaluation, but the ledger must be retained in access-controlled append-only storage and approvals must be backed by identity-provider verification, controlled authorization, and an externally managed signature/attestation in production.
 
 ## Frozen evaluation contamination gate
 
