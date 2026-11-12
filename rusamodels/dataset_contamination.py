@@ -37,6 +37,7 @@ _MAX_HAMMING_DISTANCE = 7
 _BANDS = 8
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _DATASET_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_RECORD_ID = re.compile(r"^record_[0-9a-f]{24}$")
 
 
 def _reject_constant(value: str) -> None:
@@ -254,9 +255,9 @@ def check_frozen_evaluation_contamination(
                             f"{evaluation.name}:{line_number}: record must be an object"
                         )
                     record_id = record.get("id", record.get("record_id"))
-                    if not isinstance(record_id, str) or not record_id.strip() or len(record_id) > 256:
+                    if not isinstance(record_id, str) or not _RECORD_ID.fullmatch(record_id):
                         raise DatasetContaminationError(
-                            f"{evaluation.name}:{line_number}: record id is missing or invalid"
+                            f"{evaluation.name}:{line_number}: record id must be a pseudonymized record ID"
                         )
                     try:
                         text = record_to_text(record)
