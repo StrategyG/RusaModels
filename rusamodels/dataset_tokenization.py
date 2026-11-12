@@ -147,7 +147,14 @@ def pack_dataset_split(
         add_bos=add_bos,
         add_eos=add_eos,
     )
-    tokenizer_sha256_before = hash_tokenizer_directory(tokenizer_path)
+    tokenizer_input = Path(tokenizer_path).expanduser()
+    if tokenizer_input.is_symlink():
+        raise DatasetTokenizationError("tokenizer directory must not be a symlink")
+    tokenizer_root = tokenizer_input.resolve()
+    root = Path(release_path).expanduser().resolve()
+    if root == tokenizer_root or root in tokenizer_root.parents or tokenizer_root in root.parents:
+        raise DatasetTokenizationError("tokenizer assets must be separate from the source dataset release")
+    tokenizer_sha256_before = hash_tokenizer_directory(tokenizer_root)
     eos_token_id, pad_token_id, bos_token_id, vocab_size = _tokenizer_properties(
         tokenizer, add_bos=add_bos
     )
@@ -161,7 +168,6 @@ def pack_dataset_split(
             f"sequence_length={sequence_length} exceeds tokenizer model_max_length={model_max_length}"
         )
 
-    root = Path(release_path).expanduser().resolve()
     output_input = Path(output_path).expanduser()
     if output_input.is_symlink():
         raise DatasetTokenizationError("symlink paths are not allowed for packed dataset outputs")
@@ -169,6 +175,8 @@ def pack_dataset_split(
     manifest_path = output.with_suffix(output.suffix + ".manifest.json")
     if root == output or root in output.parents:
         raise DatasetTokenizationError("packed output must be outside the immutable dataset release")
+    if tokenizer_root == output or tokenizer_root in output.parents or tokenizer_root in manifest_path.parents:
+        raise DatasetTokenizationError("packed outputs must be outside the tokenizer asset directory")
     if output.exists() or manifest_path.exists():
         raise DatasetTokenizationError("packed output or manifest already exists")
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -284,7 +292,7 @@ def pack_dataset_split(
             raise DatasetTokenizationError("source split record count changed during tokenization")
         source_sha256_after, source_size_after = _hash_file(source_path)
         release_manifest_sha256_after, _ = _hash_file(release_manifest_path)
-        tokenizer_sha256_after = hash_tokenizer_directory(tokenizer_path)
+        tokenizer_sha256_after = hash_tokenizer_directory(tokenizer_root)
         if (
             source_sha256_after != source_sha256_before
             or source_size_after != source_size_before
