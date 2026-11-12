@@ -31,6 +31,10 @@ _CONFIG_KEYS = {
 }
 
 
+def _reject_constant(value: str) -> None:
+    raise ValueError(f"non-standard JSON constant is prohibited: {value}")
+
+
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
@@ -47,9 +51,7 @@ def _load_config(path: Path) -> dict[str, Any]:
         payload = json.loads(
             path.read_text(encoding="utf-8"),
             object_pairs_hook=_unique_object,
-            parse_constant=lambda value: (_ for _ in ()).throw(
-                ValueError(f"non-standard JSON constant is prohibited: {value}")
-            ),
+            parse_constant=_reject_constant,
         )
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
         raise TokenizerTrainingError(f"cannot load tokenizer config: {exc}") from exc
