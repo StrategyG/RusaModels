@@ -83,8 +83,12 @@ def _load_export_manifest(corpus: Path, manifest_path: Path) -> tuple[dict[str, 
         raise TokenizerTrainingError("tokenizer training may use only the dataset train split")
     if manifest["encoding"] != "utf-8" or manifest["tokenizer"] != "byte-level-v1":
         raise TokenizerTrainingError("dataset text export encoding/tokenizer contract is unsupported")
-    for field in ("dataset_id", "dataset_version"):
-        if not isinstance(manifest[field], str) or not manifest[field].strip():
+    for field, maximum in (("dataset_id", 128), ("dataset_version", 64)):
+        if (
+            not isinstance(manifest[field], str)
+            or not manifest[field].strip()
+            or len(manifest[field]) > maximum
+        ):
             raise TokenizerTrainingError(f"dataset export {field} is invalid")
     for field in ("release_manifest_sha256", "source_split_sha256", "output_sha256"):
         if not isinstance(manifest[field], str) or not _SHA256.fullmatch(manifest[field]):
