@@ -47,7 +47,7 @@ _RECORD_KEYS = {
     "source_refs",
     "risk_class",
 }
-_SOURCE_REF_KEYS = {"source_id", "revision", "locator", "sha256"}
+_SOURCE_REF_KEYS = {"source_id", "revision", "locator", "sha256", "license_id"}
 _RUBRIC_KEYS = {"criterion", "weight", "pass_condition"}
 _MANIFEST_KEYS = {
     "schema_version",
@@ -123,6 +123,8 @@ def _validate_manifest(evaluation: Path, manifest_path: Path) -> tuple[dict[str,
         not isinstance(manifest["file"], str)
         or manifest["file"] != evaluation.name
         or Path(manifest["file"]).name != manifest["file"]
+        or "/" in manifest["file"]
+        or "\\" in manifest["file"]
     ):
         raise FrozenEvaluationError("manifest file name does not match the frozen evaluation file")
     if not isinstance(manifest["sha256"], str) or not _SHA256.fullmatch(manifest["sha256"]):
@@ -208,6 +210,12 @@ def _validate_record(value: Any, source: str) -> tuple[str, str]:
             raise FrozenEvaluationError(f"{source}: source reference locator is invalid")
         if not isinstance(item["sha256"], str) or not _SHA256.fullmatch(item["sha256"]):
             raise FrozenEvaluationError(f"{source}: source reference SHA-256 is invalid")
+        if (
+            not isinstance(item["license_id"], str)
+            or not item["license_id"].strip()
+            or len(item["license_id"]) > 128
+        ):
+            raise FrozenEvaluationError(f"{source}: source reference license_id is invalid")
         identity = (item["source_id"], item["revision"], item["locator"])
         if identity in seen_refs:
             raise FrozenEvaluationError(f"{source}: duplicate source reference")
