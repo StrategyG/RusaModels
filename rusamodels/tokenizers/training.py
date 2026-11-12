@@ -167,6 +167,7 @@ def train_tokenizer(
         raise RuntimeError("Install the tokenizer extra to train a BPE tokenizer") from exc
 
     staging: Path | None = Path(tempfile.mkdtemp(prefix=f".{output.name}.", dir=output.parent))
+    published = False
     try:
         backend = Tokenizer(models.BPE(unk_token=SPECIAL_TOKENS["unk"]))
         backend.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
@@ -242,6 +243,7 @@ def train_tokenizer(
             raise TokenizerTrainingError(f"tokenizer output appeared during training: {output}")
         os.rename(staging, output)
         staging = None
+        published = True
         loaded = load_tokenizer_artifact(output)
         loaded_audit = audit_tokenizer(loaded.backend, loaded.special_token_ids)
         return {
@@ -259,4 +261,6 @@ def train_tokenizer(
     except Exception:
         if staging is not None and staging.exists():
             shutil.rmtree(staging, ignore_errors=True)
+        if published and output.exists():
+            shutil.rmtree(output, ignore_errors=True)
         raise
