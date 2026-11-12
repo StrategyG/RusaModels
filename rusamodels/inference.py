@@ -27,13 +27,15 @@ def _runtime_configuration(settings, endpoint: str) -> tuple[str, str, dict[str,
 
 
 def openai_model_list(settings) -> dict[str, Any]:
-    _base_url, model_id, _headers, _timeout = _runtime_configuration(settings, "chat/completions")
-    models = [{
-        "id": model_id,
-        "object": "model",
-        "created": 0,
-        "owned_by": "rusamodels",
-    }]
+    """List configured runtimes independently; chat and embeddings are optional."""
+    models = []
+    if settings.inference_base_url and settings.inference_model_id:
+        models.append({
+            "id": settings.inference_model_id,
+            "object": "model",
+            "created": 0,
+            "owned_by": "rusamodels",
+        })
     if settings.embedding_base_url and settings.embedding_model_id:
         models.append({
             "id": settings.embedding_model_id,
@@ -41,6 +43,8 @@ def openai_model_list(settings) -> dict[str, Any]:
             "created": 0,
             "owned_by": "rusamodels",
         })
+    if not models:
+        raise HTTPException(503, "No inference runtime is configured")
     return {"object": "list", "data": models}
 
 
