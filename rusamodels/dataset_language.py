@@ -94,8 +94,11 @@ def _build_detector(language_codes: tuple[str, ...]) -> Any:
             'python -m pip install -e ".[dataset]"'
         ) from exc
     available: dict[str, Any] = {}
-    for language in Language:
-        iso_code = language.iso_code_639_1
+    for name in dir(Language):
+        if not name.isupper():
+            continue
+        language = getattr(Language, name)
+        iso_code = getattr(language, "iso_code_639_1", None)
         if iso_code is not None:
             available[iso_code.name.lower()] = language
     missing = sorted(set(language_codes) - set(available))
