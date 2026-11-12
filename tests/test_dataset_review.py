@@ -307,3 +307,20 @@ def test_review_gate_rejects_symlink_ledger(tmp_path: Path) -> None:
 
     with pytest.raises(DatasetReviewError, match="symlink paths"):
         evaluate_dataset_reviews(release, symlink, tmp_path / "report.json")
+
+
+def test_publication_approval_must_follow_the_latest_review(tmp_path: Path) -> None:
+    release = _release(tmp_path)
+    ids = _record_ids(release)
+    ledger = _write_ledger(tmp_path / "reviews.jsonl", ids)
+    with ledger.open("a", encoding="utf-8") as handle:
+        event = _event(ids[0], "technical")
+        event["review_id"] = "review-technical-after-publication"
+        event["reviewed_at"] = "2026-01-02T00:00:00Z"
+        handle.write(json.dumps(event) + "\n")
+
+    result = evaluate_dataset_reviews(release, ledger, tmp_path / "report.json")
+    report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
+
+    assert result["approved_for_release"] is False
+    assert report["blocker_counts"]["publication_approval_stale"] == 1
