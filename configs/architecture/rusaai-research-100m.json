@@ -4,6 +4,8 @@
   "model_version": "0.1.0-design",
   "status": "design_ready_training_not_started",
   "architecture": {
+    "architecture_type": "dense_decoder_transformer",
+    "norm_layout": "pre_norm",
     "vocab_size": 32000,
     "layers": 12,
     "hidden_size": 768,
