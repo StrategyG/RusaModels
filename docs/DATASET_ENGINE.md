@@ -19,7 +19,7 @@ The pipeline currently provides:
 - Disk-backed SQLite verification indexes for record IDs, fingerprints, provenance, and split-group isolation.
 - SQLite-backed staging so the pipeline does not need to hold the full dataset in Python memory.
 
-The pipeline does not infer whether a license is legally compatible, identify all PII, perform semantic/near-duplicate detection, classify language, perform quality scoring, annotate examples, or tokenize/pack sequences. Those capabilities remain future work and must not be implied by a successful release build.
+The pipeline does not infer whether a license is legally compatible, identify all PII, classify language, perform automated toxicity classification, or tokenize/pack sequences. The initial SimHash quality analyzer, external frozen-evaluation contamination check, and human-review gate provide bounded evidence but do not replace semantic review, full safety classification, reviewer identity verification, or signed release attestations.
 
 ## Input contract
 
@@ -141,6 +141,71 @@ Each text file has a sibling manifest whose name appends .manifest.json to the o
 
 Use the train export as the Carbon trainer's training corpus and the validation export as its held-out evaluation corpus. Copy the dataset identity and reviewed license declaration into the training config. The trainer independently hashes both text files and rejects identical train/evaluation corpora.
 
+## Human review and publication gate
+
+A dataset release is immutable after it is built. Human review evidence is therefore kept in a separate append-only JSONL ledger and evaluated against the exact release manifest digest.
+
+Each released record requires the latest approved event for all five review types:
+
+- `technical`: quality score, language, task type, and evidence status.
+- `rights`: explicit `rights_status=approved`.
+- `security`: risk classification.
+- `independent_qa`: independent quality score, risk classification, and evidence status.
+- `publication_approval`: explicit `publication_authorized=true`.
+
+The independent QA reviewer must differ from the technical reviewer. The publication approver must differ from both and from the rights/security reviewers. Latest events supersede older events; a later rejection or revision request blocks publication. The default gate requires quality scores of at least 4/5 and a maximum risk class of medium.
+
+Reviewer identifiers must be pseudonymous. Do not put names, email addresses, free-text reviewer notes, or sensitive case details in the ledger. Keep identity mapping and detailed audit notes in an access-controlled review system.
+
+The event contract is defined by `schemas/llm/dataset-review-record.schema.json`. A representative technical event is:
+
+~~~json
+{
+  "review_id": "review-example-technical-001",
+  "record_id": "record_0123456789abcdef01234567",
+  "review_type": "technical",
+  "reviewer_id": "reviewer_technical_01",
+  "decision": "approved",
+  "quality_score": 5,
+  "risk_class": null,
+  "rights_status": null,
+  "evidence_status": "implementation_observation",
+  "language": "id",
+  "task_type": "technical_instruction",
+  "publication_authorized": false,
+  "reviewed_at": "2026-01-01T00:00:00Z"
+}
+~~~
+
+Run the gate after review events are recorded:
+
+~~~bash
+python -m rusamodels.dataset_review \\
+  --release artifacts/datasets/rusaai-agent-sft-curated/0.1.0 \\
+  --ledger artifacts/reviews/rusaai-agent-sft-curated-0.1.0.jsonl \\
+  --report artifacts/reports/rusaai-agent-sft-curated-0.1.0-review.json
+~~~
+
+Exit code 0 means every record passed the configured review gate; exit code 1 means the report was generated but one or more records are blocked; exit code 2 means the release or ledger could not be evaluated. The report binds the review ledger digest to the exact dataset manifest digest. This tool validates reviewer identifiers and separation rules; it does not authenticate real-world reviewer identity or cryptographically sign approvals. Production publication must add identity-provider verification, controlled authorization, and an externally managed signature/attestation.
+
+## Frozen evaluation contamination gate
+
+Keep the frozen release evaluation set separate from training, validation, and internal test sources. The frozen set must have a manifest with `purpose=frozen_evaluation`, `locked=true`, a pinned file name, SHA-256, byte size, record count, dataset ID/version, and timezone-aware creation timestamp. The manifest contract is defined by `schemas/llm/frozen-evaluation-manifest.schema.json`.
+
+Compare all three dataset splits against the frozen evaluation set:
+
+~~~bash
+python -m rusamodels.dataset_contamination \\
+  --release artifacts/datasets/rusaai-agent-sft-curated/0.1.0 \\
+  --frozen-evaluation data/frozen_eval/release-eval.jsonl \\
+  --frozen-manifest data/frozen_eval/release-eval.manifest.json \\
+  --report artifacts/reports/rusaai-agent-sft-curated-0.1.0-contamination.jsonl
+~~~
+
+The gate checks exact normalized training-text matches and SimHash near-duplicates using the same byte-independent text rendering used by the text exporter. It writes only pseudonymous record IDs, split, match type, Hamming distance, and text hash; it does not copy evaluation prompt text into the report. Exit code 0 means no candidate match was found, 1 means one or more exact/near matches were found, and 2 means the scan could not be completed.
+
+The SimHash threshold is bounded to 0–7 bits by the eight-band LSH candidate guarantee. This is a lexical heuristic, not semantic equivalence detection; paraphrases may be missed. The frozen evaluation manifest is an integrity record, not a cryptographic signature. Keep the frozen set in access-controlled storage, restrict who can read it, and use an externally signed manifest for a production benchmark gate.
+
 ## Redaction and privacy limits
 
 Email and common credential patterns are redacted by default. Phone-number redaction is disabled by default because numeric sequences can be legitimate model content. These regex rules are a defensive preprocessing layer, not a comprehensive PII detector or privacy certification.
@@ -159,9 +224,9 @@ The following roadmap items are not implemented by this initial release builder:
 
 - Capacity-tested near-duplicate detection at representative dataset scale (the initial SimHash/LSH checker is implemented; threshold calibration and large-corpus benchmarks remain).
 - Language identification and language-aware quality metrics.
-- Configurable quality classifiers and filtering reports.
-- Human annotation/review workflow and reviewer provenance.
-- Evaluation contamination checks against frozen benchmark sets (the near-duplicate checker currently checks only within one released dataset, not against external frozen benchmark corpora).
+- Configurable quality classifiers, toxicity/unsafe-content handling, and filtering reports.
+- Human review ledger and publication gate are implemented as an initial workflow; integration with an authenticated annotation UI and signed reviewer attestations remains open.
+- Frozen evaluation contamination gate is implemented for exact text and SimHash near-duplicates; semantic contamination detection and capacity calibration remain open.
 - Tokenizer-aware preprocessing and sequence packing.
 - Dataset registry integration and registry-level promotion/retention.
 - External object-storage upload/download for dataset releases.
