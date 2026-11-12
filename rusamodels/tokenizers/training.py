@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .loading import load_tokenizer_artifact
-from .validation import DEFAULT_SMOKE_SAMPLES, audit_tokenizer
+from .validation import audit_tokenizer
 from .vocabulary import SPECIAL_TOKENS, resolve_special_token_ids
 
 
@@ -192,7 +192,7 @@ def train_tokenizer(
                 "use a larger approved training corpus rather than padding the vocabulary"
             )
         special_ids = resolve_special_token_ids(backend)
-        audit = audit_tokenizer(backend, special_ids)
+        audit_tokenizer(backend, special_ids)
         tokenizer_path = staging / "tokenizer.json"
         backend.save(str(tokenizer_path))
         tokenizer_sha256, tokenizer_size = _sha256_file(tokenizer_path)
