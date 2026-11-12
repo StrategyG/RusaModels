@@ -37,7 +37,7 @@ def _provenance() -> dict:
 def test_evaluation_requires_exact_training_eval_digest_and_revision() -> None:
     model_id, revision = _validate_provenance(
         _provenance(),
-        {"id": "organization/model", "revision": "a" * 40},
+        {"id": "organization/model", "revision": "a" * 40, "license": "apache-2.0"},
         "c" * 64,
         36,
         "d" * 64,
@@ -51,7 +51,7 @@ def test_evaluation_rejects_different_eval_file_or_model_revision() -> None:
     with pytest.raises(ValueError, match="SHA-256"):
         _validate_provenance(
             _provenance(),
-            {"id": "organization/model", "revision": "a" * 40},
+            {"id": "organization/model", "revision": "a" * 40, "license": "apache-2.0"},
             "d" * 64,
             36,
             "d" * 64,
@@ -60,7 +60,7 @@ def test_evaluation_rejects_different_eval_file_or_model_revision() -> None:
     with pytest.raises(ValueError, match="does not match the configured model"):
         _validate_provenance(
             _provenance(),
-            {"id": "organization/model", "revision": "e" * 40},
+            {"id": "organization/model", "revision": "e" * 40, "license": "apache-2.0"},
             "c" * 64,
             36,
             "d" * 64,
