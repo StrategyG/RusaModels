@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0.0",
+  "run": {
+    "name": "rusaai-research-100m-cpu-pilot",
+    "seed": 42,
+    "device": "cpu",
+    "precision": "fp32",
+    "deterministic": "best_effort"
+  },
+  "architecture_config": "configs/architecture/rusaai-research-100m.json",
+  "tokenizer_artifact_dir": "artifacts/tokenizers/rusaai-research-100m-bpe-32k",
+  "data": {
+    "train_corpus": "data/research_100m/train.txt",
+    "train_manifest": "data/research_100m/train.txt.manifest.json",
+    "validation_corpus": "data/research_100m/validation.txt",
+    "validation_manifest": "data/research_100m/validation.txt.manifest.json"
+  },
+  "output_dir": "artifacts/rusaai-research-100m-cpu-pilot",
+  "training": {
+    "micro_batch_size": 1,
+    "sequence_length": 256,
+    "gradient_accumulation_steps": 16,
+    "gradient_checkpointing": true,
+    "max_steps": 500,
+    "optimizer": "adamw",
+    "learning_rate": 0.0003,
+    "weight_decay": 0.1,
+    "warmup_ratio": 0.03,
+    "scheduler": "cosine",
+    "gradient_clip_norm": 1.0,
+    "evaluation_interval_steps": 100,
+    "save_interval_steps": 250,
+    "max_checkpoints": 2
+  },
+  "dataloader": {
+    "streaming": true,
+    "num_workers": 0,
+    "pin_memory": false,
+    "prefetch_factor": 1
+  },
+  "cpu": {
+    "threads": 2,
+    "interop_threads": 1,
+    "gpu_offload": false
+  },
+  "safety": {
+    "max_training_process_ram_gb": 4.0,
+    "minimum_system_free_ram_gb": 1.0,
+    "stop_on_oom": true,
+    "stop_on_uncontrolled_swap": true,
+    "max_swap_growth_gb": 0.5
+  }
+}
