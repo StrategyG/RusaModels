@@ -222,9 +222,16 @@ def load_architecture_blueprint(path: str | Path) -> ArchitectureBlueprint:
         raise ArchitectureConfigError("model_version is invalid")
     if not isinstance(payload["status"], str) or payload["status"] not in _BLUEPRINT_STATUSES:
         raise ArchitectureConfigError("blueprint status is invalid")
+    architecture_values = payload["architecture"]
+    required_architecture_keys = set(DecoderArchitectureConfig.__dataclass_fields__) - {"eos_token_id"}
+    if (
+        not isinstance(architecture_values, dict)
+        or not required_architecture_keys.issubset(architecture_values)
+    ):
+        raise ArchitectureConfigError("blueprint architecture is missing required versioned fields")
     return ArchitectureBlueprint(
         model_id=payload["model_id"],
         model_version=payload["model_version"],
         status=payload["status"],
-        architecture=DecoderArchitectureConfig.from_dict(payload["architecture"]),
+        architecture=DecoderArchitectureConfig.from_dict(architecture_values),
     )
