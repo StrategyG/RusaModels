@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "tokenizer_id": "rusaai-research-100m-bpe-32k",
-  "tokenizer_version": "0.1.0-design",
+  "tokenizer_version": "0.1.0",
   "algorithm": "byte_level_bpe",
   "vocab_size": 32000,
   "min_frequency": 2,
