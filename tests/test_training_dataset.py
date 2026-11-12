@@ -126,3 +126,23 @@ def test_eval_distribution_requires_both_blocked_and_unblocked_cases():
     validate_eval_distribution([blocked, *unblocked], min_blocked_fraction=0.10, min_unblocked_fraction=0.50)
     with pytest.raises(DatasetValidationError, match="unblocked eval fraction"):
         validate_eval_distribution([blocked], min_blocked_fraction=0.10, min_unblocked_fraction=0.50)
+
+
+def test_training_dataset_rejects_duplicate_json_keys(tmp_path):
+    path = tmp_path / "duplicate-key.jsonl"
+    path.write_text(
+        '{"id":"first","id":"second","agent_role":"analyst","messages":[],"response":{}}\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(DatasetValidationError, match="duplicate JSON object key"):
+        load_jsonl(path)
+
+
+def test_training_dataset_rejects_non_finite_json_numbers(tmp_path):
+    path = tmp_path / "non-finite.jsonl"
+    path.write_text(
+        '{"id":"one","agent_role":"analyst","messages":[],"response":{"message":"x","actions":[],"done":true,"extra":NaN}}\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(DatasetValidationError, match="non-standard JSON constant"):
+        load_jsonl(path)
