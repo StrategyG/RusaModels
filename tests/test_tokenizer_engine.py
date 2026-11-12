@@ -136,3 +136,23 @@ def test_tokenizer_audit_reports_indonesian_english_code_and_json() -> None:
     report = audit_tokenizer(backend, resolve_special_token_ids(backend))
     assert set(report["categories"]) == {"indonesian", "english", "code", "json"}
     assert report["round_trip_passed"] is True
+
+
+def test_tokenizer_loader_rejects_manifest_with_non_bpe_implementation(tmp_path: Path) -> None:
+    corpus, manifest = _write_export(tmp_path)
+    artifact_dir = tmp_path / "tokenizer-v1"
+    train_tokenizer(corpus, manifest, artifact_dir, vocab_size=300)
+    tokenizer_path = artifact_dir / "tokenizer.json"
+    tokenizer_payload = json.loads(tokenizer_path.read_text(encoding="utf-8"))
+    tokenizer_payload["pre_tokenizer"] = {"type": "Whitespace"}
+    tokenizer_path.write_text(json.dumps(tokenizer_payload), encoding="utf-8")
+
+    artifact_manifest_path = artifact_dir / "rusa-tokenizer-manifest.json"
+    artifact_manifest = json.loads(artifact_manifest_path.read_text(encoding="utf-8"))
+    tokenizer_bytes = tokenizer_path.read_bytes()
+    artifact_manifest["tokenizer_sha256"] = hashlib.sha256(tokenizer_bytes).hexdigest()
+    artifact_manifest["tokenizer_size_bytes"] = len(tokenizer_bytes)
+    artifact_manifest_path.write_text(json.dumps(artifact_manifest), encoding="utf-8")
+
+    with pytest.raises(TokenizerArtifactError, match="ByteLevel BPE contract"):
+        load_tokenizer_artifact(artifact_dir)
