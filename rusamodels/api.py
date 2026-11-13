@@ -838,7 +838,11 @@ def create_service_app(
         principal: Principal = Depends(roles("administrator")),
         db: Session = Depends(get_db),
     ):
-        job = db.get(ModelJob, job_id)
+        # Serialize cancellation with worker claims. The worker locks the same
+        # ModelJob row before transitioning queued jobs to running.
+        job = db.scalar(
+            select(ModelJob).where(ModelJob.id == job_id).with_for_update()
+        )
         if job is None:
             raise HTTPException(404, "Model job not found")
         if job.status == "cancelled":
@@ -847,13 +851,21 @@ def create_service_app(
             job.status = "cancelled"
             job.finished_at = datetime.now(UTC)
             job.next_attempt_at = None
-            db.commit()
-            audit(db, request, principal, "model_job.cancelled", f"job:{job_id}")
+            job.lease_owner = None
+            job.lease_expires_at = None
+            if job.output_version_id:
+                output_version = db.get(ModelVersion, job.output_version_id)
+                if output_version is not None and output_version.status == "queued":
+                    output_version.status = "cancelled"
+            # record_audit commits the job, version and audit event together.
+            audit(
+                db, request, principal, "model_job.cancelled", f"job:{job_id}",
+                {"output_version_id": job.output_version_id},
+            )
             return job
         if job.status == "running":
             if not job.cancel_requested:
                 job.cancel_requested = True
-                db.commit()
                 audit(
                     db, request, principal, "model_job.cancel_requested",
                     f"job:{job_id}", {"lease_epoch": job.lease_epoch},
