@@ -8,6 +8,7 @@ from pydantic import SecretStr
 from rusamodels.storage import (
     LocalArtifactStorage,
     S3ArtifactStorage,
+    create_storage,
     validate_storage_key,
 )
 
@@ -95,3 +96,17 @@ def test_s3_storage_reuses_workload_identity_when_write_key_is_absent(monkeypatc
     storage = S3ArtifactStorage(settings)
     assert storage.read_client is storage.write_client
     assert len(clients) == 1
+
+
+def test_edge_profile_uses_local_artifact_storage(tmp_path):
+    settings = SimpleNamespace(
+        environment="edge",
+        storage_backend="local",
+        local_storage_path=tmp_path,
+    )
+
+    storage = create_storage(settings)
+
+    assert isinstance(storage, LocalArtifactStorage)
+    storage.check_ready()
+    assert (tmp_path / ".multipart").is_dir()

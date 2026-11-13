@@ -63,10 +63,15 @@ def create_service_app(
     storage=None,
 ) -> FastAPI:
     runtime = settings or get_settings()
-    if runtime.environment in {"staging", "production"}:
+    if runtime.environment in {"edge", "staging", "production"}:
+        if runtime.environment == "edge" and service_name != "model-server":
+            raise RuntimeError("The RUSA-CPU-16 edge profile runs only the Model Server")
         validate_production_service_credentials(
             runtime,
-            require_inference=(service_name == "model-server" and bool(runtime.inference_base_url)),
+            require_inference=(
+                service_name == "model-server"
+                and (runtime.environment == "edge" or bool(runtime.inference_base_url))
+            ),
         )
         if (
             service_name == "quant-server"
@@ -83,9 +88,9 @@ def create_service_app(
         title=f"RusaModels {service_name}",
         version="0.2.0",
         description="Independent RUSA-AI model infrastructure control plane.",
-        docs_url=None if runtime.environment in {"staging", "production"} else "/docs",
-        redoc_url=None if runtime.environment in {"staging", "production"} else "/redoc",
-        openapi_url=None if runtime.environment in {"staging", "production"} else "/openapi.json",
+        docs_url=None if runtime.environment in {"edge", "staging", "production"} else "/docs",
+        redoc_url=None if runtime.environment in {"edge", "staging", "production"} else "/redoc",
+        openapi_url=None if runtime.environment in {"edge", "staging", "production"} else "/openapi.json",
     )
     app.state.settings = runtime
     app.state.engine = db_engine

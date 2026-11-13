@@ -1,4 +1,5 @@
 """Validated configuration shared by Model Server and Quant Server."""
+import ipaddress
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -9,6 +10,15 @@ from pydantic import AliasChoices, Field, SecretStr, field_validator, model_vali
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _is_loopback_host(host: str) -> bool:
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -17,7 +27,7 @@ class Settings(BaseSettings):
         populate_by_name=True,
     )
 
-    environment: Literal["development", "test", "staging", "production"] = Field(
+    environment: Literal["development", "test", "edge", "staging", "production"] = Field(
         "development", validation_alias="RUSAMODELS_ENV"
     )
     database_url: str = Field(
@@ -135,7 +145,22 @@ class Settings(BaseSettings):
         return value
 
     @model_validator(mode="after")
-    def enforce_production_adapters(self):
+    def enforce_deployment_adapters(self):
+        if self.environment == "edge":
+            if not self.database_url.startswith("sqlite:///"):
+                raise ValueError("RUSAMODELS_ENV=edge requires a local SQLite database")
+            if self.storage_backend != "local":
+                raise ValueError("RUSAMODELS_ENV=edge requires local artifact storage")
+            if self.s3_endpoint_url or self.s3_access_key_id or self.s3_write_access_key_id:
+                raise ValueError("RUSAMODELS_ENV=edge must not configure S3 endpoints or credentials")
+            if not self.inference_base_url or not self.inference_model_id:
+                raise ValueError("RUSAMODELS_ENV=edge requires one local inference runtime")
+            edge_runtime = urlsplit(self.inference_base_url)
+            if edge_runtime.scheme != "http" or not edge_runtime.hostname or not _is_loopback_host(edge_runtime.hostname):
+                raise ValueError("RUSAMODELS_ENV=edge inference must use HTTP on loopback only")
+            if self.embedding_base_url or self.embedding_model_id:
+                raise ValueError("RUSA-CPU-16 does not configure a separate embedding runtime")
+
         if self.environment in {"staging", "production"}:
             if not self.database_url.startswith(("postgresql://", "postgresql+")):
                 raise ValueError("Staging and production require PostgreSQL")

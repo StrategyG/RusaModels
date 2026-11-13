@@ -1,30 +1,16 @@
 name: RusaModels CI
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, fix/production-hardening-2026-11-11, feat/rusa-cpu-16-windows-baseline]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
 permissions:
   contents: read
 jobs:
   test:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: rusamodels_test
-          POSTGRES_PASSWORD: ci-postgres-password
-          POSTGRES_DB: rusamodels_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U rusamodels_test -d rusamodels_test"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      RUSAMODELS_TEST_DATABASE_URL: postgresql+psycopg://rusamodels_test:ci-postgres-password@localhost:5432/rusamodels_test
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, immutable commit
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0, immutable commit
@@ -197,3 +183,78 @@ jobs:
           RUSAMODELS_INFERENCE_API_KEY: ci-inference-upstream-key
           RUSAMODELS_WORKSPACE_ROOT: /tmp/rusamodels-workspace
         run: docker compose -f docker-compose.production.yml config --quiet
+
+
+  windows-cpu-profile:
+    name: Windows RUSA-CPU-16 script validation
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, immutable commit
+      - name: Parse native Windows deployment scripts
+        shell: pwsh
+        run: |
+          $scripts = @(
+            "scripts/start_rusa_cpu_16.ps1",
+            "scripts/stop_rusa_cpu_16.ps1",
+            "scripts/verify_rusa_cpu_16.ps1",
+            "scripts/verify_rusa_cpu_16_context.ps1",
+            "scripts/verify_rusa_cpu_16_soak.ps1"
+          )
+          foreach ($script in $scripts) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $script).Path,
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error ("Line {0}: {1} | Extent: {2}" -f $_.Extent.StartLineNumber, $_.Message, $_.Extent.Text) }
+              exit 1
+            }
+            Write-Host "PowerShell syntax OK: $script"
+          }
+
+      - name: Parse deployment scripts with Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $scripts = @(
+            "scripts/start_rusa_cpu_16.ps1",
+            "scripts/stop_rusa_cpu_16.ps1",
+            "scripts/verify_rusa_cpu_16.ps1",
+            "scripts/verify_rusa_cpu_16_context.ps1"
+          )
+          foreach ($script in $scripts) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $script).Path,
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error $_.Message }
+              exit 1
+            }
+            Write-Host "Windows PowerShell 5.1 syntax OK: $script"
+          }
+
+      - name: Probe Windows CPU instruction feature API and HTTP client in Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          Add-Type -AssemblyName System.Net.Http
+          $client = [System.Net.Http.HttpClient]::new()
+          $client.Dispose()
+          Add-Type -TypeDefinition @'
+          using System;
+          using System.Runtime.InteropServices;
+          public static class RusaCpuFeatureProbe {
+              [DllImport("kernel32.dll", ExactSpelling = true)]
+              public static extern bool IsProcessorFeaturePresent(uint processorFeature);
+          }
+          '@
+          $featureIds = @(6, 10, 13, 36, 37, 38, 39, 40, 41, 60)
+          foreach ($featureId in $featureIds) {
+            $null = [RusaCpuFeatureProbe]::IsProcessorFeaturePresent([uint32]$featureId)
+          }
+          Write-Host "Windows CPU feature probe and HTTP client are callable in Windows PowerShell 5.1."

@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0",
+  "model_id": "rusaai-edge-1.54b",
+  "model_version": "0.1.0-design",
+  "status": "DESIGN_ONLY",
+  "identity_alignment": {
+    "architecture_reference_model_id": "rusaai-edge-1.54b",
+    "training_engine_pre_audit_product_model_id": "rusaai-edge-derived",
+    "runtime_model_id": null,
+    "runtime_model_id_decision": "PENDING"
+  },
+  "source_architecture": "RusaAi Unified CPU-First AI Architecture v2.0",
+  "architecture": {
+    "type": "dense_decoder_only_transformer",
+    "normalization": "pre_norm",
+    "layers": 32,
+    "hidden_size": 2048,
+    "query_heads": 16,
+    "key_value_heads": 4,
+    "head_dimension": 128,
+    "gqa_ratio": 4,
+    "feed_forward": "swiglu",
+    "feed_forward_intermediate": 5632,
+    "vocabulary_target": 48000,
+    "embeddings": "tied_input_output",
+    "position_encoding": "rope",
+    "rope_scaling": "optional_only_after_evaluation",
+    "rms_norm_epsilon": 0.00001,
+    "linear_bias": false,
+    "dropout": 0.0,
+    "mixture_of_experts": false,
+    "target_parameters": 1541277696
+  },
+  "checkpoint": {
+    "selection_requirement": "non_qwen_open_weight",
+    "selection_status": "NOT_SELECTED",
+    "repository": null,
+    "immutable_revision": null,
+    "license": null,
+    "compatibility_status": "NOT_VERIFIED",
+    "non_qwen_lineage_status": "NOT_VERIFIED",
+    "architecture_relation": "NOT_AUDITED",
+    "actual_parameter_count": null,
+    "actual_configuration_sha256": null
+  },
+  "tokenizer": {
+    "status": "NOT_SELECTED",
+    "repository": null,
+    "revision": null,
+    "chat_template_status": "NOT_VALIDATED"
+  },
+  "training": {
+    "status": "NOT_STARTED"
+  },
+  "artifact": {
+    "status": "NOT_BUILT",
+    "format": "GGUF",
+    "quantization": "Q4_K_M",
+    "filename": null,
+    "sha256": null,
+    "estimated_weight_size_gb": {
+      "minimum": 0.9,
+      "maximum": 1.1
+    }
+  },
+  "benchmark": {
+    "status": "NOT_TESTED",
+    "context_8192_status": "NOT_TESTED"
+  },
+  "deployment": {
+    "runtime": "llama.cpp",
+    "cpu_only": true,
+    "gpu_layers": 0,
+    "context_initial": 4096,
+    "context_target_after_acceptance": 8192
+  }
+}
