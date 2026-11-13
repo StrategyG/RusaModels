@@ -3,12 +3,14 @@
 - Status: Accepted
 - Date: 10 November 2026
 
+> **Terminology clarification:** “shared control plane” in this ADR means the RusaModels-internal PostgreSQL registry/control store shared by its Model Server and Quant Server. It is not the RUSA AI ecosystem Control Plane, which is owned by RusaAi. RusaModels remains the Model Plane.
+
 ## Context
 Model lifecycle and inference are separated from conversion and quantization. Two Codespaces must share a single model registry and artifact store.
 
 ## Decision
 1. Keep Model Server and Quant Server as independent FastAPI entry points and Codespaces profiles.
-2. Use one shared PostgreSQL control plane and one S3-compatible artifact store.
+2. Use one shared PostgreSQL registry store for RusaModels Model Server and Quant Server, plus one S3-compatible artifact store.
 3. Restrict SQLite and local files to development and tests.
 4. Use Alembic migrations.
 5. Enforce Viewer, Manager and Administrator roles in the APIs.
