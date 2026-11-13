@@ -1,6 +1,8 @@
 """Validated API request and response schemas."""
 from datetime import datetime
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 
@@ -59,8 +61,31 @@ class VersionOut(BaseModel):
     precision: str | None
     status: str
     manifest_sha256: str | None
+    artifact_index_sha256: str | None
+    lifecycle_status: str
+    approved_by: str | None
+    approved_at: datetime | None
+    supersedes_version_id: str | None
     created_by: str
     created_at: datetime | None
+
+
+class VersionLifecycleUpdate(BaseModel):
+    status: Literal["candidate", "evaluated", "approved", "deprecated", "archived"]
+
+
+class ArtifactRetentionUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    retention_class: Literal["standard", "temporary", "archive"] | None = None
+    retention_until: datetime | None = None
+    legal_hold: bool | None = None
+
+    @field_validator("retention_until")
+    @classmethod
+    def require_timezone_for_retention(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value.tzinfo is None:
+            raise ValueError("retention_until must include a timezone")
+        return value
 
 
 class UploadOut(BaseModel):
@@ -81,6 +106,14 @@ class ArtifactOut(BaseModel):
     media_type: str | None
     size_bytes: int
     sha256: str
+    created_by: str | None
+    source_job_id: str | None
+    provenance: dict | None
+    retention_class: str
+    retention_until: datetime | None
+    legal_hold: bool
+    verified_at: datetime | None
+    deleted_at: datetime | None
     immutable: bool
     created_at: datetime | None
 

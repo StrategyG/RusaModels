@@ -70,3 +70,25 @@ Production schema changes use Alembic migrations. Application startup does not c
 Agent SFT dataset validation, QLoRA training, held-out evaluation, adapter merge, artifact manifest and model benchmarking live in RusaModels. The training contract is a versioned snapshot used only for dataset/evaluation validation. RUSA AI runtime authorization remains in its Tool Gateway and Policy Engine.
 
 The 4-vCPU/16-GB Codespaces profile is for CPU inference. QLoRA training is a separate CUDA-only workflow and must run on a trusted GPU environment.
+
+
+## Registry and artifact governance
+
+The registry separates operational model-version job state from release
+lifecycle state. A version follows `draft` → `candidate` → `evaluated`
+→ `approved`, then `deprecated` and `archived`. Approval is administrator-only,
+rechecks all registered artifact bytes and SHA-256 values, and records the
+previous approved version for rollback traceability.
+
+A strict Model Manifest v1 is canonicalized and stored with its SHA-256 digest.
+A manifest is attached once to a draft version; changes require a new version.
+The manifest binds model identity, architecture, tokenizer, source/license,
+training provenance, artifact filenames/sizes/checksums and an optional
+evaluation report ID.
+
+Artifact metadata records upload/job provenance, retention class, expiry,
+legal hold, last successful verification and purge tombstones. Downloads
+re-hash stored bytes before serving them. Purge is administrator-only and
+requires an expired retention deadline, no legal hold, and an eligible
+draft or archived model version. See
+[Artifact Retention and Recovery](ARTIFACT_RETENTION_AND_RECOVERY.md).
