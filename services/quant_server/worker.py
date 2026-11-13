@@ -382,7 +382,7 @@ def process_job(
                 for item in sorted(artifacts, key=lambda value: value.original_filename or "")
             ]
             manifest_bytes = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
-            output_version.manifest_sha256 = hashlib.sha256(manifest_bytes).hexdigest()
+            output_version.artifact_index_sha256 = hashlib.sha256(manifest_bytes).hexdigest()
             output_version.status = "ready"
             result = db.execute(
                 update(ModelJob)
@@ -415,6 +415,18 @@ def process_job(
                 for key in uploaded_keys:
                     storage.delete(key)
                 return
+            for artifact in artifacts:
+                artifact.created_by = job.created_by
+                artifact.source_job_id = job.id
+                artifact.provenance = {
+                    "origin": "model_job",
+                    "job_id": job.id,
+                    "job_type": job.job_type,
+                    "source_version_id": job.input_version_id,
+                    "actor_subject": job.created_by,
+                }
+                artifact.retention_class = "standard"
+                artifact.verified_at = datetime.now(UTC)
             db.add_all(artifacts)
             _audit(db, job, "model_job.succeeded", "success", status="succeeded")
             try:

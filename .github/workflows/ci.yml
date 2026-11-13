@@ -11,6 +11,22 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: rusamodels
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d rusamodels"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      RUSAMODELS_TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/rusamodels
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, immutable commit
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0, immutable commit
@@ -27,6 +43,14 @@ jobs:
         run: bandit -q -r rusamodels services migrations --severity-level medium --confidence-level medium
       - name: Tests
         run: pytest -q
+      - name: Validate PostgreSQL migration upgrade and rollback
+        env:
+          RUSAMODELS_ENV: test
+          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/rusamodels
+        run: |
+          alembic upgrade head
+          alembic downgrade -1
+          alembic upgrade head
       - name: Build container image
         run: docker build --pull --tag rusamodels-ci:${GITHUB_SHA} .
       - name: Build quantization-enabled worker image
