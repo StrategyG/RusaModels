@@ -221,6 +221,6 @@ class S3ArtifactStorage:
 def create_storage(settings):
     if settings.storage_backend == "s3":
         return S3ArtifactStorage(settings)
-    if settings.environment not in {"development", "test"}:
-        raise RuntimeError("Local storage is allowed only in development and tests")
+    if settings.environment not in {"development", "test", "edge"}:
+        raise RuntimeError("Local storage is allowed only in development, tests and the local edge profile")
     return LocalArtifactStorage(settings.local_storage_path)

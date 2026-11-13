@@ -1,0 +1,202 @@
+schema_version: 2
+profile:
+  id: rusa-cpu-16
+  version: 2.0.0
+  source_architecture: RusaAi Architecture v2.0
+  status: architecture_target_not_yet_deployable
+  deployment: native_local_edge
+platform:
+  operating_system: Windows 11 64-bit
+  cpu:
+    vendor: Intel
+    family: Core i5
+    sku_detection: required
+    physical_core_detection: required
+    logical_processor_detection: required
+    instruction_features_to_record: [SSE, SSE2, SSE3, SSSE3, SSE4_1, SSE4_2, AVX, AVX2, AVX512F, BMI2]
+    instruction_feature_source: Windows_IsProcessorFeaturePresent
+    generation_threads_initial: 4
+    generation_threads_adjustment: min_4_or_detected_physical_core_count
+    batch_threads_initial: 4
+    http_threads_initial: 2
+    generation_sku_status: not_yet_confirmed
+  physical_memory_gb: 16
+  accelerator: cpu_only
+model:
+  id: rusaai-edge-1.54b
+  identity_alignment:
+    architecture_reference_model_id: rusaai-edge-1.54b
+    training_engine_pre_audit_product_model_id: rusaai-edge-derived
+    runtime_model_id: null
+    runtime_model_id_decision: PENDING
+  version: 0.1.0-design
+  architecture:
+    type: dense_decoder_only_transformer
+    normalization: pre_norm
+    layers: 32
+    hidden_size: 2048
+    query_heads: 16
+    key_value_heads: 4
+    head_dimension: 128
+    gqa_ratio: 4
+    feed_forward: swiglu
+    feed_forward_intermediate: 5632
+    vocabulary_target: 48000
+    embeddings: tied_input_output
+    position_encoding: rope
+    rope_scaling: optional_only_after_evaluation
+    rms_norm_epsilon: 0.00001
+    linear_bias: false
+    dropout: 0.0
+    mixture_of_experts: false
+  target_parameters: 1541277696
+  checkpoint:
+    selection_requirement: non_qwen_open_weight
+    selection_status: NOT_SELECTED
+    repository: null
+    immutable_revision: null
+    license: null
+    compatibility_status: NOT_VERIFIED
+    non_qwen_lineage_status: NOT_VERIFIED
+    architecture_relation: NOT_AUDITED
+    actual_parameter_count: null
+    actual_configuration_sha256: null
+  tokenizer:
+    status: NOT_SELECTED
+  training:
+    status: NOT_STARTED
+  artifact:
+    status: NOT_BUILT
+    format: GGUF
+    quantization_target: Q4_K_M
+    filename: null
+    sha256: null
+    estimated_weight_size_gb:
+      minimum: 0.9
+      maximum: 1.1
+  benchmark:
+    status: NOT_TESTED
+    context_8192_status: NOT_TESTED
+runtime:
+  backend: llama.cpp
+  resident_model_limit: 1
+  model_format: GGUF
+  quantization: Q4_K_M
+  host: 127.0.0.1
+  port: 8081
+  context:
+    initial_tokens: 4096
+    target_tokens: 8192
+    target_activation_requires_device_ram_acceptance: true
+  generation_threads_initial: 4
+  batch_threads_initial: 4
+  http_threads_initial: 2
+  parallel_slots: 1
+  batch_size_initial: 128
+  micro_batch_size_initial: 64
+  kv_cache:
+    key: Q8_0
+    value: Q8_0
+    use_only_if_supported_and_validated: true
+  gpu_layers: 0
+  memory_mapping: enabled_when_supported
+  web_ui: disabled
+  metrics: enabled
+services:
+  rusamodels_model_server:
+    host: 127.0.0.1
+    port: 8090
+    base_path: /openai/v1
+    environment: edge
+    database: sqlite
+    artifact_storage: local
+    upstream_url: http://127.0.0.1:8081
+    model_id: null
+    model_id_source: approved_manifest_identity_alignment_runtime_model_id
+  llama_cpp:
+    host: 127.0.0.1
+    port: 8081
+  external_inference_fallback: false
+orchestration:
+  owner: Rusaai
+  active_generation_limit: 1
+  pending_inference_queue_limit: 3
+  queue_owner: Rusaai
+  reasoning_controller_owner: Rusaai
+  reasoning_candidate_execution: sequential
+  deep_reasoning_candidates_target: 2
+  tool_execution_owner: Rusaai_Tool_Gateway
+  policy_enforcement_owner: Rusaai_Policy_Engine
+  workflow_decision_owner: Rusaai_Supreme_Orchestrator
+resource_protection:
+  owner: Rusaai
+  minimum_free_memory_gb: 2.0
+  cpu_percent:
+    normal_below: 70
+    reduce_background_from: 70
+    defer_nonpriority_above: 85
+  ram_percent:
+    limit_new_model_loads_above: 75
+    reduce_context_and_additional_tasks_above: 85
+  thermal_throttling_telemetry: when_available
+memory_estimates:
+  physical_memory_gb: 16
+  model_weights_q4_k_m_gb:
+    minimum: 0.9
+    maximum: 1.1
+  kv_cache_q8_0_mib:
+    context_4096: 128
+    context_8192: 256
+  other_process_memory: measure_on_target_device
+  minimum_free_memory_gb: 2.0
+control_plane_reference:
+  owner: Rusaai
+  capability_profiles_share_one_model: true
+  reasoning_profiles:
+    quick:
+      max_output_tokens: 256
+      candidates: 1
+    standard:
+      max_output_tokens: 1024
+      candidates: 1
+    deep:
+      minimum_output_tokens: 2048
+      maximum_output_tokens: 4096
+      candidates: 2
+      execution: sequential
+    max:
+      maximum_output_tokens: 8192
+      candidates: 3
+      execution: sequential
+      status: experimental_not_enabled_in_initial_profile
+  memory_categories: [working, episodic, semantic, procedural, project]
+  text_search: SQLite_FTS5
+  vector_retrieval: optional_after_quality_validation
+  retrieval:
+    chunk_tokens:
+      minimum: 400
+      maximum: 600
+    overlap_tokens:
+      minimum: 50
+      maximum: 80
+    initial_chunks:
+      minimum: 3
+      maximum: 6
+    expanded_chunks:
+      minimum: 6
+      maximum: 10
+acceptance:
+  non_qwen_checkpoint_selected_and_license_recorded: required
+  checkpoint_configuration_and_tokenizer_validated: required
+  gguf_artifact_sha256_recorded: required
+  gpu_offload_layers: 0
+  context_4096_test: required
+  context_8192_test_before_enablement: required
+  sequential_requests: 20
+  stable_session_minutes: 30
+  minimum_free_memory_gb_during_inference: 2.0
+  active_generations: 1
+  pending_requests: 3
+  restart_recovery: required
+  ttft_tokens_per_second_latency_ram_cpu_recorded: required
+  queue_wait_and_depth_owner: Rusaai

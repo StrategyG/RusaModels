@@ -1,0 +1,427 @@
+[CmdletBinding()]
+param(
+    [string]$RepoRoot = (Split-Path -Parent $PSScriptRoot)
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+function Import-RusaDotEnv {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+
+    foreach ($line in Get-Content -LiteralPath $Path) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed -or $trimmed.StartsWith("#")) { continue }
+        $match = [regex]::Match($trimmed, '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$')
+        if (-not $match.Success) { continue }
+
+        $name = $match.Groups[1].Value
+        if ($name -in @("RUSAMODELS_API_TOKEN", "RUSAMODELS_SERVICE_TOKEN")) {
+            throw "Raw Rusaai tokens must not be stored in the RusaModels .env file."
+        }
+        $value = $match.Groups[2].Value.Trim()
+        if ($value.Length -ge 2) {
+            $first = $value.Substring(0, 1)
+            $last = $value.Substring($value.Length - 1, 1)
+            if (($first -eq '"' -and $last -eq '"') -or ($first -eq "'" -and $last -eq "'")) {
+                $value = $value.Substring(1, $value.Length - 2)
+            }
+        }
+        $existing = [Environment]::GetEnvironmentVariable($name, "Process")
+        if ([string]::IsNullOrWhiteSpace($existing)) {
+            [Environment]::SetEnvironmentVariable($name, $value, "Process")
+        }
+    }
+}
+
+function Wait-HttpReady {
+    param(
+        [string]$Uri,
+        [System.Diagnostics.Process]$Process,
+        [int]$TimeoutSeconds,
+        [string]$ServiceName
+    )
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        $Process.Refresh()
+        if ($Process.HasExited) {
+            throw "$ServiceName exited with code $($Process.ExitCode). Inspect .local/logs."
+        }
+        try {
+            $null = Invoke-RestMethod -Uri $Uri -Method Get -TimeoutSec 3
+            return
+        }
+        catch {
+            Start-Sleep -Seconds 2
+        }
+    }
+    throw "$ServiceName did not become ready within $TimeoutSeconds seconds. Inspect .local/logs."
+}
+
+function Assert-PortAvailable {
+    param([int]$Port)
+    $listeners = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+    if ($listeners.Count -gt 0) {
+        throw "TCP port $Port is already in use. Stop the existing service before starting RUSA-CPU-16."
+    }
+}
+
+if (-not ("RusaCpuFeatureProbe" -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+public static class RusaCpuFeatureProbe
+{
+    [DllImport("kernel32.dll", ExactSpelling = true)]
+    public static extern bool IsProcessorFeaturePresent(uint processorFeature);
+}
+'@
+}
+
+$RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
+Push-Location $RepoRoot
+$llamaProcess = $null
+$apiProcess = $null
+$llamaRecordCreated = $false
+$apiRecordCreated = $false
+$rawApiToken = $null
+$rawServiceToken = $null
+$rawTokensCaptured = $false
+$stateDir = Join-Path $RepoRoot ".local\rusa-cpu-16"
+
+try {
+    $rawApiToken = [Environment]::GetEnvironmentVariable("RUSAMODELS_API_TOKEN", "Process")
+    $rawServiceToken = [Environment]::GetEnvironmentVariable("RUSAMODELS_SERVICE_TOKEN", "Process")
+    $rawTokensCaptured = $true
+    [Environment]::SetEnvironmentVariable("RUSAMODELS_API_TOKEN", $null, "Process")
+    [Environment]::SetEnvironmentVariable("RUSAMODELS_SERVICE_TOKEN", $null, "Process")
+    Import-RusaDotEnv -Path (Join-Path $RepoRoot ".env")
+
+    if ($env:RUSAMODELS_ENV -ne "edge") { throw "RUSA-CPU-16 requires RUSAMODELS_ENV=edge." }
+    if ($env:DATABASE_URL -notmatch '^sqlite:///') { throw "RUSA-CPU-16 requires a local SQLite DATABASE_URL." }
+    if ($env:STORAGE_BACKEND -ne "local") { throw "RUSA-CPU-16 requires STORAGE_BACKEND=local." }
+    if ($env:RUSAMODELS_INFERENCE_BASE_URL -ne "http://127.0.0.1:8081") {
+        throw "Inference must target http://127.0.0.1:8081."
+    }
+    $modelId = $env:RUSAMODELS_INFERENCE_MODEL_ID
+    $manifestPath = $env:RUSAMODELS_MODEL_MANIFEST
+    if ([string]::IsNullOrWhiteSpace($manifestPath)) {
+        $manifestPath = "models/rusaai-edge/manifests/0.1.0-design.json"
+    }
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        throw "RusaAi-Edge model manifest is missing: $manifestPath"
+    }
+    $modelManifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+    if ($modelManifest.model_id -ne $modelManifest.identity_alignment.architecture_reference_model_id) {
+        throw "The manifest model_id must remain the Architecture v2.0 reference identity."
+    }
+    $approvedRuntimeModelId = [string]$modelManifest.identity_alignment.runtime_model_id
+    if ($modelManifest.identity_alignment.runtime_model_id_decision -ne "APPROVED" -or
+        [string]::IsNullOrWhiteSpace($approvedRuntimeModelId)) {
+        throw "Deployment blocked: ADR-TRAIN-001 must approve and record identity_alignment.runtime_model_id before startup."
+    }
+    if ([string]::IsNullOrWhiteSpace($modelId) -or $modelId -ne $approvedRuntimeModelId) {
+        throw "RUSAMODELS_INFERENCE_MODEL_ID must exactly match the approved manifest runtime_model_id."
+    }
+    if ($modelManifest.status -ne "READY_FOR_DEVICE_VALIDATION") {
+        throw "The model manifest must be READY_FOR_DEVICE_VALIDATION before runtime startup."
+    }
+    if ($modelManifest.checkpoint.selection_status -ne "SELECTED") {
+        throw "Deployment blocked: Architecture v2.0 requires a selected non-Qwen checkpoint; current status is $($modelManifest.checkpoint.selection_status)."
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$modelManifest.checkpoint.repository) -or
+        $modelManifest.checkpoint.repository -match '(?i)^Qwen/') {
+        throw "Deployment requires an approved non-Qwen checkpoint repository."
+    }
+    if ($modelManifest.checkpoint.immutable_revision -notmatch '^[0-9a-fA-F]{40}$' -or
+        [string]::IsNullOrWhiteSpace([string]$modelManifest.checkpoint.license) -or
+        $modelManifest.checkpoint.compatibility_status -ne "VERIFIED") {
+        throw "An immutable checkpoint revision, license and compatibility evidence are required."
+    }
+    if ($modelManifest.checkpoint.non_qwen_lineage_status -ne "VERIFIED") {
+        throw "Checkpoint provenance must verify that the selected foundation lineage is non-Qwen."
+    }
+    $architectureRelation = $modelManifest.checkpoint.architecture_relation
+    $actualParameterCount = [int64]$modelManifest.checkpoint.actual_parameter_count
+    if ($architectureRelation -notin @("IDENTICAL", "DERIVATIVE_ADAPTATION") -or
+        $actualParameterCount -le 0 -or
+        $modelManifest.checkpoint.actual_configuration_sha256 -notmatch '^[0-9a-fA-F]{64}$') {
+        throw "Record the audited checkpoint architecture relation, actual parameter count and configuration SHA-256."
+    }
+    if ($architectureRelation -eq "IDENTICAL" -and
+        $actualParameterCount -ne [int64]$modelManifest.architecture.target_parameters) {
+        throw "An IDENTICAL checkpoint must match the RusaAi-Edge reference parameter count."
+    }
+    if ($modelManifest.tokenizer.status -ne "VALIDATED" -or
+        $modelManifest.tokenizer.chat_template_status -ne "VALIDATED" -or
+        [string]::IsNullOrWhiteSpace([string]$modelManifest.tokenizer.repository) -or
+        $modelManifest.tokenizer.revision -notmatch '^[0-9a-fA-F]{40}$') {
+        throw "Tokenizer/chat template validation, repository and immutable revision are required."
+    }
+    if ($modelManifest.artifact.status -ne "BUILT" -or
+        $modelManifest.artifact.format -ne "GGUF" -or
+        $modelManifest.artifact.quantization -ne "Q4_K_M" -or
+        [string]::IsNullOrWhiteSpace([string]$modelManifest.artifact.filename) -or
+        $modelManifest.artifact.sha256 -notmatch '^[0-9a-fA-F]{64}$') {
+        throw "A named, built GGUF Q4_K_M artifact with a recorded SHA-256 is required."
+    }
+    if ($env:RUSAMODELS_GGUF_MODEL_SHA256 -ine $modelManifest.artifact.sha256) {
+        throw "The configured artifact SHA-256 does not match the approved model manifest."
+    }
+    $contextSize = 4096
+    if (-not [string]::IsNullOrWhiteSpace($env:RUSAMODELS_CONTEXT_SIZE)) {
+        if ($env:RUSAMODELS_CONTEXT_SIZE -notmatch '^(4096|8192)$') {
+            throw "RUSAMODELS_CONTEXT_SIZE must be 4096 or 8192."
+        }
+        $contextSize = [int]$env:RUSAMODELS_CONTEXT_SIZE
+    }
+    if ($contextSize -eq 8192) {
+        $context8kStatus = $modelManifest.benchmark.context_8192_status
+        $context8kTestMode = $env:RUSAMODELS_CONTEXT_8K_TEST_MODE -eq "true"
+        if ($context8kStatus -ne "PASS" -and
+            -not ($context8kStatus -eq "TESTING" -and $context8kTestMode)) {
+            throw "8K context requires PASS evidence, or TESTING status plus RUSAMODELS_CONTEXT_8K_TEST_MODE=true."
+        }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:RUSAMODELS_EMBEDDING_BASE_URL) -or
+        -not [string]::IsNullOrWhiteSpace($env:RUSAMODELS_EMBEDDING_MODEL_ID)) {
+        throw "The RUSA-CPU-16 edge profile does not start a separate embedding runtime."
+    }
+    if ($env:RUSAMODELS_SERVICE_TOKEN_SHA256 -notmatch '^[0-9a-f]{64}$') {
+        throw "Set RUSAMODELS_SERVICE_TOKEN_SHA256 to a lowercase SHA-256 digest."
+    }
+    if ($env:RUSAMODELS_API_PRINCIPALS -notmatch '^[{]') {
+        throw "Set RUSAMODELS_API_PRINCIPALS to JSON containing an inference principal."
+    }
+    $principals = ConvertFrom-Json -InputObject $env:RUSAMODELS_API_PRINCIPALS
+    $inferencePrincipals = @($principals.PSObject.Properties | Where-Object { $_.Value.role -eq "inference" })
+    if ($inferencePrincipals.Count -lt 1) {
+        throw "RUSAMODELS_API_PRINCIPALS must contain a role=inference principal."
+    }
+
+    if (-not $env:RUSAMODELS_GGUF_MODEL_PATH -or
+        -not (Test-Path -LiteralPath $env:RUSAMODELS_GGUF_MODEL_PATH -PathType Leaf)) {
+        throw "RUSAMODELS_GGUF_MODEL_PATH must point to a local GGUF file."
+    }
+    if ($env:RUSAMODELS_GGUF_MODEL_SHA256 -notmatch '^[0-9a-fA-F]{64}$') {
+        throw "RUSAMODELS_GGUF_MODEL_SHA256 must be a 64-character SHA-256 digest."
+    }
+    $modelPath = (Resolve-Path -LiteralPath $env:RUSAMODELS_GGUF_MODEL_PATH).Path
+    if ([System.IO.Path]::GetFileName($modelPath) -ine $modelManifest.artifact.filename) {
+        throw "The local GGUF filename does not match the approved model manifest."
+    }
+
+    $pythonCommand = Get-Command python.exe -ErrorAction Stop
+    $pythonExe = $pythonCommand.Source
+    if (-not $env:LLAMA_SERVER_EXE) {
+        $llamaCommand = Get-Command llama-server.exe -ErrorAction Stop
+        $llamaExe = $llamaCommand.Source
+    }
+    else {
+        if (-not (Test-Path -LiteralPath $env:LLAMA_SERVER_EXE -PathType Leaf)) {
+            throw "LLAMA_SERVER_EXE does not exist: $env:LLAMA_SERVER_EXE"
+        }
+        $llamaExe = (Resolve-Path -LiteralPath $env:LLAMA_SERVER_EXE).Path
+    }
+
+    $llamaVersionOutput = (& $llamaExe --version 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($llamaVersionOutput)) {
+        throw "Could not read llama.cpp version. Verify LLAMA_SERVER_EXE."
+    }
+    $llamaHelpOutput = & $llamaExe --help 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($llamaHelpOutput)) {
+        throw "Could not inspect llama.cpp options. Verify the installed runtime build."
+    }
+    $requiredLlamaOptions = @(
+        "--model", "--alias", "--host", "--port", "--ctx-size",
+        "--threads", "--threads-batch", "--threads-http", "--parallel",
+        "--batch-size", "--ubatch-size", "--n-gpu-layers", "--flash-attn",
+        "--jinja", "--no-webui", "--metrics"
+    )
+    foreach ($option in $requiredLlamaOptions) {
+        if ($llamaHelpOutput -notmatch [regex]::Escape($option)) {
+            throw "Installed llama.cpp does not support required baseline option $option."
+        }
+    }
+    $kvCacheQ8Supported = (
+        $llamaHelpOutput -match [regex]::Escape("--cache-type-k") -and
+        $llamaHelpOutput -match [regex]::Escape("--cache-type-v") -and
+        $llamaHelpOutput -match "q8_0"
+    )
+    if (-not $kvCacheQ8Supported) {
+        Write-Warning "This llama.cpp build does not advertise Q8_0 K/V cache; using its supported default cache type."
+    }
+
+    $processors = @(Get-CimInstance -ClassName Win32_Processor)
+    $physicalCores = [int](($processors | Measure-Object -Property NumberOfCores -Sum).Sum)
+    $logicalProcessors = [int](($processors | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum)
+    $computer = Get-CimInstance -ClassName Win32_ComputerSystem
+    $memoryGiB = [math]::Round(($computer.TotalPhysicalMemory / 1GB), 2)
+    $os = Get-CimInstance -ClassName Win32_OperatingSystem
+    $freeMemoryGiB = [math]::Round((($os.FreePhysicalMemory * 1KB) / 1GB), 2)
+
+    if ($os.Caption -notmatch "Windows 11" -or $os.OSArchitecture -ne "64-bit") {
+        throw "RUSA-CPU-16 requires Windows 11 64-bit; detected $($os.Caption) / $($os.OSArchitecture)."
+    }
+    if ($memoryGiB -lt 15) { throw "RUSA-CPU-16 expects a nominal 16-GB host; detected $memoryGiB GiB." }
+    if ($freeMemoryGiB -lt 2) { throw "Only $freeMemoryGiB GiB RAM is free; minimum is 2 GiB." }
+    $cpuNames = @($processors | ForEach-Object { $_.Name })
+    if (($cpuNames | Where-Object { $_ -notmatch 'Intel.*Core.*i5' }).Count -gt 0) {
+        throw "RUSA-CPU-16 requires an Intel Core i5 processor; detected: $($cpuNames -join '; ')."
+    }
+    if ($physicalCores -lt 1) { throw "Could not detect physical CPU cores." }
+    $threads = [math]::Min(4, $physicalCores)
+$featureMap = [ordered]@{
+    SSE = 6
+    SSE2 = 10
+    SSE3 = 13
+    SSSE3 = 36
+    SSE4_1 = 37
+    SSE4_2 = 38
+    AVX = 39
+    AVX2 = 40
+    AVX512F = 41
+    BMI2 = 60
+}
+$availableCpuFeatures = @()
+foreach ($featureName in $featureMap.Keys) {
+    if ([RusaCpuFeatureProbe]::IsProcessorFeaturePresent([uint32]$featureMap[$featureName])) {
+        $availableCpuFeatures += $featureName
+    }
+}
+if ($availableCpuFeatures.Count -eq 0) {
+    $availableCpuFeatures = @("not_reported_by_windows")
+}
+
+
+    $logDir = Join-Path $RepoRoot ".local\logs"
+    New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
+    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+    $llamaVersionOutput | Set-Content -LiteralPath (Join-Path $logDir "llama-server-version.txt")
+$hardwareProfile = [ordered]@{
+    captured_utc = [datetime]::UtcNow.ToString("o")
+    operating_system = $os.Caption
+    os_version = $os.Version
+    os_build = $os.BuildNumber
+    cpu_names = $cpuNames
+    physical_cores = $physicalCores
+    logical_processors = $logicalProcessors
+    instruction_features_reported_by_windows = $availableCpuFeatures
+    llama_cpp_version = $llamaVersionOutput
+    kv_cache_q8_0_supported = $kvCacheQ8Supported
+    total_memory_gib = $memoryGiB
+    free_memory_at_start_gib = $freeMemoryGiB
+}
+$hardwareProfile | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stateDir "hardware-profile.json")
+
+    foreach ($service in @("llama-server", "model-server")) {
+        if (Test-Path -LiteralPath (Join-Path $stateDir "$service.json")) {
+            throw "A $service process record exists. Run scripts/stop_rusa_cpu_16.ps1 first."
+        }
+    }
+
+    & $pythonExe scripts/verify_gguf_model.py --model $modelPath --sha256 $env:RUSAMODELS_GGUF_MODEL_SHA256
+    if ($LASTEXITCODE -ne 0) { throw "GGUF checksum verification failed." }
+
+    Assert-PortAvailable -Port 8081
+    Assert-PortAvailable -Port 8090
+
+    & $pythonExe -m alembic upgrade head
+    if ($LASTEXITCODE -ne 0) { throw "Alembic migration failed." }
+
+    $llamaArgs = @(
+        "--model", ('"' + $modelPath + '"'),
+        "--alias", $modelId,
+        "--host", "127.0.0.1",
+        "--port", "8081",
+        "--ctx-size", "$contextSize",
+        "--threads", "$threads",
+        "--threads-batch", "4",
+        "--threads-http", "2",
+        "--parallel", "1",
+        "--batch-size", "128",
+        "--ubatch-size", "64"
+    )
+    if ($kvCacheQ8Supported) {
+        $llamaArgs += @("--cache-type-k", "q8_0", "--cache-type-v", "q8_0")
+    }
+    $llamaArgs += @(
+        "--n-gpu-layers", "0",
+        "--flash-attn", "auto",
+        "--jinja",
+        "--no-webui",
+        "--metrics"
+    )
+    $llamaStart = @{
+        FilePath = $llamaExe
+        ArgumentList = ($llamaArgs -join " ")
+        WorkingDirectory = $RepoRoot
+        RedirectStandardOutput = (Join-Path $logDir "llama-server.stdout.log")
+        RedirectStandardError = (Join-Path $logDir "llama-server.stderr.log")
+        PassThru = $true
+    }
+    $llamaProcess = Start-Process @llamaStart
+    $llamaRecordCreated = $true
+    @{
+        pid = $llamaProcess.Id
+        executable = $llamaExe
+        started_utc = [datetime]::UtcNow.ToString("o")
+    } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $stateDir "llama-server.json")
+
+    Wait-HttpReady -Uri "http://127.0.0.1:8081/health" -Process $llamaProcess -TimeoutSeconds 300 -ServiceName "llama.cpp"
+
+    $apiStart = @{
+        FilePath = $pythonExe
+        ArgumentList = @("-m", "uvicorn", "services.model_server.app.main:app", "--host", "127.0.0.1", "--port", "8090")
+        WorkingDirectory = $RepoRoot
+        RedirectStandardOutput = (Join-Path $logDir "model-server.stdout.log")
+        RedirectStandardError = (Join-Path $logDir "model-server.stderr.log")
+        PassThru = $true
+    }
+    $apiProcess = Start-Process @apiStart
+    $apiRecordCreated = $true
+    @{
+        pid = $apiProcess.Id
+        executable = $pythonExe
+        started_utc = [datetime]::UtcNow.ToString("o")
+    } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $stateDir "model-server.json")
+
+    Wait-HttpReady -Uri "http://127.0.0.1:8090/health/ready" -Process $apiProcess -TimeoutSeconds 90 -ServiceName "RusaModels Model Server"
+
+    Write-Host ""
+    Write-Host "RUSA-CPU-16 services are ready."
+    Write-Host "Model Server: http://127.0.0.1:8090"
+    Write-Host "OpenAI API:   http://127.0.0.1:8090/openai/v1"
+    Write-Host "llama.cpp:    http://127.0.0.1:8081 (loopback only)"
+    Write-Host "llama.cpp version: $llamaVersionOutput"
+    Write-Host "Q8_0 K/V cache supported: $kvCacheQ8Supported"
+    Write-Host "Model ID: $modelId | Context: $contextSize tokens | Batch/ubatch: 128/64"
+    Write-Host "Physical cores: $physicalCores | Logical processors: $logicalProcessors | Generation threads: $threads"
+    Write-Host ("Windows-reported CPU features: {0}" -f ($availableCpuFeatures -join ", "))
+    Write-Host "Total RAM: $memoryGiB GiB | Free RAM at startup: $freeMemoryGiB GiB"
+    Write-Host "Logs: $logDir"
+}
+catch {
+    if ($apiProcess -and -not $apiProcess.HasExited) {
+        Stop-Process -Id $apiProcess.Id -Force -ErrorAction SilentlyContinue
+    }
+    if ($apiRecordCreated) {
+        Remove-Item -LiteralPath (Join-Path $stateDir "model-server.json") -Force -ErrorAction SilentlyContinue
+    }
+    if ($llamaProcess -and -not $llamaProcess.HasExited) {
+        Stop-Process -Id $llamaProcess.Id -Force -ErrorAction SilentlyContinue
+    }
+    if ($llamaRecordCreated) {
+        Remove-Item -LiteralPath (Join-Path $stateDir "llama-server.json") -Force -ErrorAction SilentlyContinue
+    }
+    throw
+}
+finally {
+    if ($rawTokensCaptured) {
+        [Environment]::SetEnvironmentVariable("RUSAMODELS_API_TOKEN", $rawApiToken, "Process")
+        [Environment]::SetEnvironmentVariable("RUSAMODELS_SERVICE_TOKEN", $rawServiceToken, "Process")
+    }
+    Pop-Location
+}
