@@ -16,6 +16,9 @@ def test_migration_and_audit_append_only(tmp_path, monkeypatch):
     command.upgrade(Config("alembic.ini"), "head")
     engine = create_engine(url)
     tables = set(inspect(engine).get_table_names())
+    with engine.connect() as connection:
+        revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+    assert len(revision) <= 32
     assert {"model_catalog", "model_versions", "artifacts", "upload_sessions",
             "upload_parts", "model_jobs", "audit_events", "alembic_version"} <= tables
     with engine.connect() as connection:

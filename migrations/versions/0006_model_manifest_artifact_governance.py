@@ -5,7 +5,7 @@ import json
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0006_model_manifest_artifact_governance"
+revision = "0006_manifest_gov"
 down_revision = "0005_model_job_cancellation"
 branch_labels = None
 depends_on = None
