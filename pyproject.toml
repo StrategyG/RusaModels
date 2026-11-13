@@ -31,7 +31,7 @@ quantization = [
   "transformers>=5.22.2,<6",
 ]
 training = [
-  "datasets>=3,<5",
+  "datasets>=3,<6",
   "peft>=0.21.2,<1",
   "torch>=2.4,<3",
   "transformers>=5.22.2,<6",
