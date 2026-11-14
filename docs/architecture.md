@@ -1,11 +1,11 @@
 # RusaModels Architecture
 
-RusaModels is an independent model infrastructure platform. RusaAi is an authenticated client and remains responsible for agent orchestration and workflow state.
+RusaModels is an independent Model Plane service. RusaAi is the ecosystem Control Plane and an authenticated client; it remains responsible for agent orchestration, tenant/task policy, and workflow state. In this document, the shared Model Plane registry store is the database shared by RusaModels Model Server and Quant Server; it is not the RusaAi Control Plane.
 
 - **Model Server:** model lifecycle and authenticated inference gateway; reads model metadata and immutable artifacts.
 - **Local CPU inference:** private llama.cpp GGUF runtime for generation and a separate SentenceTransformers runtime for embeddings. The Model Server proxies both APIs.
 - **Quant Server:** conversion and quantization boundary; writes immutable artifacts and registers model versions.
-- **Shared control plane:** PostgreSQL stores registry metadata, versions and append-only audit events. S3-compatible storage stores model files.
+- **Shared Model Plane registry store:** PostgreSQL stores model registry metadata, versions and append-only audit events for RusaModels Model Server and Quant Server. S3-compatible storage stores model files. RusaAi does not connect directly to either store.
 - **Development adapters:** SQLite and local filesystem are restricted to development and tests.
 
 Both Codespaces receive the same external DATABASE_URL, S3_ENDPOINT_URL, S3_BUCKET and S3 credentials. They must not provision independent databases or artifact buckets.

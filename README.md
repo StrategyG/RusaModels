@@ -11,11 +11,15 @@ Standard RusaModels deployments expose two services: the Model Server and Quant 
 - **Native Windows RUSA-CPU-16 v2.0** — architecture target for RusaAi-Edge-1.54B on Intel Core i5 / 16 GB RAM, llama.cpp and CPU-only inference. It is intentionally not deployable until a compatible non-Qwen checkpoint is selected, tokenizer/chat template are validated and a Q4_K_M GGUF artifact is built and checksummed.
 - **RUSA-EDGE-8** — declarative Windows laptop / Android ARM64 profile for 8 GB physical RAM, 4K context, one active generation and CPU-only Q4_K_M inference. It remains a design target pending checkpoint selection and device benchmarks; see `docs/RUSA-EDGE-8.md`.
 - **Codespaces CPU Runtime** — separate optional development profile with private llama.cpp and SentenceTransformers sidecars; it is not the Windows RUSA-CPU-16 baseline.
-- **Shared PostgreSQL** — registry metadata, model versions, upload sessions and audit events in standard multi-service deployments.
+- **Shared RusaModels registry database** — PostgreSQL stores model metadata, versions, upload sessions and audit events for the Model Server and Quant Server in standard multi-service deployments.
 - **Shared S3-compatible storage** — immutable model artifacts in standard multi-service deployments.
 - **RUSA-CPU-16 edge storage** — local SQLite and local artifact files; no PostgreSQL or S3 dependency.
 
 RusaAi is an authenticated service consumer. It does not connect directly to the RusaModels database or object storage.
+
+## Ecosystem boundary
+
+RusaAi owns the RUSA AI ecosystem Control Plane, including tenant identity, agent/task orchestration, policy and workflow state. RusaModels owns the Model Plane. The shared PostgreSQL registry database described above is internal to RusaModels Model Server and Quant Server; it is not the RusaAi Control Plane. RusaAi integrates through the authenticated Model Server API and must not receive direct database or object-store credentials. See the [RusaAi Model Plane boundary ADR](https://github.com/StrategyG/RusaAi/blob/main/docs/adr/ADR-0002-rusamodels-model-plane-boundary.md) and the proposed [cross-repository architecture reconciliation](https://github.com/StrategyG/RusaAi/pull/117).
 
 ## Implemented
 
@@ -57,7 +61,7 @@ The Compose stack runs PostgreSQL and MinIO locally for development only. It is 
 
 ## Codespaces
 
-Create a Model Server Codespace using `.devcontainer/model-server/devcontainer.json` or the CPU inference profile `.devcontainer/model-server-cpu/devcontainer.json`. Create a separate Quant Server Codespace using `.devcontainer/quant-server/devcontainer.json`. The CPU profile requests 4 CPUs, 16 GB RAM and starts private llama.cpp and local embedding services; keep GGUF and embedding model weights outside Git. Configure the shared control-plane secrets as documented in [docs/CODESPACES.md](docs/CODESPACES.md).
+Create a Model Server Codespace using `.devcontainer/model-server/devcontainer.json` or the CPU inference profile `.devcontainer/model-server-cpu/devcontainer.json`. Create a separate Quant Server Codespace using `.devcontainer/quant-server/devcontainer.json`. The CPU profile requests 4 CPUs, 16 GB RAM and starts private llama.cpp and local embedding services; keep GGUF and embedding model weights outside Git. Configure the shared RusaModels registry and artifact-store settings as documented in [docs/CODESPACES.md](docs/CODESPACES.md).
 
 ## Security
 
