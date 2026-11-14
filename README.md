@@ -17,6 +17,10 @@ Standard RusaModels deployments expose two services: the Model Server and Quant 
 
 RusaAi is an authenticated service consumer. It does not connect directly to the RusaModels database or object storage.
 
+## Ecosystem boundary
+
+RusaAi owns the RUSA AI ecosystem Control Plane, including tenant identity, agent/task orchestration, policy and workflow state. RusaModels owns the Model Plane. The shared PostgreSQL registry database described above is internal to RusaModels Model Server and Quant Server; it is not the RusaAi Control Plane. RusaAi integrates through the authenticated Model Server API and must not receive direct database or object-store credentials. See the [RusaAi Model Plane boundary ADR](https://github.com/StrategyG/RusaAi/blob/main/docs/adr/ADR-0002-rusamodels-model-plane-boundary.md) and the proposed [cross-repository architecture reconciliation](https://github.com/StrategyG/RusaAi/pull/117).
+
 ## Implemented
 
 - Separate FastAPI Model Server and Quant Server entry points plus an independent Quant Worker.
