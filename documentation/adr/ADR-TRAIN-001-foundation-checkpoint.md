@@ -120,4 +120,4 @@ Select exactly one disposition after all required evidence is reviewed:
 **Reviewer / approval reference:** PENDING  
 **Decision date:** PENDING
 
-No checkpoint is approved by this draft ADR.
+No checkpoint was approved by this historical ADR.
