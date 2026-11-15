@@ -1,4 +1,8 @@
-# RusaModels Agent SFT Training
+# RusaModels Training Workflows
+
+> **NEXUS restriction (2026-11-15):** The Qwen3 QLoRA commands and configs documented below are a legacy, isolated six-role Agent SFT experiment. They are **not** the NEXUS training path and must not be run for NEXUS. NEXUS Foundation is from-scratch; NEXUS Agent is a separate model. No NEXUS tokenizer or model training may begin until the Training Authorization Gate in [ADR-TRAIN-002](../documentation/adr/ADR-TRAIN-002-nexus-dual-model-training.md) passes. See the RusaAi [ADR-0003](https://github.com/StrategyG/RusaAi/blob/docs/chunk-01-architecture-adr-reconciliation-20261113/docs/adr/ADR-0003-nexus-foundation-agent-architecture.md).
+
+## Legacy QLoRA Agent SFT workflow
 
 ## Scope and status
 
