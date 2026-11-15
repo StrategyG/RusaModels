@@ -95,7 +95,13 @@ def create_service_app(
     app = FastAPI(
         title=f"RusaModels {service_name}",
         version="0.2.0",
-        description="RUSA AI Model Plane service for model registry, artifacts, inference, embeddings, and quantization. The ecosystem Control Plane is owned by RusaAi.",
+        description=(
+            "RUSA AI Model Server for model registry, artifacts, inference, and embeddings. "
+            "The ecosystem Control Plane is owned by RusaAi."
+            if service_name == "model-server"
+            else "RUSA AI Quant Server for model conversion, quantization, and immutable artifact registration. "
+            "The ecosystem Control Plane is owned by RusaAi."
+        ),
         docs_url=None if runtime.environment in {"edge", "staging", "production"} else "/docs",
         redoc_url=None if runtime.environment in {"edge", "staging", "production"} else "/redoc",
         openapi_url=None if runtime.environment in {"edge", "staging", "production"} else "/openapi.json",
