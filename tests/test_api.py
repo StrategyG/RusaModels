@@ -767,3 +767,24 @@ def test_postgres_upload_session_row_lock_blocks_competing_transaction(postgres_
         contender.rollback()
         locker.close()
         contender.close()
+
+
+def test_model_and_quant_server_openapi_descriptions_match_ownership(api_client):
+    """Shared app factory must not describe Quant Server as an inference service."""
+    from rusamodels.api import create_service_app
+
+    quant_description = api_client.app.openapi()["info"]["description"]
+    model_app = create_service_app(
+        "model-server",
+        api_client.app.state.settings,
+        engine=api_client.app.state.engine,
+        storage=api_client.app.state.storage,
+    )
+    model_description = model_app.openapi()["info"]["description"]
+
+    assert "inference" not in quant_description.lower()
+    assert "embeddings" not in quant_description.lower()
+    assert "quantization" in quant_description.lower()
+    assert "inference" in model_description.lower()
+    assert "embeddings" in model_description.lower()
+    assert "quantization" not in model_description.lower()
