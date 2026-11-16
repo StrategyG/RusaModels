@@ -228,17 +228,19 @@ def test_rusa_edge_8_profile_preserves_architecture_limits_and_device_targets():
 
 
 
-def test_foundation_checkpoint_adr_keeps_selection_and_runtime_identity_pending():
+def test_foundation_checkpoint_adr_is_superseded_by_nexus_from_scratch_decision():
     adr = (
         ROOT / "documentation" / "adr" / "ADR-TRAIN-001-foundation-checkpoint.md"
     ).read_text(encoding="utf-8")
 
-    assert "Status:** DRAFT" in adr
+    assert "Status:** SUPERSEDED" in adr
+    assert "ADR-TRAIN-002" in adr
     assert "rusaai-edge-1.54b" in adr
     assert "rusaai-edge-derived" in adr
     assert "BhinekaIntiLabs/bhineka-gpt" in adr
     assert "PENDING_AUDIT / PILOT_CANDIDATE_ONLY" in adr
-    assert "No checkpoint is approved by this draft ADR." in adr
+    assert "not selected for NEXUS" in adr
+    assert "No checkpoint was approved by this historical ADR." in adr
 
 
 

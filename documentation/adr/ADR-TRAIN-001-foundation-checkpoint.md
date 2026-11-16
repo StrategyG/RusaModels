@@ -1,6 +1,8 @@
 # ADR-TRAIN-001 — Foundation checkpoint selection
 
-**Status:** DRAFT — no foundation checkpoint approved  
+> **Supersession notice (2026-11-15):** The project-owner decision is to train NEXUS Foundation from scratch and maintain a separate NEXUS Agent model. The pretrained candidates below are not selected for NEXUS. This document is retained for historical context only and does not authorize loading or training. See ADR-TRAIN-002.
+
+**Status:** SUPERSEDED — retained as historical pretrained-checkpoint proposal; see [ADR-TRAIN-002](ADR-TRAIN-002-nexus-dual-model-training.md)  
 **Decision owner:** Rusaai model owner  
 **Scope:** Product model foundation for RusaAi-Edge; this record does not approve a runtime artifact.
 
@@ -118,4 +120,4 @@ Select exactly one disposition after all required evidence is reviewed:
 **Reviewer / approval reference:** PENDING  
 **Decision date:** PENDING
 
-No checkpoint is approved by this draft ADR.
+No checkpoint was approved by this historical ADR.
