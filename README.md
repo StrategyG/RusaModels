@@ -79,3 +79,20 @@ Never commit model weights, API tokens or credentials. Production requires Postg
 - [Codespaces CPU inference](docs/CPU_INFERENCE.md)
 - [Training](docs/TRAINING.md)
 - [Migration from RusaAi](docs/MIGRATION_FROM_RUSAAI.md)
+
+
+## Local hardware inventory (installer foundation)
+
+RusaModels includes a read-only hardware inventory utility for the RUSA AI local installer:
+
+```bash
+python -m rusamodels.hardware --json
+# or, after installing the package:
+rusamodels-hardware --json
+```
+
+The command reports OS/architecture, CPU identity and logical cores, RAM where exposed by the OS, free disk space, and NVIDIA devices discoverable with `nvidia-smi`. It returns a conservative CPU-first runtime recommendation with bounded concurrency and a memory reserve.
+
+GPU presence is only an acceleration candidate; the utility does not enable GPU offload, download models, reserve memory, or claim a model fits. Model selection still requires an approved immutable checkpoint, license/tokenizer audit, artifact digest verification and target-device benchmark. See [Local Hardware Detection and Runtime Profile](docs/LOCAL_HARDWARE_PROFILES_v1.0.md).
+
+The Windows consumer installer, automatic model provisioning and production hardware certification are not yet implemented.
