@@ -40,7 +40,7 @@ training = [
   "PyYAML>=6,<7",
 ]
 embeddings = [
-  "sentence-transformers>=3,<6",
+  "sentence-transformers>=3,<7",
   "torch>=2.4,<3",
 ]
 
